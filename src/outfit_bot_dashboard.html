@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Outfit-Bot Dashboard</title>
     <style>
-        body { background-color: #121212; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 2em; }
-        .container { max-width: 900px; margin: auto; background-color: #1e1e1e; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
+        body { background-color: #121212; color: #e0e_e0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 1rem; }
+        .container { max-width: 900px; margin: auto; background-color: #1e1e1e; padding: 1.5rem; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
         h1, h2, h3 { color: #ffffff; border-bottom: 2px solid #333; padding-bottom: 0.5rem; }
         .form-group { margin-bottom: 15px; }
         label { display: block; margin-bottom: 5px; font-weight: bold; }
@@ -14,8 +14,7 @@
             width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; box-sizing: border-box; 
             background-color: #333; color: #e0e0e0; 
         }
-        textarea { font-family: monospace; }
-        .btn { padding: 10px 15px; border: none; border-radius: 4px; color: white; cursor: pointer; font-size: 16px; margin-right: 10px; transition: background-color 0.3s; }
+        .btn { padding: 10px 15px; border: none; border-radius: 4px; color: white; cursor: pointer; font-size: 16px; margin-top: 5px; transition: background-color 0.3s; width: 100%; box-sizing: border-box;}
         .btn-save { background-color: #28a745; }
         .btn-save:hover { background-color: #218838; }
         .btn-action { background-color: #007bff; }
@@ -29,19 +28,24 @@
         .status-active { background-color: #1e4620; color: #d4edda; border: 1px solid #28a745; }
         .status-inactive { background-color: #4c1d21; color: #f8d7da; border: 1px solid #dc3545; }
 
-        .log-window {
-            background-color: #000; color: #00ff00; font-family: 'Courier New', Courier, monospace;
-            padding: 15px; border-radius: 5px; height: 300px; overflow-y: scroll; border: 1px solid #333;
-            font-size: 0.9em; white-space: pre-wrap;
-        }
-
+        .log-window { background-color: #000; color: #00ff00; font-family: 'Courier New', Courier, monospace; padding: 15px; border-radius: 5px; height: 300px; overflow-y: scroll; border: 1px solid #333; font-size: 0.9em; white-space: pre-wrap; }
         .alert { padding: 1rem; margin-bottom: 1rem; border-radius: 4px; }
-        .alert-success { background-color: #1e4620; color: #d4edda; border: 1px solid #c3e6cb; }
-        .alert-info { background-color: #0c5460; color: #d1ecf1; border: 1px solid #bee5eb; }
-        .alert-danger { background-color: #721c24; color: #f8d7da; border: 1px solid #f5c6cb; }
+        .alert-success { background-color: #1e4620; color: #d4edda; }
+        .alert-info { background-color: #0c5460; color: #d1ecf1; }
+        .alert-danger { background-color: #721c24; color: #f8d7da; }
 
         hr { border: 0; border-top: 1px solid #333; margin: 2em 0; }
-        .flex-row { display: flex; justify-content: space-between; align-items: center; }
+        .flex-row { display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; }
+        .flex-row a { margin-top: 10px; }
+
+        .action-buttons { display: flex; flex-direction: column; gap: 10px; }
+
+        @media (min-width: 600px) {
+            .flex-row { flex-direction: row; align-items: center; }
+            .flex-row a { margin-top: 0; }
+            .btn { width: auto; }
+            .action-buttons { flex-direction: row; }
+        }
     </style>
 </head>
 <body>
@@ -66,28 +70,28 @@
         <div style="margin-bottom: 20px; padding: 15px; background-color: #2a2a2a; border-radius: 8px;">
             <h3 style="margin-top: 0;">Prozess-Steuerung</h3>
             {% if is_running %}
-                <form action="/outfit-bot/stop" method="post" style="display:inline;">
+                <form action="/outfit-bot/stop" method="post">
                     <button type="submit" class="btn btn-danger">🛑 Bot stoppen</button>
                 </form>
             {% else %}
-                <form action="/outfit-bot/start" method="post" style="display:inline;">
+                <form action="/outfit-bot/start" method="post">
                     <button type="submit" class="btn btn-save">▶️ Bot starten</button>
                 </form>
             {% endif %}
         </div>
 
         <h2>Manuelle Aktionen</h2>
-        <div style="margin-bottom: 20px;">
-            <form action="/outfit-bot/start-contest" method="post" style="display:inline;">
+        <div class="action-buttons" style="margin-bottom: 20px;">
+            <form action="/outfit-bot/start-contest" method="post">
                 <button type="submit" class="btn btn-action" {{ 'disabled' if not is_running }}>📸 Wettbewerb jetzt starten</button>
             </form>
-            <form action="/outfit-bot/announce-winner" method="post" style="display:inline;">
+            <form action="/outfit-bot/announce-winner" method="post">
                 <button type="submit" class="btn btn-warning" {{ 'disabled' if not is_running }}>🏆 Gewinner jetzt auslosen</button>
             </form>
-            {% if not is_running %}
-                <p style="color: #dc3545; font-size: 0.9em; margin-top: 5px;">⚠️ Bot muss laufen, um Aktionen auszuführen.</p>
-            {% endif %}
         </div>
+        {% if not is_running %}
+            <p style="color: #dc3545; font-size: 0.9em; margin-top: 5px;">⚠️ Bot muss laufen, um Aktionen auszuführen.</p>
+        {% endif %}
 
         <hr>
 
@@ -133,10 +137,6 @@
         <div class="log-window">
             {% for line in logs %}{{ line }}{% endfor %}
         </div>
-        <div style="text-align: right; margin-top: 5px;">
-            <a href="/outfit-bot/dashboard" class="btn btn-secondary" style="background-color: #6c757d; font-size: 0.8em; padding: 5px 10px;">Logs aktualisieren</a>
-        </div>
-
     </div>
 </body>
 </html>

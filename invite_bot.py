@@ -1,6 +1,7 @@
 import logging
 import os
 import json
+import re
 from pathlib import Path
 from datetime import datetime, timedelta
 from telegram import Update, ChatInviteLink
@@ -44,7 +45,7 @@ def load_bot_settings_config():
         "is_enabled": False,
         "bot_token": "",
         "main_chat_id": "",
-        "topic_id": "", # NEU
+        "topic_id": "",
         "link_ttl_minutes": 15
     }
     return load_json(BOT_SETTINGS_CONFIG_FILE, default)
@@ -87,6 +88,12 @@ def remove_profile(user_id: int):
 ASK_NAME, ASK_AGE, ASK_STATE, ASK_PHOTO, ASK_SECURITY, ASK_HOBBIES, ASK_INSTAGRAM, ASK_OTHER, ASK_SEXUALITY, ASK_RULES = range(10)
 user_data_temp = {}
 
+# --- NEUE FUNKTION: Antwort für Entwickler-Info ---
+async def reply_with_developer_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Sendet eine vordefinierte Nachricht über den Entwickler."""
+    if update.message:
+        await update.message.reply_text("Vielen Dank. Ich wurde entwickelt von @pup_Rinno_cgn")
+
 # --- Commands ---------------------------------------------------
 async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
@@ -107,7 +114,7 @@ async def start_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ASK_NAME
 
 
-# --- Formular Schritte ------------------------------------------
+# --- Formular Schritte ---
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"DEBUG: get_name triggered. User ID: {update.message.from_user.id}, Text: {update.message.text}")
     user = update.message.from_user
@@ -120,7 +127,6 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Wie alt bist du? (zwischen 10 und 100)")
     return ASK_AGE
 
-
 async def get_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
     age_text = update.message.text.strip()
     if not age_text.isdigit() or not 10 <= int(age_text) <= 100:
@@ -130,12 +136,10 @@ async def get_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Aus welchem Bundesland kommst du? (z.B. NRW, Bayern, Berlin …)")
     return ASK_STATE
 
-
 async def get_state(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data_temp[update.message.from_user.id]["state"] = update.message.text.strip()
     await update.message.reply_text("Bitte sende ein *normales Foto* von dir (kein Dokument).", parse_mode="Markdown")
     return ASK_PHOTO
-
 
 async def get_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
@@ -146,14 +150,12 @@ async def get_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"💥 Was ist dein Kink oder Fetisch?\n\n{FREIWILLIG_HINT}", parse_mode="Markdown")
     return ASK_SECURITY
 
-
 async def get_security(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     if is_valid(text):
         user_data_temp[update.message.from_user.id]["security"] = text
     await update.message.reply_text(f"🎯 Was sind deine Hobbys oder Interessen?\n\n{FREIWILLIG_HINT}", parse_mode="Markdown")
     return ASK_HOBBIES
-
 
 async def get_hobbies(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
@@ -162,14 +164,12 @@ async def get_hobbies(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"📱 Trage hier deinen Instagram oder einen anderen Social Media Account ein:\n\n{FREIWILLIG_HINT}", parse_mode="Markdown")
     return ASK_INSTAGRAM
 
-
 async def get_instagram(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     if is_valid(text):
         user_data_temp[update.message.from_user.id]["instagram"] = text
     await update.message.reply_text(f"💬 Möchtest du noch etwas über dich sagen?\n\n{FREIWILLIG_HINT}", parse_mode="Markdown")
     return ASK_OTHER
-
 
 async def get_other(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
@@ -178,144 +178,72 @@ async def get_other(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"🏳️‍🌈 Wie ist deine Sexualität?\n\n{FREIWILLIG_HINT}", parse_mode="Markdown")
     return ASK_SEXUALITY
 
-
 async def get_sexuality(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     if is_valid(text):
         user_data_temp[update.message.from_user.id]["sexuality"] = text
-
-    regeln = (
-        "📜 *Bevor du in die Gruppe kommst, lies bitte unsere Regeln:*\n\n"
-        "✅ *DOS:*\n"
-        "• Respektvoller Umgang\n"
-        "• Überwiegend gute Laune 😄\n\n"
-        "❌ *DON'TS:*\n"
-        "✖️ Beleidigungen\n"
-        "✖️ Diskriminierung\n"
-        "✖️ Hardcore-Inhalte\n"
-        "✖️ Blut oder offene Wunden\n"
-        "✖️ Inhalte mit Kindern\n"
-        "✖️ Inhalte mit Tieren (sexuell)\n"
-        "✖️ Inhalte mit Bezug auf Tod\n"
-        "✖️ Exkremente\n\n"
-        "_Verstöße werden durch Admins geprüft und bei Wiederholung erfolgt Ausschluss._\n\n"
-        "👉 *Wenn du einverstanden bist, bestätige mit OK.*"
-    )
+    regeln = ( "📜 *Bevor du in die Gruppe kommst, lies bitte unsere Regeln:*\n\n" "✅ *DOS:*\n" "• Respektvoller Umgang\n" "• Überwiegend gute Laune 😄\n\n" "❌ *DON'TS:*\n" "✖️ Beleidigungen\n" "✖️ Diskriminierung\n" "✖️ Hardcore-Inhalte\n" "✖️ Blut oder offene Wunden\n" "✖️ Inhalte mit Kindern\n" "✖️ Inhalte mit Tieren (sexuell)\n" "✖️ Inhalte mit Bezug auf Tod\n" "✖️ Exkremente\n\n" "_Verstöße werden durch Admins geprüft und bei Wiederholung erfolgt Ausschluss._\n\n" "👉 *Wenn du einverstanden bist, bestätige mit OK.*" )
     await update.message.reply_text(regeln, parse_mode="Markdown")
     return ASK_RULES
-
 
 async def get_rules_ok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text.strip().lower() != "ok":
         await update.message.reply_text("Bitte antworte mit *OK*, um den Regeln zuzustimmen.", parse_mode="Markdown")
         return ASK_RULES
-
     user_id = update.message.from_user.id
     user_data_temp[user_id]["created_at"] = datetime.utcnow().isoformat()
     save_profile(user_id, user_data_temp[user_id])
-
     config = load_bot_settings_config()
     GROUP_ID = int(config.get("main_chat_id", 0)) if config.get("main_chat_id") else 0
     LINK_TTL_MINUTES = config.get("link_ttl_minutes", 15)
-
     if not GROUP_ID:
-        logger.error("GROUP_ID ist nicht konfiguriert. Kann keinen Einladungslink erstellen.")
-        await update.message.reply_text("⚠️ Fehler: Die Gruppen-ID ist nicht konfiguriert. Bitte informiere einen Administrator.")
-        user_data_temp.pop(user_id, None)
+        logger.error("GROUP_ID ist nicht konfiguriert.")
+        await update.message.reply_text("⚠️ Fehler: Die Gruppen-ID ist nicht konfiguriert.")
         return ConversationHandler.END
-
     try:
-        link: ChatInviteLink = await context.bot.create_chat_invite_link(
-            chat_id=GROUP_ID,
-            expire_date=datetime.utcnow() + timedelta(minutes=LINK_TTL_MINUTES),
-            creates_join_request=True,
-        )
+        link: ChatInviteLink = await context.bot.create_chat_invite_link(chat_id=GROUP_ID, expire_date=datetime.utcnow() + timedelta(minutes=LINK_TTL_MINUTES), creates_join_request=True)
         await update.message.reply_text(f"✅ Super! Hier ist dein Einladungslink (gültig für {LINK_TTL_MINUTES} Minuten):\n{link.invite_link}")
     except Exception as e:
         logger.error(f"Fehler beim Link-Erstellen: {e}")
-        await update.message.reply_text("⚠️ Fehler beim Erstellen des Links. Bitte versuche es später erneut.")
-
+        await update.message.reply_text("⚠️ Fehler beim Erstellen des Links.")
     user_data_temp.pop(user_id, None)
     return ConversationHandler.END
 
-
-# --- Willkommensnachricht in Gruppe -----------------------------
+# --- Willkommensnachricht & Beitritt ---
 def format_welcome(profile: dict) -> str:
-    lines = [
-        f"🎉 *Willkommen in der Gruppe!*",
-        f"👤 *Name:* {profile.get('name', '-')}",
-        f"🎂 *Alter:* {profile.get('age', '-')}",
-        f"📍 *Bundesland:* {profile.get('state', '-')}",
-        f"🔗 *Telegram:* @{profile.get('username') or 'Kein Benutzername'}",
-    ]
-    if is_valid(profile.get("security", "")):
-        lines.append(f"💥 *Kink/Fetisch:* {profile['security']}")
-    if is_valid(profile.get("hobbies", "")):
-        lines.append(f"🎯 *Hobbys:* {profile['hobbies']}")
-    if is_valid(profile.get("instagram", "")):
-        lines.append(f"📱 *Social Media:* {profile['instagram']}")
-    if is_valid(profile.get("other", "")):
-        lines.append(f"💬 *Sonstiges:* {profile['other']}")
-    if is_valid(profile.get("sexuality", "")):
-        lines.append(f"🏳️‍🌈 *Sexualität:* {profile['sexuality']}")
+    lines = [ f"🎉 *Willkommen in der Gruppe!*", f"👤 *Name:* {profile.get('name', '-')}", f"🎂 *Alter:* {profile.get('age', '-')}", f"📍 *Bundesland:* {profile.get('state', '-')}", f"🔗 *Telegram:* @{profile.get('username') or 'Kein Benutzername'}", ]
+    if is_valid(profile.get("security", "")): lines.append(f"💥 *Kink/Fetisch:* {profile['security']}")
+    if is_valid(profile.get("hobbies", "")): lines.append(f"🎯 *Hobbys:* {profile['hobbies']}")
+    if is_valid(profile.get("instagram", "")): lines.append(f"📱 *Social Media:* {profile['instagram']}")
+    if is_valid(profile.get("other", "")): lines.append(f"💬 *Sonstiges:* {profile['other']}")
+    if is_valid(profile.get("sexuality", "")): lines.append(f"🏳️‍🌈 *Sexualität:* {profile['sexuality']}")
     lines.append(f"🕐 *Beigetreten am:* {datetime.now().strftime('%d.%m.%Y – %H:%M')}")
     return "\n".join(lines)
-
 
 async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.chat_join_request.from_user
     profile = load_profile(user.id)
-
     config = load_bot_settings_config()
     GROUP_ID = int(config.get("main_chat_id", 0)) if config.get("main_chat_id") else 0
     TOPIC_ID_STR = config.get("topic_id")
     TOPIC_ID = int(TOPIC_ID_STR) if TOPIC_ID_STR and TOPIC_ID_STR.isdigit() else None
-
-    if not GROUP_ID:
-        logger.error("GROUP_ID ist nicht konfiguriert. Kann Beitrittsanfrage nicht bearbeiten.")
-        return
-
-    try:
-        await context.bot.approve_chat_join_request(chat_id=GROUP_ID, user_id=user.id)
-    except Exception as e:
-        logger.error(f"Genehmigung fehlgeschlagen: {e}")
-        return
-
+    if not GROUP_ID: return
+    try: await context.bot.approve_chat_join_request(chat_id=GROUP_ID, user_id=user.id)
+    except Exception as e: logger.error(f"Genehmigung fehlgeschlagen: {e}"); return
     if profile:
         welcome_message = format_welcome(profile)
         try:
-            # Sende Steckbrief in das spezifische Topic, falls eine TOPIC_ID konfiguriert ist
             if profile.get("photo_file_id"):
-                await context.bot.send_photo(
-                    chat_id=GROUP_ID,
-                    photo=profile["photo_file_id"],
-                    caption=welcome_message,
-                    parse_mode="Markdown",
-                    message_thread_id=TOPIC_ID # Hinzugefügt
-                )
+                await context.bot.send_photo(chat_id=GROUP_ID, photo=profile["photo_file_id"], caption=welcome_message, parse_mode="Markdown", message_thread_id=TOPIC_ID)
             else:
-                await context.bot.send_message(
-                    chat_id=GROUP_ID,
-                    text=welcome_message,
-                    parse_mode="Markdown",
-                    message_thread_id=TOPIC_ID # Hinzugefügt
-                )
-            logger.info(f"Steckbrief für {user.full_name} in Topic {TOPIC_ID if TOPIC_ID else 'main chat'} gepostet.")
-        except Exception as e:
-            logger.error(f"Fehler bei Begrüßung in Gruppe/Topic: {e}")
-        
+                await context.bot.send_message(chat_id=GROUP_ID, text=welcome_message, parse_mode="Markdown", message_thread_id=TOPIC_ID)
+        except Exception as e: logger.error(f"Fehler bei Begrüßung: {e}")
         remove_profile(user.id)
 
-
-# --- Wenn jemand die Gruppe verlässt -----------------------------
 async def handle_member_left(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.left_chat_member: return
     user = update.message.left_chat_member
-    if user:
-        remove_profile(user.id)
-        logger.info(f"Benutzer {user.full_name} hat die Gruppe verlassen. Profil wurde gelöscht.")
-        # Optional: Nachricht über Verlassen in einem Admin-Log-Kanal posten, aber nicht in der Hauptgruppe, um Spam zu vermeiden
-
+    if user: remove_profile(user.id); logger.info(f"Benutzer {user.full_name} hat die Gruppe verlassen.")
 
 # --- Bot Start --------------------------------------------------
 if __name__ == "__main__":
@@ -324,7 +252,7 @@ if __name__ == "__main__":
     is_enabled = config.get("is_enabled", False)
 
     if not BOT_TOKEN or not is_enabled:
-        logger.info("Invite-Bot ist nicht aktiviert oder BOT_TOKEN fehlt. Wird nicht gestartet.")
+        logger.info("Invite-Bot ist nicht aktiviert oder BOT_TOKEN fehlt.")
     else:
         app = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -351,5 +279,12 @@ if __name__ == "__main__":
         app.add_handler(ChatJoinRequestHandler(handle_join_request))
         app.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, handle_member_left))
 
+        # --- NEUE HANDLER ---
+        developer_filter = filters.Regex(re.compile(r'^wer ist dein entwickler\??$', re.IGNORECASE))
+        app.add_handler(MessageHandler(developer_filter & filters.TEXT & ~filters.COMMAND, reply_with_developer_info))
+
+        praise_filter = filters.Regex(re.compile(r'^cooler bot!?$', re.IGNORECASE))
+        app.add_handler(MessageHandler(praise_filter & filters.TEXT & ~filters.COMMAND, reply_with_developer_info))
+        
         logger.info("🤖 Invite-Bot läuft …")
         app.run_polling()

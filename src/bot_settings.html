@@ -7,52 +7,33 @@
     <style>
         body {
             font-family: sans-serif;
-            margin: 20px;
-            background-color: #121212; /* Sehr dunkles Grau */
-            color: #e0e0e0; /* Helles Grau für Text */
+            margin: 0;
+            padding: 1rem;
+            background-color: #121212;
+            color: #e0e0e0;
         }
         .container {
             max-width: 800px;
             margin: 0 auto;
-            background-color: #1e1e1e; /* Etwas helleres Dunkelgrau */
-            padding: 30px;
+            background-color: #1e1e1e;
+            padding: 1.5rem;
             border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4); /* Dunklerer Schatten */
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
         }
-        h1 {
-            color: #bb86fc; /* Hell-Lila, für Kontrast auf dunklem Hintergrund */
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        h2, h3 {
-            color: #e0e0e0;
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: bold;
-            color: #e0e0e0;
-        }
-        input[type="text"],
-        input[type="number"],
-        textarea {
-            width: calc(100% - 20px);
+        h1, h2, h3 { color: #bb86fc; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; }
+        input[type="text"], input[type="number"] {
+            width: 100%;
             padding: 10px;
-            border: 1px solid #333; /* Dunklerer Rand */
+            border: 1px solid #333;
             border-radius: 4px;
             box-sizing: border-box;
-            background-color: #2a2a2a; /* Dunkles Feld */
-            color: #e0e0e0; /* Helle Schrift im Feld */
-        }
-        input[type="checkbox"] {
-            margin-right: 10px;
             background-color: #2a2a2a;
-            border: 1px solid #333;
+            color: #e0e0e0;
         }
-        .button-style {
+        input[type="checkbox"] { margin-right: 10px; }
+        .button-style, button {
             display: block;
             width: 100%;
             padding: 12px 20px;
@@ -62,32 +43,20 @@
             cursor: pointer;
             font-size: 16px;
             text-align: center;
-            text-decoration: none; /* Wichtig für Links, damit sie wie Buttons aussehen */
+            text-decoration: none;
             transition: background-color 0.3s ease;
-        }
-        button, .button-style {
-            background-color: #6200ee; /* Dunkel-Lila Button */
+            background-color: #6200ee;
             color: white;
+            box-sizing: border-box;
         }
-        button:hover, .button-style:hover {
-            background-color: #3700b3; /* Dunkleres Lila beim Hover */
-        }
-        .success-message {
-            color: #03dac6; /* Türkisgrün für Erfolg */
-            text-align: center;
-            margin-top: 20px;
-        }
-        .error-message {
-            color: #cf6679; /* Korallrot für Fehler */
-            text-align: center;
-            margin-top: 20px;
-        }
+        button:hover, .button-style:hover { background-color: #3700b3; }
+        .success-message { color: #03dac6; }
+        .error-message { color: #cf6679; }
         .status-section {
             margin-top: 30px;
             padding: 20px;
-            background-color: #2a2a2a; /* Dunkler Hintergrund für Status */
+            background-color: #2a2a2a;
             border-radius: 8px;
-            border: 1px solid #333;
         }
         .status-indicator {
             display: inline-block;
@@ -96,30 +65,29 @@
             border-radius: 50%;
             margin-right: 8px;
         }
-        .status-running {
-            background-color: #28a745; /* Green - bleibt gut sichtbar */
-        }
-        .status-stopped {
-            background-color: #dc3545; /* Red - bleibt gut sichtbar */
-        }
+        .status-running { background-color: #28a745; }
+        .status-stopped { background-color: #dc3545; }
         pre {
-            background-color: #000; /* Reines Schwarz für Logs */
+            background-color: #000;
             padding: 10px;
             border-radius: 4px;
             overflow-x: auto;
             white-space: pre-wrap;
             word-wrap: break-word;
-            color: #03dac6; /* Türkisgrün für Log-Text */
-            border: 1px solid #333;
+            color: #03dac6;
         }
         .button-group {
             display: flex;
+            flex-direction: column;
             gap: 10px;
             margin-bottom: 20px;
         }
-        .button-group button {
-            flex: 1;
-            margin-top: 0;
+        .button-group form { flex: 1; }
+
+        @media (min-width: 600px) {
+            .button-group {
+                flex-direction: row;
+            }
         }
     </style>
 </head>
@@ -143,27 +111,22 @@
                     Bot aktivieren
                 </label>
             </div>
-
             <div class="form-group">
                 <label for="bot_token">Bot Token:</label>
                 <input type="text" id="bot_token" name="bot_token" value="{{ config.bot_token or '' }}" placeholder="Ihr Bot Token">
             </div>
-
             <div class="form-group">
-                <label for="main_chat_id">Haupt-Chat ID der Gruppe (für Einladungslinks):</label>
+                <label for="main_chat_id">Haupt-Chat ID der Gruppe:</label>
                 <input type="text" id="main_chat_id" name="main_chat_id" value="{{ config.main_chat_id or '' }}" placeholder="-100xxxxxxxxxx">
             </div>
-
             <div class="form-group">
                 <label for="topic_id">Topic-ID (Optional):</label>
                 <input type="text" id="topic_id" name="topic_id" value="{{ config.topic_id or '' }}" placeholder="ID des Themas für Steckbriefe">
             </div>
-
             <div class="form-group">
                 <label for="link_ttl_minutes">Gültigkeit des Einladungslinks (Minuten):</label>
                 <input type="number" id="link_ttl_minutes" name="link_ttl_minutes" value="{{ config.link_ttl_minutes or 15 }}" min="1">
             </div>
-
             <button type="submit">Einstellungen speichern</button>
         </form>
 
@@ -184,7 +147,7 @@
                 </form>
             </div>
             <h3>Logs:</h3>
-            <pre>{% if invite_bot_logs %}{{ invite_bot_logs|join('') }}{% else %}Keine Logs verfügbar oder Bot wurde noch nicht gestartet.{% endif %}</pre>
+            <pre>{% if invite_bot_logs %}{{ invite_bot_logs|join('') }}{% else %}Keine Logs verfügbar.{% endif %}</pre>
         </div>
     </div>
 </body>
