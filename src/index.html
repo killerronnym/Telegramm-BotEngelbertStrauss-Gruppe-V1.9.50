@@ -14,8 +14,10 @@
         .btn-secondary:hover { background-color: #5a6268; }
         .btn-danger { background-color: #dc3545; }
         .btn-danger:hover { background-color: #c82333; }
+        .btn-success { background-color: #28a745; }
+        .btn-success:hover { background-color: #218838; }
         .form-group { margin-bottom: 1rem; }
-        .action-group { display: flex; gap: 10px; }
+        .action-group { display: flex; gap: 10px; flex-wrap: wrap; }
         label { display: block; margin-bottom: 0.5rem; }
         input[type="text"], input[type="time"] { width: 100%; padding: 0.75rem; background-color: #333; border: 1px solid #555; color: #e0e0e0; border-radius: 4px; box-sizing: border-box; }
         .alert { padding: 1rem; margin-bottom: 1rem; border-radius: 4px; }
@@ -26,11 +28,20 @@
         .status-active { background-color: #28a745; color: white; }
         .status-inactive { background-color: #dc3545; color: white; }
         .settings-section { background-color: #2a2a2a; padding: 1.5rem; border-radius: 8px; margin-top: 1.5rem; }
+        .nav-section { background-color: #2a2a2a; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem; text-align: center; border: 1px solid #444; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Bot Steuerung</h1>
+        
+        <!-- NEU: Navigations-Sektion zum Outfit-Bot -->
+        <div class="nav-section">
+            <h2>Neuer Outfit-Wettbewerb Bot</h2>
+            <p>Hier geht es zur neuen Steuerung für den Outfit-Bot.</p>
+            <a href="/outfit-bot/dashboard" class="btn btn-success">Zum Outfit-Bot Dashboard</a>
+        </div>
+
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
@@ -48,7 +59,7 @@
             </form>
         </div>
         <hr>
-        <h2>Einstellungen</h2>
+        <h2>Einstellungen (Alter Bot)</h2>
 
         <!-- Quiz Einstellungen -->
         <div class="settings-section">

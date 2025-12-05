@@ -320,16 +320,6 @@
         "antwort": 0
     },
     {
-        "frage": "Was sollte man tun, bevor man Fotos aus einer geschlossenen Gruppe extern teilt?",
-        "optionen": [
-            "Erlaubnis einholen",
-            "Einfach posten",
-            "Nur den Text entfernen",
-            "Den Namen raten"
-        ],
-        "antwort": 0
-    },
-    {
         "frage": "Welches Verhalten hilft neuen Mitgliedern in einer ES-Gruppe am meisten?",
         "optionen": [
             "Freundlich begrüßen",

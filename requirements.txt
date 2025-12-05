@@ -7,3 +7,5 @@ flask
 python-telegram-bot
 APScheduler
 pytz
+pyTelegramBotAPI
+schedule

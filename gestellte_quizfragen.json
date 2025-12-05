@@ -18,5 +18,20 @@
             "Weil es nur für Partys gedacht ist"
         ],
         "antwort": 0
-    }
+    },
+    {
+        "frage": "Was sollte man tun, bevor man Fotos aus einer geschlossenen Gruppe extern teilt?",
+        "optionen": [
+            "Erlaubnis einholen",
+            "Einfach posten",
+            "Nur den Text entfernen",
+            "Den Namen raten"
+        ],
+        "antwort": 0
+    },
+    17,
+    19,
+    23,
+    29,
+    14
 ]

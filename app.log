@@ -1,117 +1,29 @@
-2025-12-05 15:48:54,475 - WARNING -  * Debugger is active!
-2025-12-05 15:48:54,482 - INFO -  * Debugger PIN: 273-191-448
-2025-12-05 15:49:31,624 - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
-2025-12-05 15:49:31,627 - INFO - Added job "scheduled_job" to job store "default"
-2025-12-05 15:49:31,627 - INFO - Scheduler started
-2025-12-05 15:49:31,657 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on http://127.0.0.1:9002
-2025-12-05 15:49:31,658 - INFO - [33mPress CTRL+C to quit[0m
-2025-12-05 15:49:31,660 - INFO -  * Restarting with stat
-2025-12-05 15:49:32,141 - WARNING -  * Debugger is active!
-2025-12-05 15:49:32,148 - INFO -  * Debugger PIN: 273-191-448
-2025-12-05 15:49:32,173 - INFO - 127.0.0.1 - - [05/Dec/2025 15:49:32] "GET /?monospaceUid=707083 HTTP/1.1" 200 -
-2025-12-05 15:50:00,001 - INFO - Running job "scheduled_job (trigger: cron[minute='*'], next run at: 2025-12-05 15:50:00 UTC)" (scheduled at 2025-12-05 15:50:00+00:00)
-2025-12-05 15:50:00,025 - INFO - Scheduler prüft auf Aufgaben. Aktuelle deutsche Zeit: 16:50
-2025-12-05 15:50:00,025 - INFO - Job "scheduled_job (trigger: cron[minute='*'], next run at: 2025-12-05 15:51:00 UTC)" executed successfully
-2025-12-05 15:51:00,001 - INFO - Running job "scheduled_job (trigger: cron[minute='*'], next run at: 2025-12-05 15:52:00 UTC)" (scheduled at 2025-12-05 15:51:00+00:00)
-2025-12-05 15:51:00,001 - INFO - Scheduler prüft auf Aufgaben. Aktuelle deutsche Zeit: 16:51
-2025-12-05 15:51:00,002 - INFO - Job "scheduled_job (trigger: cron[minute='*'], next run at: 2025-12-05 15:52:00 UTC)" executed successfully
-2025-12-05 15:52:00,001 - INFO - Running job "scheduled_job (trigger: cron[minute='*'], next run at: 2025-12-05 15:53:00 UTC)" (scheduled at 2025-12-05 15:52:00+00:00)
-2025-12-05 15:52:00,002 - INFO - Scheduler prüft auf Aufgaben. Aktuelle deutsche Zeit: 16:52
-2025-12-05 15:52:00,003 - INFO - Job "scheduled_job (trigger: cron[minute='*'], next run at: 2025-12-05 15:53:00 UTC)" executed successfully
-2025-12-05 15:53:00,001 - INFO - Running job "scheduled_job (trigger: cron[minute='*'], next run at: 2025-12-05 15:54:00 UTC)" (scheduled at 2025-12-05 15:53:00+00:00)
-2025-12-05 15:53:00,001 - INFO - Scheduler prüft auf Aufgaben. Aktuelle deutsche Zeit: 16:53
-2025-12-05 15:53:00,002 - INFO - Job "scheduled_job (trigger: cron[minute='*'], next run at: 2025-12-05 15:54:00 UTC)" executed successfully
-2025-12-05 15:54:00,001 - INFO - Running job "scheduled_job (trigger: cron[minute='*'], next run at: 2025-12-05 15:55:00 UTC)" (scheduled at 2025-12-05 15:54:00+00:00)
-2025-12-05 15:54:00,001 - INFO - Scheduler prüft auf Aufgaben. Aktuelle deutsche Zeit: 16:54
-2025-12-05 15:54:00,001 - INFO - Job "scheduled_job (trigger: cron[minute='*'], next run at: 2025-12-05 15:55:00 UTC)" executed successfully
-2025-12-05 15:55:00,001 - INFO - Running job "scheduled_job (trigger: cron[minute='*'], next run at: 2025-12-05 15:56:00 UTC)" (scheduled at 2025-12-05 15:55:00+00:00)
-2025-12-05 15:55:00,001 - INFO - Scheduler prüft auf Aufgaben. Aktuelle deutsche Zeit: 16:55
-2025-12-05 15:55:00,002 - INFO - Job "scheduled_job (trigger: cron[minute='*'], next run at: 2025-12-05 15:56:00 UTC)" executed successfully
-2025-12-05 15:56:00,001 - INFO - Running job "scheduled_job (trigger: cron[minute='*'], next run at: 2025-12-05 15:57:00 UTC)" (scheduled at 2025-12-05 15:56:00+00:00)
-2025-12-05 15:56:00,001 - INFO - Scheduler prüft auf Aufgaben. Aktuelle deutsche Zeit: 16:56
-2025-12-05 15:56:00,002 - INFO - Job "scheduled_job (trigger: cron[minute='*'], next run at: 2025-12-05 15:57:00 UTC)" executed successfully
-2025-12-05 15:56:29,700 - INFO - Versuch, eine 'Quizfrage' an Channel -1003234700999 zu senden. Manueller Aufruf: True
-2025-12-05 15:56:30,058 - ERROR - Unerwarteter Fehler: Ein unerwarteter Fehler (Quizfrage): 'antwort'
-Traceback (most recent call last):
-  File "/home/user/telegramm-bot-es/main.py", line 133, in handle_sending
-    asyncio.run(send_telegram_poll(bot_token, channel_id, item_obj, 'quiz' if config_type == 'quiz' else 'regular'))
-  File "/nix/store/s0p1kr5mvs0j42dq5r08kgqbi0k028f2-python3-3.11.10/lib/python3.11/asyncio/runners.py", line 190, in run
-    return runner.run(main)
-           ^^^^^^^^^^^^^^^^
-  File "/nix/store/s0p1kr5mvs0j42dq5r08kgqbi0k028f2-python3-3.11.10/lib/python3.11/asyncio/runners.py", line 118, in run
-    return self._loop.run_until_complete(task)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/nix/store/s0p1kr5mvs0j42dq5r08kgqbi0k028f2-python3-3.11.10/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
-    return future.result()
-           ^^^^^^^^^^^^^^^
-  File "/home/user/telegramm-bot-es/main.py", line 103, in send_telegram_poll
-    params.update({'type': 'quiz', 'correct_option_id': frage_obj['antwort']})
-                                                        ~~~~~~~~~^^^^^^^^^^^
-KeyError: 'antwort'
-2025-12-05 15:56:30,064 - INFO - 127.0.0.1 - - [05/Dec/2025 15:56:30] "[32mPOST /send_quizfrage HTTP/1.1[0m" 302 -
-2025-12-05 15:56:30,110 - INFO - 127.0.0.1 - - [05/Dec/2025 15:56:30] "GET / HTTP/1.1" 200 -
-2025-12-05 15:56:32,302 - INFO - Versuch, eine 'Umfrage' an Channel -1003234700999 zu senden. Manueller Aufruf: True
-2025-12-05 15:56:32,602 - INFO - HTTP Request: POST https://api.telegram.org/bot7926468677:AAHK3foZRZAjADsEbi7bk6gAGGoAkctzzIo/sendPoll "HTTP/1.1 200 OK"
-2025-12-05 15:56:32,609 - INFO - Umfrage "Trägst du Engelbert Strauss bei gefährlicheren Tätigkeiten (z. B. Baustelle)?" wurde erfolgreich gesendet!
-2025-12-05 15:56:32,617 - INFO - 127.0.0.1 - - [05/Dec/2025 15:56:32] "[32mPOST /send_umfrage HTTP/1.1[0m" 302 -
-2025-12-05 15:56:32,656 - INFO - 127.0.0.1 - - [05/Dec/2025 15:56:32] "GET / HTTP/1.1" 200 -
-2025-12-05 15:56:37,923 - INFO - Versuch, eine 'Quizfrage' an Channel -1003234700999 zu senden. Manueller Aufruf: True
-2025-12-05 15:56:38,308 - ERROR - Unerwarteter Fehler: Ein unerwarteter Fehler (Quizfrage): 'antwort'
-Traceback (most recent call last):
-  File "/home/user/telegramm-bot-es/main.py", line 133, in handle_sending
-    asyncio.run(send_telegram_poll(bot_token, channel_id, item_obj, 'quiz' if config_type == 'quiz' else 'regular'))
-  File "/nix/store/s0p1kr5mvs0j42dq5r08kgqbi0k028f2-python3-3.11.10/lib/python3.11/asyncio/runners.py", line 190, in run
-    return runner.run(main)
-           ^^^^^^^^^^^^^^^^
-  File "/nix/store/s0p1kr5mvs0j42dq5r08kgqbi0k028f2-python3-3.11.10/lib/python3.11/asyncio/runners.py", line 118, in run
-    return self._loop.run_until_complete(task)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/nix/store/s0p1kr5mvs0j42dq5r08kgqbi0k028f2-python3-3.11.10/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
-    return future.result()
-           ^^^^^^^^^^^^^^^
-  File "/home/user/telegramm-bot-es/main.py", line 103, in send_telegram_poll
-    params.update({'type': 'quiz', 'correct_option_id': frage_obj['antwort']})
-                                                        ~~~~~~~~~^^^^^^^^^^^
-KeyError: 'antwort'
-2025-12-05 15:56:38,313 - INFO - 127.0.0.1 - - [05/Dec/2025 15:56:38] "[32mPOST /send_quizfrage HTTP/1.1[0m" 302 -
-2025-12-05 15:56:38,355 - INFO - 127.0.0.1 - - [05/Dec/2025 15:56:38] "GET / HTTP/1.1" 200 -
-2025-12-05 15:57:00,000 - INFO - Running job "scheduled_job (trigger: cron[minute='*'], next run at: 2025-12-05 15:58:00 UTC)" (scheduled at 2025-12-05 15:57:00+00:00)
-2025-12-05 15:57:00,001 - INFO - Scheduler prüft auf Aufgaben. Aktuelle deutsche Zeit: 16:57
-2025-12-05 15:57:00,001 - INFO - Job "scheduled_job (trigger: cron[minute='*'], next run at: 2025-12-05 15:58:00 UTC)" executed successfully
-2025-12-05 15:57:22,621 - INFO - Versuch, eine 'Quizfrage' an Channel -1003234700999 zu senden. Manueller Aufruf: True
-2025-12-05 15:57:22,818 - ERROR - Unerwarteter Fehler: Ein unerwarteter Fehler (Quizfrage): 'antwort'
-Traceback (most recent call last):
-  File "/home/user/telegramm-bot-es/main.py", line 133, in handle_sending
-    asyncio.run(send_telegram_poll(bot_token, channel_id, item_obj, 'quiz' if config_type == 'quiz' else 'regular'))
-  File "/nix/store/s0p1kr5mvs0j42dq5r08kgqbi0k028f2-python3-3.11.10/lib/python3.11/asyncio/runners.py", line 190, in run
-    return runner.run(main)
-           ^^^^^^^^^^^^^^^^
-  File "/nix/store/s0p1kr5mvs0j42dq5r08kgqbi0k028f2-python3-3.11.10/lib/python3.11/asyncio/runners.py", line 118, in run
-    return self._loop.run_until_complete(task)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/nix/store/s0p1kr5mvs0j42dq5r08kgqbi0k028f2-python3-3.11.10/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
-    return future.result()
-           ^^^^^^^^^^^^^^^
-  File "/home/user/telegramm-bot-es/main.py", line 103, in send_telegram_poll
-    params.update({'type': 'quiz', 'correct_option_id': frage_obj['antwort']})
-                                                        ~~~~~~~~~^^^^^^^^^^^
-KeyError: 'antwort'
-2025-12-05 15:57:22,832 - INFO - 127.0.0.1 - - [05/Dec/2025 15:57:22] "[32mPOST /send_quizfrage HTTP/1.1[0m" 302 -
-2025-12-05 15:57:22,869 - INFO - 127.0.0.1 - - [05/Dec/2025 15:57:22] "GET / HTTP/1.1" 200 -
-2025-12-05 15:57:23,903 - INFO - Versuch, eine 'Umfrage' an Channel -1003234700999 zu senden. Manueller Aufruf: True
-2025-12-05 15:57:24,200 - INFO - HTTP Request: POST https://api.telegram.org/bot7926468677:AAHK3foZRZAjADsEbi7bk6gAGGoAkctzzIo/sendPoll "HTTP/1.1 200 OK"
-2025-12-05 15:57:24,208 - INFO - Umfrage "Wie druck- und scheuerfest sind Logos/Prints deiner Erfahrung nach?" wurde erfolgreich gesendet!
-2025-12-05 15:57:24,215 - INFO - 127.0.0.1 - - [05/Dec/2025 15:57:24] "[32mPOST /send_umfrage HTTP/1.1[0m" 302 -
-2025-12-05 15:57:24,256 - INFO - 127.0.0.1 - - [05/Dec/2025 15:57:24] "GET / HTTP/1.1" 200 -
-2025-12-05 15:58:00,001 - INFO - Running job "scheduled_job (trigger: cron[minute='*'], next run at: 2025-12-05 15:59:00 UTC)" (scheduled at 2025-12-05 15:58:00+00:00)
-2025-12-05 15:58:00,001 - INFO - Scheduler prüft auf Aufgaben. Aktuelle deutsche Zeit: 16:58
-2025-12-05 15:58:00,002 - INFO - Job "scheduled_job (trigger: cron[minute='*'], next run at: 2025-12-05 15:59:00 UTC)" executed successfully
-2025-12-05 15:58:00,314 - INFO - Versuch, eine 'Quizfrage' an Channel -1003234700999 zu senden. Manueller Aufruf: True
-2025-12-05 15:58:00,625 - INFO - HTTP Request: POST https://api.telegram.org/bot7926468677:AAHK3foZRZAjADsEbi7bk6gAGGoAkctzzIo/sendPoll "HTTP/1.1 200 OK"
-2025-12-05 15:58:00,636 - INFO - Quizfrage "Was ist ein plausibler Grund, warum viele Leute ES auch privat tragen?" wurde erfolgreich gesendet!
-2025-12-05 15:58:00,640 - INFO - 127.0.0.1 - - [05/Dec/2025 15:58:00] "[32mPOST /send_quizfrage HTTP/1.1[0m" 302 -
-2025-12-05 15:58:00,681 - INFO - 127.0.0.1 - - [05/Dec/2025 15:58:00] "GET / HTTP/1.1" 200 -
-2025-12-05 15:59:00,000 - INFO - Running job "scheduled_job (trigger: cron[minute='*'], next run at: 2025-12-05 16:00:00 UTC)" (scheduled at 2025-12-05 15:59:00+00:00)
-2025-12-05 15:59:00,001 - INFO - Scheduler prüft auf Aufgaben. Aktuelle deutsche Zeit: 16:59
-2025-12-05 15:59:00,001 - INFO - Job "scheduled_job (trigger: cron[minute='*'], next run at: 2025-12-05 16:00:00 UTC)" executed successfully
+2025-12-05 18:18:10,902 INFO:  * Restarting with stat [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:18:23,010 WARNING:  * Debugger is active! [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:18:23,098 INFO:  * Debugger PIN: 273-191-448 [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:19:09,101 INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:9002 [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:19:09,121 INFO: [33mPress CTRL+C to quit[0m [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:19:09,123 INFO:  * Restarting with stat [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:19:20,604 WARNING:  * Debugger is active! [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:19:20,665 INFO:  * Debugger PIN: 273-191-448 [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:19:21,188 INFO: 127.0.0.1 - - [05/Dec/2025 18:19:21] "GET /?monospaceUid=560602 HTTP/1.1" 200 - [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:19:37,275 INFO: 127.0.0.1 - - [05/Dec/2025 18:19:37] "GET /outfit-bot/dashboard HTTP/1.1" 200 - [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:19:45,924 INFO: outfit_bot.py gestartet mit PID: 76573 [in /home/user/telegramm-bot-es/app.py:92]
+2025-12-05 18:19:45,926 INFO: 127.0.0.1 - - [05/Dec/2025 18:19:45] "[32mPOST /outfit-bot/start HTTP/1.1[0m" 302 - [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:19:46,302 INFO: 127.0.0.1 - - [05/Dec/2025 18:19:46] "GET /outfit-bot/dashboard HTTP/1.1" 200 - [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:20:22,061 INFO: 127.0.0.1 - - [05/Dec/2025 18:20:22] "[32mPOST /outfit-bot/start-contest HTTP/1.1[0m" 302 - [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:20:22,373 INFO: 127.0.0.1 - - [05/Dec/2025 18:20:22] "GET /outfit-bot/dashboard HTTP/1.1" 200 - [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:20:47,999 INFO: 127.0.0.1 - - [05/Dec/2025 18:20:47] "[32mPOST /outfit-bot/announce-winner HTTP/1.1[0m" 302 - [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:20:48,340 INFO: 127.0.0.1 - - [05/Dec/2025 18:20:48] "GET /outfit-bot/dashboard HTTP/1.1" 200 - [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:27:06,277 INFO: 127.0.0.1 - - [05/Dec/2025 18:27:06] "GET /?monospaceUid=0 HTTP/1.1" 200 - [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:27:06,511 INFO: 127.0.0.1 - - [05/Dec/2025 18:27:06] "GET /?monospaceUid=601918 HTTP/1.1" 200 - [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:28:24,122 INFO: 127.0.0.1 - - [05/Dec/2025 18:28:24] "GET /outfit-bot/dashboard HTTP/1.1" 200 - [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:29:13,542 INFO: outfit_bot.py gestartet mit PID: 78599 [in /home/user/telegramm-bot-es/app.py:92]
+2025-12-05 18:29:13,568 INFO: 127.0.0.1 - - [05/Dec/2025 18:29:13] "[32mPOST /outfit-bot/start HTTP/1.1[0m" 302 - [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:29:13,809 INFO: 127.0.0.1 - - [05/Dec/2025 18:29:13] "GET /outfit-bot/dashboard HTTP/1.1" 200 - [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:29:22,146 INFO: 127.0.0.1 - - [05/Dec/2025 18:29:22] "[32mPOST /outfit-bot/start-contest HTTP/1.1[0m" 302 - [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:29:22,409 INFO: 127.0.0.1 - - [05/Dec/2025 18:29:22] "GET /outfit-bot/dashboard HTTP/1.1" 200 - [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:30:13,857 INFO: 127.0.0.1 - - [05/Dec/2025 18:30:13] "[32mPOST /outfit-bot/announce-winner HTTP/1.1[0m" 302 - [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:30:14,086 INFO: 127.0.0.1 - - [05/Dec/2025 18:30:14] "GET /outfit-bot/dashboard HTTP/1.1" 200 - [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]
+2025-12-05 18:37:56,961 INFO: 127.0.0.1 - - [05/Dec/2025 18:37:56] "GET / HTTP/1.1" 200 - [in /home/user/telegramm-bot-es/.venv/lib/python3.11/site-packages/werkzeug/_internal.py:97]

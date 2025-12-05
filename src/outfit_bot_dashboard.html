@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Outfit-Bot Dashboard</title>
+    <style>
+        body { background-color: #121212; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 2em; }
+        .container { max-width: 900px; margin: auto; background-color: #1e1e1e; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
+        h1, h2, h3 { color: #ffffff; border-bottom: 2px solid #333; padding-bottom: 0.5rem; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="text"], input[type="time"], textarea, select { 
+            width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; box-sizing: border-box; 
+            background-color: #333; color: #e0e0e0; 
+        }
+        textarea { font-family: monospace; }
+        .btn { padding: 10px 15px; border: none; border-radius: 4px; color: white; cursor: pointer; font-size: 16px; margin-right: 10px; transition: background-color 0.3s; }
+        .btn-save { background-color: #28a745; }
+        .btn-save:hover { background-color: #218838; }
+        .btn-action { background-color: #007bff; }
+        .btn-action:hover { background-color: #0056b3; }
+        .btn-danger { background-color: #dc3545; }
+        .btn-danger:hover { background-color: #c82333; }
+        .btn-warning { background-color: #ffc107; color: #333; }
+        .btn-warning:hover { background-color: #e0a800; }
+        
+        .status-box { padding: 15px; border-radius: 5px; margin-bottom: 20px; text-align: center; font-weight: bold; font-size: 1.2em; }
+        .status-active { background-color: #1e4620; color: #d4edda; border: 1px solid #28a745; }
+        .status-inactive { background-color: #4c1d21; color: #f8d7da; border: 1px solid #dc3545; }
+
+        .log-window {
+            background-color: #000; color: #00ff00; font-family: 'Courier New', Courier, monospace;
+            padding: 15px; border-radius: 5px; height: 300px; overflow-y: scroll; border: 1px solid #333;
+            font-size: 0.9em; white-space: pre-wrap;
+        }
+
+        .alert { padding: 1rem; margin-bottom: 1rem; border-radius: 4px; }
+        .alert-success { background-color: #1e4620; color: #d4edda; border: 1px solid #c3e6cb; }
+        .alert-info { background-color: #0c5460; color: #d1ecf1; border: 1px solid #bee5eb; }
+        .alert-danger { background-color: #721c24; color: #f8d7da; border: 1px solid #f5c6cb; }
+
+        hr { border: 0; border-top: 1px solid #333; margin: 2em 0; }
+        .flex-row { display: flex; justify-content: space-between; align-items: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="flex-row">
+            <h1>👔 Outfit-Bot Dashboard</h1>
+            <a href="/" style="color: #007bff; text-decoration: none;">← Zurück zur Hauptseite</a>
+        </div>
+        
+        <!-- Status Anzeige -->
+        <div class="status-box {{ 'status-active' if is_running else 'status-inactive' }}">
+            Status: {{ '🟢 AKTIV (Läuft)' if is_running else '🔴 INAKTIV (Gestoppt)' }}
+        </div>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Hauptsteuerung (Start/Stop) -->
+        <div style="margin-bottom: 20px; padding: 15px; background-color: #2a2a2a; border-radius: 8px;">
+            <h3 style="margin-top: 0;">Prozess-Steuerung</h3>
+            {% if is_running %}
+                <form action="/outfit-bot/stop" method="post" style="display:inline;">
+                    <button type="submit" class="btn btn-danger">🛑 Bot stoppen</button>
+                </form>
+            {% else %}
+                <form action="/outfit-bot/start" method="post" style="display:inline;">
+                    <button type="submit" class="btn btn-save">▶️ Bot starten</button>
+                </form>
+            {% endif %}
+        </div>
+
+        <!-- Manuelle Aktionen -->
+        <h2>Manuelle Aktionen</h2>
+        <div style="margin-bottom: 20px;">
+            <form action="/outfit-bot/start-contest" method="post" style="display:inline;">
+                <button type="submit" class="btn btn-action" {{ 'disabled' if not is_running }}>📸 Wettbewerb jetzt starten</button>
+            </form>
+            <form action="/outfit-bot/announce-winner" method="post" style="display:inline;">
+                <button type="submit" class="btn btn-warning" {{ 'disabled' if not is_running }}>🏆 Gewinner jetzt auslosen</button>
+            </form>
+            {% if not is_running %}
+                <p style="color: #dc3545; font-size: 0.9em; margin-top: 5px;">⚠️ Bot muss laufen, um Aktionen auszuführen.</p>
+            {% endif %}
+        </div>
+
+        <hr>
+
+        <!-- Konfiguration -->
+        <h2>⚙️ Konfiguration</h2>
+        <form action="/outfit-bot/save-config" method="post">
+            <div class="form-group">
+                <label for="bot_token">Bot Token</label>
+                <input type="text" id="bot_token" name="BOT_TOKEN" value="{{ config.BOT_TOKEN }}">
+            </div>
+            <div class="form-group">
+                <label for="chat_id">Gruppen-Chat-ID</label>
+                <input type="text" id="chat_id" name="CHAT_ID" value="{{ config.CHAT_ID }}">
+            </div>
+            <div class="form-group">
+                <label>Automatische Posts: 
+                    <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background-color: {{ '#28a745' if config.AUTO_POST_ENABLED else '#dc3545' }}; margin-right:5px;"></span>
+                    {{ 'Aktiviert' if config.AUTO_POST_ENABLED else 'Deaktiviert' }}
+                </label>
+                 <select name="AUTO_POST_ENABLED">
+                    <option value="true" {{ 'selected' if config.AUTO_POST_ENABLED }}>Aktivieren</option>
+                    <option value="false" {{ 'selected' if not config.AUTO_POST_ENABLED }}>Deaktivieren</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="post_time">Start-Uhrzeit (HH:MM)</label>
+                <input type="time" id="post_time" name="POST_TIME" value="{{ config.POST_TIME }}">
+            </div>
+            <div class="form-group">
+                <label for="winner_time">Gewinner-Uhrzeit (HH:MM)</label>
+                <input type="time" id="winner_time" name="WINNER_TIME" value="{{ config.WINNER_TIME }}">
+            </div>
+            <div class="form-group">
+                <label for="admin_ids">Admin User IDs (kommagetrennt)</label>
+                <textarea id="admin_ids" name="ADMIN_USER_IDS" rows="2">{{ config.ADMIN_USER_IDS|join(', ') }}</textarea>
+            </div>
+            <button type="submit" class="btn btn-save">Konfiguration speichern</button>
+        </form>
+
+        <hr>
+
+        <!-- Live Logs -->
+        <h2>📜 Live Logs (Letzte 30 Zeilen)</h2>
+        <div class="log-window">
+            {% for line in logs %}
+{{ line }}{% endfor %}
+        </div>
+        <div style="text-align: right; margin-top: 5px;">
+            <a href="/outfit-bot/dashboard" class="btn btn-secondary" style="background-color: #6c757d; font-size: 0.8em; padding: 5px 10px;">Logs aktualisieren</a>
+        </div>
+
+    </div>
+</body>
+</html>
