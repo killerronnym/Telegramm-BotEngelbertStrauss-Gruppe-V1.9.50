@@ -7,5 +7,23 @@
             "Linux",
             "Andere"
         ]
+    },
+    {
+        "frage": "Trägst du Engelbert Strauss bei gefährlicheren Tätigkeiten (z. B. Baustelle)?",
+        "optionen": [
+            "Ja, regelmäßig",
+            "Selten",
+            "Nur privat",
+            "Gar nicht"
+        ]
+    },
+    {
+        "frage": "Wie druck- und scheuerfest sind Logos/Prints deiner Erfahrung nach?",
+        "optionen": [
+            "Sehr haltbar",
+            "Haltbar",
+            "Mittel",
+            "Schnell kaputt"
+        ]
     }
 ]

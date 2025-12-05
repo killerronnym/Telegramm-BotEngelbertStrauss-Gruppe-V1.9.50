@@ -8,5 +8,15 @@
             "Saturn"
         ],
         "antwort": 2
+    },
+    {
+        "frage": "Was ist ein plausibler Grund, warum viele Leute ES auch privat tragen?",
+        "optionen": [
+            "Robust, bequem und stylisch",
+            "Weil es keine anderen Marken gibt",
+            "Weil es gesetzlich vorgeschrieben ist",
+            "Weil es nur für Partys gedacht ist"
+        ],
+        "antwort": 0
     }
 ]

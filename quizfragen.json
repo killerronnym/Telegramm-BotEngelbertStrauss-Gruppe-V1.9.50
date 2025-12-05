@@ -1,22 +1,382 @@
 [
     {
-        "frage": "Was ist die Hauptstadt von Deutschland?",
+        "frage": "Aus welchem Land stammt Engelbert Strauss?",
         "optionen": [
-            "München",
-            "Berlin",
-            "Hamburg",
-            "Köln"
+            "Deutschland",
+            "Österreich",
+            "Schweiz",
+            "Niederlande"
         ],
-        "antwort": 1
+        "antwort": 0
     },
     {
-        "frage": "Wie viele Kontinente gibt es?",
+        "frage": "Wofür ist Engelbert Strauss am bekanntesten?",
         "optionen": [
-            "5",
-            "6",
-            "7",
-            "8"
+            "Arbeitskleidung und Arbeitsschutz",
+            "Luxusanzüge",
+            "Sporternährung",
+            "Haushaltsgeräte"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Welches Tier ist Teil des Markenzeichens von Engelbert Strauss?",
+        "optionen": [
+            "Adler",
+            "Löwe",
+            "Strauß",
+            "Wolf"
         ],
         "antwort": 2
+    },
+    {
+        "frage": "Welche Produktgruppe gehört typisch zu Engelbert Strauss?",
+        "optionen": [
+            "Sicherheitsschuhe",
+            "Krawatten",
+            "Abendkleider",
+            "Badeschlappen"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Welche Aussage passt am besten zu Engelbert Strauss?",
+        "optionen": [
+            "Workwear mit starkem Praxisfokus",
+            "Reine High-Fashion-Marke",
+            "Elektronikhersteller",
+            "Lebensmittelmarke"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Welche Farbe/Farbkombi ist bei Engelbert Strauss besonders verbreitet?",
+        "optionen": [
+            "Schwarz/Rot",
+            "Pink/Gold",
+            "Weiß/Lila",
+            "Türkis/Orange"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Was ist ein typisches Merkmal vieler Arbeitshosen von Engelbert Strauss?",
+        "optionen": [
+            "Viele Funktionstaschen",
+            "Seidenstoff",
+            "Bügelfalten wie bei Anzügen",
+            "Pailletten"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Welche Eigenschaft ist bei Workwear besonders wichtig?",
+        "optionen": [
+            "Robustheit",
+            "Empfindliche Stoffe",
+            "Nur Deko-Optik",
+            "Reiner Laufsteg-Fokus"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Welche Art Jacke ist typisch für Engelbert Strauss?",
+        "optionen": [
+            "Softshelljacke",
+            "Smoking",
+            "Pelzmantel",
+            "Seidenkimono"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Wozu dienen Kniepolstertaschen an Arbeitshosen?",
+        "optionen": [
+            "Zum Einsetzen von Kniepolstern",
+            "Nur als Modedetail",
+            "Für Handy-Lautsprecher",
+            "Für Schmuck"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Welche Schutzklasse ist eine typische Kategorie bei Sicherheitsschuhen?",
+        "optionen": [
+            "S1",
+            "A9",
+            "X5",
+            "Q2"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Was ist ein wichtiger Vorteil von Sicherheitsschuhen?",
+        "optionen": [
+            "Schutz vor Verletzungen am Arbeitsplatz",
+            "Bessere Schwimmleistung",
+            "Höhere Sprungkraft im Basketball",
+            "Perfekt für Opernbälle"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Warum sind reflektierende Elemente an Workwear nützlich?",
+        "optionen": [
+            "Erhöhen die Sichtbarkeit",
+            "Machen das Material weicher",
+            "Reduzieren Taschenanzahl",
+            "Ersetzen die Sicherheitskappe"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Welche dieser Kategorien ist am ehesten Workwear-typisch?",
+        "optionen": [
+            "Bundhose",
+            "Abendrobe",
+            "Samtanzug",
+            "Strandkaftan"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Wofür sind Latzhosen im Arbeitskontext besonders praktisch?",
+        "optionen": [
+            "Zusätzlicher Schutz und Stauraum",
+            "Weil sie leichter reißen",
+            "Weil sie keine Taschen haben",
+            "Weil sie nur für Mode gedacht sind"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Welches Material findet man häufig bei robuster Arbeitskleidung?",
+        "optionen": [
+            "Mischgewebe aus Baumwolle und Polyester",
+            "Reine Seide",
+            "Satin",
+            "Spitze"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Was beschreibt ein sinnvolles Kleidungssystem für wechselndes Wetter?",
+        "optionen": [
+            "Layering (Schichtprinzip)",
+            "Nur ein T-Shirt für alles",
+            "Nur Sommerkleidung im Winter",
+            "Nur Regenjacke ohne Unterbau"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Welche Kombination hält bei Regen am ehesten trocken?",
+        "optionen": [
+            "Regenjacke und Regenhose",
+            "Baumwollhoodie und Jeans",
+            "T-Shirt und Shorts",
+            "Fleecejacke ohne Wetterschutz"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Welche Zielgruppe spricht Engelbert Strauss traditionell stark an?",
+        "optionen": [
+            "Handwerk und Industrie",
+            "Nur Profi-Gamer",
+            "Nur Opernsänger",
+            "Nur Marathonläufer"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Was ist bei einer Arbeitshose meist entscheidender als reine Optik?",
+        "optionen": [
+            "Funktion und Bewegungsfreiheit",
+            "Glitzer",
+            "Designerlabel ohne Nutzen",
+            "Extrem empfindlicher Stoff"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Welche Aussage passt am besten zum aktuellen Image von Engelbert Strauss?",
+        "optionen": [
+            "Workwear mit Lifestyle-Faktor",
+            "Reine Abendmode",
+            "Nur Homewear",
+            "Nur Sporttrikots"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Welche Art Accessoires bietet Engelbert Strauss typischerweise an?",
+        "optionen": [
+            "Gürtel, Mützen, Socken",
+            "Luxusuhren",
+            "Diamantschmuck",
+            "Kochmesser-Sets"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Welche Kopfbedeckung ist bei Workwear-Marken wie Engelbert Strauss üblich?",
+        "optionen": [
+            "Cap",
+            "Zylinder",
+            "Krone",
+            "Tüllhaube"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Welche Eigenschaft ist bei Arbeitshandschuhen besonders wichtig?",
+        "optionen": [
+            "Grip und Schutz",
+            "Glanzoptik",
+            "Parfümduft",
+            "Deko-Fransen"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Welche dieser Optionen ist am ehesten ein typischer Workwear-Einsatzort?",
+        "optionen": [
+            "Baustelle",
+            "Strandhochzeit",
+            "Opernball",
+            "Laufsteg-Gala"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Welche Eigenschaft unterstützt langes Stehen und Gehen in Arbeitsschuhen?",
+        "optionen": [
+            "Gute Dämpfung und Passform",
+            "Hoher Absatz",
+            "Ultraglatte Sohle",
+            "Sehr harte, ungepolsterte Innensohle"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Was sollte man beim Kauf von Sicherheitsschuhen zuerst prüfen?",
+        "optionen": [
+            "Die passende Schutzklasse",
+            "Nur die Farbe",
+            "Nur das Logo",
+            "Nur die Schnürsenkel"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Warum kann Stretch in Arbeitshosen sinnvoll sein?",
+        "optionen": [
+            "Mehr Bewegungsfreiheit",
+            "Weniger Komfort",
+            "Mehr Rutschen",
+            "Weniger Haltbarkeit grundsätzlich"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Welche Art Hose ist für warme Tage am naheliegendsten?",
+        "optionen": [
+            "Arbeitsshorts",
+            "Gefütterte Winterhose",
+            "Skihose",
+            "Thermohose plus Unterwäsche"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Was ist beim Waschen von Workwear grundsätzlich sinnvoll?",
+        "optionen": [
+            "Pflegeetikett beachten",
+            "Alles immer bei 90°C",
+            "Nie waschen",
+            "Nur mit aggressiven Lösungsmitteln reinigen"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Welche Eigenschaft trägt in einer Community-Gruppe zu einem guten Klima bei?",
+        "optionen": [
+            "Respektvoller Umgang",
+            "Shaming",
+            "Druck auf andere",
+            "Beleidigungen"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Was ist in Kink-/Fetisch-nahen Communities besonders zentral?",
+        "optionen": [
+            "Consent und klare Grenzen",
+            "Grenzen ignorieren",
+            "Andere bloßstellen",
+            "Ungefragt Inhalte teilen"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Was sollte man tun, bevor man Fotos aus einer geschlossenen Gruppe extern teilt?",
+        "optionen": [
+            "Erlaubnis einholen",
+            "Einfach posten",
+            "Nur den Text entfernen",
+            "Den Namen raten"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Welches Verhalten hilft neuen Mitgliedern in einer ES-Gruppe am meisten?",
+        "optionen": [
+            "Freundlich begrüßen",
+            "Ignorieren",
+            "Direkt kritisieren",
+            "Mit Spott reagieren"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Welche Art Beitrag ist in einer Engelbert-Strauss-Fangruppe meist am nützlichsten?",
+        "optionen": [
+            "Outfit- und Produkterfahrungen",
+            "Off-Topic-Spam",
+            "Beleidigungen",
+            "Nur Fremdwerbung"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Was beschreibt den Spirit des bekannten Strauss-Slogans am ehesten?",
+        "optionen": [
+            "Positive Haltung zu Arbeit und Ausrüstung",
+            "Arbeit ist immer schlecht",
+            "Nur Freizeit zählt",
+            "Workwear ist unwichtig"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Welche Aussage ist bei Workwear-Kaufentscheidungen am sinnvollsten?",
+        "optionen": [
+            "Einsatzbereich bestimmt die Auswahl",
+            "Nur Trendfarben zählen",
+            "Nur das teuerste Teil ist gut",
+            "Funktion ist egal"
+        ],
+        "antwort": 0
+    },
+    {
+        "frage": "Warum tragen viele Fans Engelbert Strauss als kompletten Look?",
+        "optionen": [
+            "Einheitlicher Worker-Style und Markenfeeling",
+            "Weil man sonst nichts kombinieren darf",
+            "Weil es nur eine Kollektion gibt",
+            "Weil es Pflicht im Alltag ist"
+        ],
+        "antwort": 0
     }
 ]
