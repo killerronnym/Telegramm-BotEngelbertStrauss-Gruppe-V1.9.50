@@ -1,0 +1,12 @@
+[
+    {
+        "frage": "Welcher Planet ist der größte in unserem Sonnensystem?",
+        "optionen": [
+            "Erde",
+            "Mars",
+            "Jupiter",
+            "Saturn"
+        ],
+        "antwort": 2
+    }
+]

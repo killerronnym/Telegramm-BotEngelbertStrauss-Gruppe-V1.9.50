@@ -1,0 +1,11 @@
+[
+    {
+        "frage": "Welches Betriebssystem bevorzugen Sie?",
+        "optionen": [
+            "Windows",
+            "macOS",
+            "Linux",
+            "Andere"
+        ]
+    }
+]

@@ -1,0 +1,14 @@
+{
+    "quiz": {
+        "token": "7926468677:AAHK3foZRZAjADsEbi7bk6gAGGoAkctzzIo",
+        "channel_id": "-1003234700999",
+        "daily_enabled": false,
+        "time": "14:53"
+    },
+    "umfrage": {
+        "token": "7926468677:AAHK3foZRZAjADsEbi7bk6gAGGoAkctzzIo",
+        "channel_id": "-1003234700999",
+        "daily_enabled": false,
+        "time": "14:53"
+    }
+}

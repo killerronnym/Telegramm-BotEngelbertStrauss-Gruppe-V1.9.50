@@ -1,3 +1,5 @@
 #!/bin/sh
 source .venv/bin/activate
-python -u -m flask --app main run -p $PORT --debug
+export FLASK_APP=main
+export FLASK_DEBUG=1
+python -m flask run --port $PORT

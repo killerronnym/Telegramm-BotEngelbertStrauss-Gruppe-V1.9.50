@@ -1,0 +1,11 @@
+[
+    {
+        "frage": "Wann arbeiten Sie am produktivsten?",
+        "optionen": [
+            "Morgens",
+            "Nachmittags",
+            "Abends",
+            "Nachts"
+        ]
+    }
+]

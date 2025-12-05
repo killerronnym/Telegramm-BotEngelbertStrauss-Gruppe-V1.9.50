@@ -1,0 +1,22 @@
+[
+    {
+        "frage": "Was ist die Hauptstadt von Deutschland?",
+        "optionen": [
+            "München",
+            "Berlin",
+            "Hamburg",
+            "Köln"
+        ],
+        "antwort": 1
+    },
+    {
+        "frage": "Wie viele Kontinente gibt es?",
+        "optionen": [
+            "5",
+            "6",
+            "7",
+            "8"
+        ],
+        "antwort": 2
+    }
+]
