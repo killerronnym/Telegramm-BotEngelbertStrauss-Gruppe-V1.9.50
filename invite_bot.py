@@ -94,7 +94,8 @@ def remove_profile(user_id: int):
         _save_all_profiles(data)
 
 # --- States -----------------------------------------------------
-ASK_NAME, ASK_AGE, ASK_STATE, ASK_PHOTO, ASK_SECURITY, ASK_HOBBIES, ASK_INSTAGRAM, ASK_OTHER, ASK_SEXUALITY, ASK_RULES = range(10)
+# ASK_SECURITY removed
+ASK_NAME, ASK_AGE, ASK_STATE, ASK_PHOTO, ASK_HOBBIES, ASK_INSTAGRAM, ASK_OTHER, ASK_SEXUALITY, ASK_RULES = range(9)
 user_data_temp = {}
 
 async def reply_with_developer_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -135,7 +136,7 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ASK_AGE
 
 async def get_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.message.from_user # Added this line
+    user = update.message.from_user
     age_text = update.message.text.strip()
     if not age_text.isdigit() or not 10 <= int(age_text) <= 100:
         await update.message.reply_text("Bitte gib dein Alter als Zahl zwischen 10 und 100 ein\\.", parse_mode="MarkdownV2")
@@ -146,7 +147,7 @@ async def get_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ASK_STATE
 
 async def get_state(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.message.from_user # Added this line
+    user = update.message.from_user
     answer = update.message.text.strip()
     log_user_interaction(user.id, "Bundesland", answer)
     user_data_temp[user.id]["state"] = answer
@@ -160,16 +161,11 @@ async def get_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ASK_PHOTO
     log_user_interaction(user_id, "Foto", "Foto erhalten")
     user_data_temp[user_id]["photo_file_id"] = update.message.photo[-1].file_id
-    await update.message.reply_text(f"💥 Was ist dein Kink oder Fetisch?\n\n{FREIWILLIG_HINT}", parse_mode="MarkdownV2")
-    return ASK_SECURITY
-
-async def get_security(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip()
-    log_user_interaction(update.message.from_user.id, "Kink/Fetisch", text)
-    if is_valid(text):
-        user_data_temp[update.message.from_user.id]["security"] = text
+    # Direkt zur Hobbys-Frage, ASK_SECURITY überspringen
     await update.message.reply_text(f"🎯 Was sind deine Hobbys oder Interessen?\n\n{FREIWILLIG_HINT}", parse_mode="MarkdownV2")
     return ASK_HOBBIES
+
+# get_security removed
 
 async def get_hobbies(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
@@ -211,14 +207,12 @@ def format_welcome(profile: dict) -> str:
         return escape_markdown(str(text), version=2)
 
     username = profile.get('username')
-    # Create a user link. The @ is removed as it's not part of the MarkdownV2 link syntax
-    # and could cause issues with usernames containing special characters.
     if username:
         user_link = f"[{esc(username)}](tg://user?id={profile.get('telegram_id')})"
     else:
         user_link = esc(profile.get('first_name', 'Unbekannt'))
 
-    join_date_str = datetime.now().strftime('%d\\.%m\\.%Y – %H\\:%M') # Escaping hyphens and colons for MarkdownV2
+    join_date_str = datetime.now().strftime('%d\\.%m\\.%Y – %H\\:%M')
 
     lines = [
         f"🎉 *Willkommen in der Gruppe\\!*",
@@ -227,7 +221,7 @@ def format_welcome(profile: dict) -> str:
         f"📍 *Bundesland:* {esc(profile.get('state', '-'))}",
         f"🔗 *Telegram:* {user_link}",
     ]
-    if is_valid(profile.get("security", "")): lines.append(f"💥 *Kink/Fetisch:* {esc(profile['security'])}")
+    # Kink/Fetisch Zeile entfernt
     if is_valid(profile.get("hobbies", "")): lines.append(f"🎯 *Hobbys:* {esc(profile['hobbies'])}")
     if is_valid(profile.get("instagram", "")): lines.append(f"📱 *Social Media:* {esc(profile['instagram'])}")
     if is_valid(profile.get("other", "")): lines.append(f"💬 *Sonstiges:* {esc(profile['other'])}")
@@ -282,7 +276,6 @@ async def get_rules_ok(update: Update, context: ContextTypes.DEFAULT_TYPE):
         is_already_member = member.status in ['member', 'administrator', 'creator']
         logger.debug(f"[get_rules_ok] User {user_id} member status: {member.status}, is_already_member: {is_already_member}")
     except TelegramError as e:
-        # User is not a member, get_chat_member will raise an error (e.g., ChatMemberNotFound)
         logger.debug(f"[get_rules_ok] User {user_id} ist kein aktuelles Mitglied der Gruppe (Fehler: {e}).")
         is_already_member = False
     except Exception as e:
@@ -313,7 +306,7 @@ async def get_rules_ok(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"⚠️ Fehler beim Erstellen des Links\\: {escape_markdown(str(e), version=2)}", parse_mode="MarkdownV2")
     
     user_data_temp.pop(user_id, None)
-    remove_profile(user_id) # Remove profile regardless of whether it was posted or not
+    remove_profile(user_id)
     return ConversationHandler.END
 
 async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -390,7 +383,7 @@ if __name__ == "__main__":
                 ASK_AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_age)],
                 ASK_STATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_state)],
                 ASK_PHOTO: [MessageHandler(filters.PHOTO, get_photo)],
-                ASK_SECURITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_security)],
+                # ASK_SECURITY removed here as well
                 ASK_HOBBIES: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_hobbies)],
                 ASK_INSTAGRAM: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_instagram)],
                 ASK_OTHER: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_other)],
