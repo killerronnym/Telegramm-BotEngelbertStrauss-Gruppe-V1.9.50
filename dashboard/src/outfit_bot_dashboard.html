@@ -112,11 +112,6 @@
                         </div>
                     </div>
 
-                    <div class="mb-3">
-                        <label for="admin_ids" class="form-label">Admin User IDs (kommagetrennt)</label>
-                        <textarea class="form-control" id="admin_ids" name="ADMIN_USER_IDS" rows="2">{{ config.ADMIN_USER_IDS|join(', ') }}</textarea>
-                    </div>
-
                     <h3 class="mt-4 mb-3">⚔️ Duell-Einstellungen</h3>
                     <div class="mb-3 form-check form-switch">
                         <input type="checkbox" class="form-check-input" id="duel_mode" name="DUEL_MODE" {% if config.DUEL_MODE %}checked{% endif %}>
@@ -139,6 +134,34 @@
                             <label for="duel_duration" class="form-label">Duell-Dauer (Minuten)</label>
                             <input type="number" class="form-control" id="duel_duration" name="DUEL_DURATION_MINUTES" value="{{ config.DUEL_DURATION_MINUTES or 60 }}" min="1">
                         </div>
+                    </div>
+
+                    <div class="mt-4 mb-2">
+                        <h4 class="mb-2">Admin-Befehle (Telegram)</h4>
+                        <ul class="list-unstyled">
+                            <li class="mb-1 d-flex align-items-center">
+                                <span class="me-2">/start_contest</span> 
+                                <i class="bi bi-info-circle text-info" data-bs-toggle="tooltip" data-bs-placement="right" title="Startet den Outfit-Wettbewerb sofort manuell."></i>
+                            </li>
+                            <li class="mb-1 d-flex align-items-center">
+                                <span class="me-2">/announce_winner</span> 
+                                <i class="bi bi-info-circle text-info" data-bs-toggle="tooltip" data-bs-placement="right" title="Löst die Gewinnerermittlung sofort manuell aus."></i>
+                            </li>
+                            <li class="mb-1 d-flex align-items-center">
+                                <span class="me-2">/end_duel</span> 
+                                <i class="bi bi-info-circle text-info" data-bs-toggle="tooltip" data-bs-placement="right" title="Beendet ein laufendes Duell sofort und ermittelt den Gewinner."></i>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="admin_ids" class="form-label">Admin User IDs (kommagetrennt)</label>
+                        <textarea class="form-control" id="admin_ids" name="ADMIN_USER_IDS" rows="2">{{ config.ADMIN_USER_IDS|join(', ') }}</textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="temp_msg_duration" class="form-label">Dauer temporärer Nachrichten (Sekunden)</label>
+                        <input type="number" class="form-control" id="temp_msg_duration" name="TEMPORARY_MESSAGE_DURATION_SECONDS" value="{{ config.TEMPORARY_MESSAGE_DURATION_SECONDS or 30 }}" min="1">
                     </div>
 
                     <button type="submit" class="btn btn-primary mt-3 w-100">Konfiguration speichern & neustarten</button>

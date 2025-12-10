@@ -154,7 +154,8 @@ def outfit_bot_save_config():
         'POST_TIME': form.get('POST_TIME', '18:00'),
         'WINNER_TIME': form.get('WINNER_TIME', '22:00'),
         'DUEL_TYPE': form.get('DUEL_TYPE', 'tie_breaker'),
-        'DUEL_DURATION_MINUTES': int(form.get('DUEL_DURATION_MINUTES', 60))
+        'DUEL_DURATION_MINUTES': int(form.get('DUEL_DURATION_MINUTES', 60)),
+        'TEMPORARY_MESSAGE_DURATION_SECONDS': int(form.get('TEMPORARY_MESSAGE_DURATION_SECONDS', 30)) # NEW: Save temporary message duration
     })
 
     config['AUTO_POST_ENABLED'] = 'AUTO_POST_ENABLED' in form

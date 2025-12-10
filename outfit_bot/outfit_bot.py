@@ -32,7 +32,8 @@ DEFAULT_CONFIG = {
     "ADMIN_USER_IDS": [],
     "DUEL_MODE": False,
     "DUEL_TYPE": "tie_breaker",
-    "DUEL_DURATION_MINUTES": 60
+    "DUEL_DURATION_MINUTES": 60,
+    "TEMPORARY_MESSAGE_DURATION_SECONDS": 30 # Added new config key
 }
 
 def load_json(filename, default_data=None):
@@ -75,7 +76,7 @@ def reset_contest_data(is_starting_new_contest=False):
     """Resets the main contest data, keeping duel data if it exists."""
     bot_data = load_json(DATA_FILE)
     new_data = {"submissions": {}, "votes": {},
-                "contest_active": is_starting_new_contest} # NEW: manage contest_active flag
+                "contest_active": is_starting_new_contest}
     if "current_duel" in bot_data:
         new_data["current_duel"] = bot_data["current_duel"]
     save_json(DATA_FILE, new_data)
@@ -109,7 +110,6 @@ def announce_winners_grouped(winner_user_ids, votes, reason=""):
     media = []
     winner_names = []
     
-    # Fetch all winner information and prepare media group
     for user_id in winner_user_ids:
         user_id_str = str(user_id)
         if user_id_str in submissions:
@@ -122,7 +122,6 @@ def announce_winners_grouped(winner_user_ids, votes, reason=""):
         logging.error("No valid media found for grouped winner announcement. Skipping.")
         return
 
-    # Add caption to the first media item
     caption = f"🏆 Outfit des Tages: {', '.join(winner_names)} mit {votes} Reaktionen! Herzlichen Glückwunsch! 🥳"
     media[0].caption = caption
 
@@ -140,8 +139,6 @@ def start_duel(tied_message_ids):
     bot_data = load_json(DATA_FILE)
     submissions = bot_data.get("submissions", {})
 
-    # Select two random contestants from the tied messages
-    # Ensure we have at least 2 unique participants to duel
     if len(tied_message_ids) < 2:
         logging.error("Not enough tied messages to start a duel.")
         tied_user_ids = [uid for uid, s in submissions.items() if str(s.get("message_id")) in tied_message_ids]
@@ -251,7 +248,7 @@ def end_duel():
 # --- CORE BOT FUNCTIONS ---
 def send_daily_post():
     logging.info("Attempting to send daily post...")
-    reset_contest_data(is_starting_new_contest=True) # NEW: Set contest_active to True
+    reset_contest_data(is_starting_new_contest=True)
     cfg = get_config()
     chat_id = cfg.get("CHAT_ID")
     if not chat_id: return
@@ -267,7 +264,7 @@ def send_daily_post():
         logging.error(f"Error sending daily post: {e}", exc_info=True)
 
 def determine_winner():
-    logging.info("Determining winner(s)...")
+    logging.info("Determining winner(s)....")
     cfg = get_config()
     chat_id = cfg.get("CHAT_ID")
     if not chat_id: return
@@ -276,7 +273,7 @@ def determine_winner():
     bot_data = load_json(DATA_FILE)
     if not bot_data.get("submissions"):
         bot.send_message(chat_id, "Für den heutigen Wettbewerb gab es leider keine Einreichungen.", message_thread_id=topic_id)
-        reset_contest_data() # NEW: Set contest_active to False
+        reset_contest_data()
         return
 
     winner_info = {}
@@ -294,7 +291,7 @@ def determine_winner():
 
     if not winner_info or max_votes <= 0:
         bot.send_message(chat_id, "Es wurden keine Stimmen abgegeben. Es gibt heute keinen Gewinner.", message_thread_id=topic_id)
-        reset_contest_data() # NEW: Set contest_active to False
+        reset_contest_data()
         return
 
     tied_message_ids = list(winner_info.keys())
@@ -312,13 +309,13 @@ def determine_winner():
         elif cfg.get("DUEL_TYPE") == "multiple_winners":
             bot.send_message(chat_id, f"Unentschieden mit {max_votes} Stimmen! Es gibt mehrere Gewinner!", message_thread_id=topic_id)
             announce_winners_grouped(tied_user_ids, max_votes, "multiple_winners")
-            reset_contest_data() # NEW: Set contest_active to False
+            reset_contest_data()
         else:
             announce_winners_grouped([random.choice(tied_user_ids)], max_votes, "random_single_fallback")
-            reset_contest_data() # NEW: Set contest_active to False
+            reset_contest_data()
     else:
         announce_winners_grouped([random.choice(tied_user_ids)], max_votes, "single_winner")
-        reset_contest_data() # NEW: Set contest_active to False
+        reset_contest_data()
 
 # --- TELEBOT HANDLERS ---
 @bot.message_handler(commands=['start'])
@@ -326,24 +323,57 @@ def handle_start(message):
     if message.chat.type == 'private':
         args = message.text.split()
         if len(args) > 1 and args[1] == 'participate':
-             bot.reply_to(message, "Hallo! Schick mir jetzt dein Outfit-Foto, um am Wettbewerb teilzunehmen.")
+             bot.send_message(message.chat.id, "Hallo! Schick mir jetzt dein Outfit-Foto, um am Wettbewerb teilzunehmen.")
         else:
-             bot.reply_to(message, "Hallo! Ich bin der Outfit-Bot. Details zum Wettbewerb findest du in der Gruppe.")
+             bot.send_message(message.chat.id, "Hallo! Ich bin der Outfit-Bot. Details zum Wettbewerb findest du in der Gruppe.")
+
+@bot.message_handler(commands=['start_contest', 'announce_winner', 'end_duel'])
+def handle_admin_commands(message):
+    # ALWAYS delete the incoming command message
+    try:
+        bot.delete_message(message.chat.id, message.message_id)
+        logging.info(f"Admin command message deleted: {message.text} from {message.from_user.id}")
+    except Exception as e:
+        logging.error(f"Could not delete admin command message {message.message_id}: {e}", exc_info=True)
+
+    logging.info(f"Admin command received in chat {message.chat.id}: {message.text} from user {message.from_user.id}")
+    cfg = get_config() # Reload config to get the latest temporary message duration
+    temp_msg_duration = cfg.get("TEMPORARY_MESSAGE_DURATION_SECONDS", 30)
+
+    if not is_admin(message.from_user.id):
+        try:
+            sent_message = bot.send_message(message.chat.id, "🚫 Du bist kein Administrator.", message_thread_id=message.message_thread_id)
+            logging.warning(f"Non-admin user {message.from_user.id} tried to use admin command: {message.text}. Sent warning to {sent_message.chat.id}, message_id: {sent_message.message_id}")
+            threading.Timer(temp_msg_duration, bot.delete_message, args=[sent_message.chat.id, sent_message.message_id]).start()
+        except Exception as e:
+            logging.error(f"Could not send/delete non-admin warning: {e}", exc_info=True)
+        return
+    
+    command = message.text.split()[0][1:]
+    if command == "start_contest":
+        send_daily_post()
+        logging.info(f"Admin {message.from_user.id} manually started contest.")
+    elif command == "announce_winner":
+        determine_winner()
+        logging.info(f"Admin {message.from_user.id} manually triggered winner announcement.")
+    elif command == "end_duel":
+        end_duel()
+        logging.info(f"Admin {message.from_user.id} manually ended duel.")
 
 @bot.message_handler(content_types=['photo'])
 def handle_photo_submission(message):
     if message.chat.type != 'private': return
     
     bot_data = load_json(DATA_FILE)
-    if not bot_data.get("contest_active", False): # NEW: Check contest_active flag
-        bot.reply_to(message, "Momentan läuft kein Wettbewerb oder die Einreichungsphase ist vorbei.")
+    if not bot_data.get("contest_active", False):
+        bot.send_message(message.chat.id, "Momentan läuft kein Wettbewerb oder die Einreichungsphase ist vorbei.")
         return
 
     user_id = str(message.from_user.id)
     username = message.from_user.username or message.from_user.first_name
     
     if user_id in bot_data.get("submissions", {}):
-        bot.reply_to(message, "🚫 Du hast bereits ein Bild für diesen Wettbewerb hochgeladen.")
+        bot.send_message(message.chat.id, "🚫 Du hast bereits ein Bild für diesen Wettbewerb hochgeladen.")
         return
 
     cfg = get_config()
@@ -360,9 +390,9 @@ def handle_photo_submission(message):
         bot_data.setdefault("votes", {})[str(sent_message.message_id)] = {}
         save_json(DATA_FILE, bot_data)
         
-        bot.reply_to(message, "✅ Dein Outfit wurde erfolgreich in der Gruppe gepostet!")
+        bot.send_message(message.chat.id, "✅ Dein Outfit wurde erfolgreich in der Gruppe gepostet!")
     except Exception as e:
-        bot.reply_to(message, "😥 Fehler beim Posten. Ist der Bot Admin in der Gruppe?")
+        bot.send_message(message.chat.id, "😥 Fehler beim Posten. Ist der Bot Admin in der Gruppe?")
         logging.error(f"Error posting photo: {e}", exc_info=True)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('vote_') or call.data.startswith('duel_vote_'))
@@ -454,6 +484,22 @@ def handle_duel_vote(call):
 
     bot.answer_callback_query(call.id, feedback)
 
+# --- UNKNOWN COMMAND HANDLER ---
+@bot.message_handler(func=lambda message: message.text and message.text.startswith('/'), content_types=['text'])
+def handle_unknown_command(message):
+    logging.info(f"Unknown command received in chat {message.chat.id} from user {message.from_user.id}: {message.text}")
+    try:
+        bot.delete_message(message.chat.id, message.message_id)
+        logging.info(f"Unknown command message deleted: {message.text} from {message.from_user.id}")
+        
+        cfg = get_config() # Reload config to get the latest temporary message duration
+        temp_msg_duration = cfg.get("TEMPORARY_MESSAGE_DURATION_SECONDS", 30)
+        sent_message = bot.send_message(message.chat.id, "❓ Unbekannter Befehl. Bitte überprüfe die Schreibweise.", message_thread_id=message.message_thread_id)
+        threading.Timer(temp_msg_duration, bot.delete_message, args=[sent_message.chat.id, sent_message.message_id]).start()
+    except Exception as e:
+        logging.error(f"Error handling unknown command: {e}", exc_info=True)
+
+
 # --- SCHEDULING & COMMANDS ---
 def run_scheduler():
     load_schedules()
@@ -481,9 +527,6 @@ def command_listener():
             if os.path.exists("command_announce_winner.tmp"):
                 determine_winner()
                 os.remove("command_announce_winner.tmp")
-            if os.path.exists("command_end_duel.tmp"):
-                end_duel()
-                os.remove("command_end_duel.tmp")
         except Exception as e:
             logging.error(f"Error in command listener: {e}", exc_info=True)
         time.sleep(2)
