@@ -12,6 +12,7 @@ from datetime import datetime
 import sys
 
 from flask import Flask, render_template, request, flash, redirect, url_for
+from telegram import Bot
 
 # --- Logging (Global & App) ---
 logging.basicConfig(
@@ -50,6 +51,7 @@ OUTFIT_BOT_LOG = os.path.join(OUTFIT_BOT_DIR, 'outfit_bot.log')
 ID_FINDER_BOT_LOG = os.path.join(ID_FINDER_BOT_DIR, 'id_finder_bot.log')
 INVITE_BOT_LOG = os.path.join(INVITE_BOT_DIR, 'invite_bot.log')
 INVITE_BOT_USER_LOG = os.path.join(INVITE_BOT_DIR, 'user_interactions.log') # Added Invite Bot User Log
+DASHBOARD_APP_LOG = os.path.join(BASE_DIR, 'app.log')
 
 # Script Files
 OUTFIT_BOT_SCRIPT = os.path.join(OUTFIT_BOT_DIR, 'outfit_bot.py')
@@ -289,8 +291,6 @@ def bot_settings():
                 flash(f"Fehler beim Leeren des Bot Logs: {e}", "danger")
         
         else:
-            # Save Configuration
-            # Check if bot was running BEFORE stopping it
             was_running = is_invite_bot_running()
             if was_running: 
                 stop_invite_bot()
@@ -309,18 +309,10 @@ def bot_settings():
             save_json(INVITE_BOT_CONFIG_FILE, config)
             flash("Invite Bot Einstellungen gespeichert.", "success")
 
-            # Restart if it was running OR if it is enabled in config (user might want it to start immediately after save)
-            # Logic: If it WAS running, restart it. If it was NOT running, but user enabled it, maybe start it?
-            # Your request was: "Dass der Bot ein Neustart macht" - implying if it's active.
-            
             if was_running:
                 start_invite_bot()
                 flash("Invite Bot neu gestartet.", "info")
             elif config['is_enabled']:
-                # Optional: Auto-start if enabled but wasn't running? 
-                # For now sticking to restart only if it was already running to avoid unexpected starts.
-                # If you want it to start even if it wasn't running, uncomment the line below:
-                # start_invite_bot(); flash("Invite Bot gestartet (da aktiviert).", "info")
                 pass
 
         return redirect(url_for('bot_settings'))
@@ -387,12 +379,17 @@ def quiz_settings():
              save_json(DASHBOARD_CONFIG_FILE, dashboard_config)
              flash("Quiz Einstellungen gespeichert.", "success")
         elif request.form.get('action') == 'clear_log':
-             flash("Log geleert (Dummy).", "success")
+             try:
+                 with open(DASHBOARD_APP_LOG, 'w') as f: f.write('')
+                 flash("Log geleert.", "success")
+             except Exception as e:
+                 flash(f"Fehler beim Leeren des Logs: {e}", "danger")
 
         return redirect(url_for('quiz_settings'))
     
     dashboard_config = load_json(DASHBOARD_CONFIG_FILE)
-    return render_template('quiz_settings.html', config=dashboard_config, logs=[]) # Add logs if available
+    logs = get_bot_logs(DASHBOARD_APP_LOG, lines=50) # Use helper to get logs
+    return render_template('quiz_settings.html', config=dashboard_config, logs=logs)
 
 @app.route("/umfrage-settings", methods=['GET', 'POST'])
 def umfrage_settings():
@@ -406,23 +403,143 @@ def umfrage_settings():
              save_json(DASHBOARD_CONFIG_FILE, dashboard_config)
              flash("Umfrage Einstellungen gespeichert.", "success")
          elif request.form.get('action') == 'clear_log':
-             flash("Log geleert (Dummy).", "success")
+             try:
+                 with open(DASHBOARD_APP_LOG, 'w') as f: f.write('')
+                 flash("Log geleert.", "success")
+             except Exception as e:
+                 flash(f"Fehler beim Leeren des Logs: {e}", "danger")
          
          return redirect(url_for('umfrage_settings'))
 
     dashboard_config = load_json(DASHBOARD_CONFIG_FILE)
-    return render_template('umfrage_settings.html', config=dashboard_config, logs=[]) # Add logs if available
+    logs = get_bot_logs(DASHBOARD_APP_LOG, lines=50) # Use helper to get logs
+    return render_template('umfrage_settings.html', config=dashboard_config, logs=logs)
+
+async def send_telegram_poll(token, chat_id, topic_id, question, options):
+    try:
+        bot = Bot(token=token)
+        # Convert topic_id to int if present, else None
+        message_thread_id = int(topic_id) if topic_id and topic_id.isdigit() else None
+        
+        await bot.send_poll(
+            chat_id=chat_id,
+            question=question,
+            options=options,
+            is_anonymous=False,
+            allows_multiple_answers=False, # Standard poll
+            message_thread_id=message_thread_id
+        )
+        return True, "Umfrage erfolgreich gesendet!"
+    except Exception as e:
+        log.error(f"Fehler beim Senden der Umfrage: {e}")
+        return False, str(e)
+
+async def send_telegram_quiz(token, chat_id, topic_id, question, options, correct_option_id):
+    try:
+        bot = Bot(token=token)
+        message_thread_id = int(topic_id) if topic_id and topic_id.isdigit() else None
+        
+        await bot.send_poll(
+            chat_id=chat_id,
+            question=question,
+            options=options,
+            type='quiz',
+            correct_option_id=correct_option_id,
+            is_anonymous=False,
+            message_thread_id=message_thread_id
+        )
+        return True, "Quizfrage erfolgreich gesendet!"
+    except Exception as e:
+        log.error(f"Fehler beim Senden der Quizfrage: {e}")
+        return False, str(e)
 
 @app.route("/send_quizfrage", methods=['POST'])
 def send_quizfrage():
-    # Implementation for sending quiz question using stored config and data
-    flash("Quizfrage gesendet (Simulation).", "info")
+    config = load_json(DASHBOARD_CONFIG_FILE)
+    if 'quiz' not in config or not config['quiz'].get('token') or not config['quiz'].get('channel_id'):
+        flash("Fehler: Quiz Bot nicht konfiguriert (Token oder Channel ID fehlen).", "danger")
+        return redirect(request.referrer or url_for('index'))
+
+    token = config['quiz']['token']
+    chat_id = config['quiz']['channel_id']
+    topic_id = config['quiz'].get('topic_id')
+
+    # Load quiz questions
+    try:
+        with open(QUIZ_DATA_FILE, 'r', encoding='utf-8') as f:
+            questions = json.load(f)
+    except Exception as e:
+        flash(f"Fehler beim Laden der Quizfragen: {e}", "danger")
+        return redirect(request.referrer or url_for('index'))
+
+    if not questions:
+        flash("Keine Quizfragen gefunden.", "warning")
+        return redirect(request.referrer or url_for('index'))
+
+    # Pick random question
+    q = random.choice(questions)
+    question_text = q.get('frage')
+    options = q.get('optionen')
+    correct_option_id = q.get('antwort_index', 0) # Default to 0 if missing
+
+    if not question_text or not options:
+        flash("Fehlerhafte Frage in Datenbank gefunden.", "danger")
+        return redirect(request.referrer or url_for('index'))
+
+    # Send asynchronously
+    try:
+        success, msg = asyncio.run(send_telegram_quiz(token, chat_id, topic_id, question_text, options, correct_option_id))
+        if success:
+            flash(f"Quizfrage gesendet: {question_text}", "success")
+        else:
+            flash(f"Fehler beim Senden: {msg}", "danger")
+    except Exception as e:
+        flash(f"Kritischer Fehler beim Senden: {e}", "danger")
+
     return redirect(request.referrer or url_for('index'))
 
 @app.route("/send_umfrage", methods=['POST'])
 def send_umfrage():
-    # Implementation for sending poll using stored config and data
-    flash("Umfrage gesendet (Simulation).", "info")
+    config = load_json(DASHBOARD_CONFIG_FILE)
+    if 'umfrage' not in config or not config['umfrage'].get('token') or not config['umfrage'].get('channel_id'):
+        flash("Fehler: Umfrage Bot nicht konfiguriert (Token oder Channel ID fehlen).", "danger")
+        return redirect(request.referrer or url_for('index'))
+
+    token = config['umfrage']['token']
+    chat_id = config['umfrage']['channel_id']
+    topic_id = config['umfrage'].get('topic_id')
+
+    # Load polls
+    try:
+        with open(UMFRAGE_DATA_FILE, 'r', encoding='utf-8') as f:
+            polls = json.load(f)
+    except Exception as e:
+        flash(f"Fehler beim Laden der Umfragen: {e}", "danger")
+        return redirect(request.referrer or url_for('index'))
+
+    if not polls:
+        flash("Keine Umfragen gefunden.", "warning")
+        return redirect(request.referrer or url_for('index'))
+
+    # Pick random poll
+    p = random.choice(polls)
+    question_text = p.get('frage')
+    options = p.get('optionen')
+
+    if not question_text or not options:
+        flash("Fehlerhafte Umfrage in Datenbank gefunden.", "danger")
+        return redirect(request.referrer or url_for('index'))
+
+    # Send asynchronously
+    try:
+        success, msg = asyncio.run(send_telegram_poll(token, chat_id, topic_id, question_text, options))
+        if success:
+            flash(f"Umfrage gesendet: {question_text}", "success")
+        else:
+            flash(f"Fehler beim Senden: {msg}", "danger")
+    except Exception as e:
+        flash(f"Kritischer Fehler beim Senden: {e}", "danger")
+
     return redirect(request.referrer or url_for('index'))
 
 
