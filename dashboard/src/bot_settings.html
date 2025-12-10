@@ -85,9 +85,13 @@
                 <div class="card-header">
                     <h3>🖥️ Bot Logs</h3>
                 </div>
-                <div class="card-body">
-                    <pre class="log-display bg-dark text-white p-3 rounded" style="height: 300px; overflow-y: scroll; font-family: monospace; font-size: 0.9rem; white-space: pre-wrap;">{% for line in invite_bot_logs %}{{ line.strip() }}
+                <div class="card-body d-flex flex-column">
+                    <pre class="log-display bg-dark text-white p-3 rounded flex-grow-1" style="height: 300px; overflow-y: scroll; font-family: monospace; font-size: 0.9rem; white-space: pre-wrap;">{% for line in invite_bot_logs %}{{ line.strip() }}
 {% endfor %}</pre>
+                    <form action="/bot-settings" method="POST" class="mt-2">
+                        <input type="hidden" name="action" value="clear_invite_bot_log">
+                        <button type="submit" class="btn btn-sm btn-danger w-100">Bot Logs löschen</button>
+                    </form>
                 </div>
             </div>
         </div>

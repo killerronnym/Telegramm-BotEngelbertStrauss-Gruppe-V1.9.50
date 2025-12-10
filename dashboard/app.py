@@ -281,10 +281,19 @@ def bot_settings():
             except Exception as e:
                 flash(f"Fehler beim Leeren des Logs: {e}", "danger")
         
+        elif action == 'clear_invite_bot_log':
+            try:
+                with open(INVITE_BOT_LOG, 'w') as f: f.write('')
+                flash("Bot Log erfolgreich geleert.", "success")
+            except Exception as e:
+                flash(f"Fehler beim Leeren des Bot Logs: {e}", "danger")
+        
         else:
             # Save Configuration
+            # Check if bot was running BEFORE stopping it
             was_running = is_invite_bot_running()
-            if was_running: stop_invite_bot()
+            if was_running: 
+                stop_invite_bot()
 
             config = load_json(INVITE_BOT_CONFIG_FILE)
             config['bot_token'] = request.form.get('bot_token', '').strip()
@@ -300,9 +309,19 @@ def bot_settings():
             save_json(INVITE_BOT_CONFIG_FILE, config)
             flash("Invite Bot Einstellungen gespeichert.", "success")
 
+            # Restart if it was running OR if it is enabled in config (user might want it to start immediately after save)
+            # Logic: If it WAS running, restart it. If it was NOT running, but user enabled it, maybe start it?
+            # Your request was: "Dass der Bot ein Neustart macht" - implying if it's active.
+            
             if was_running:
                 start_invite_bot()
                 flash("Invite Bot neu gestartet.", "info")
+            elif config['is_enabled']:
+                # Optional: Auto-start if enabled but wasn't running? 
+                # For now sticking to restart only if it was already running to avoid unexpected starts.
+                # If you want it to start even if it wasn't running, uncomment the line below:
+                # start_invite_bot(); flash("Invite Bot gestartet (da aktiviert).", "info")
+                pass
 
         return redirect(url_for('bot_settings'))
 
