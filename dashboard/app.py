@@ -45,13 +45,14 @@ OUTFIT_BOT_CONFIG_FILE = os.path.join(OUTFIT_BOT_DIR, 'outfit_bot_config.json')
 ID_FINDER_CONFIG_FILE = os.path.join(ID_FINDER_BOT_DIR, 'id_finder_config.json')
 INVITE_BOT_CONFIG_FILE = os.path.join(INVITE_BOT_DIR, 'invite_bot_config.json')
 DASHBOARD_CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
+ADMINS_FILE = os.path.join(BASE_DIR, 'admins.json') # NEW: Admins File
 
 # Log Files
 OUTFIT_BOT_LOG = os.path.join(OUTFIT_BOT_DIR, 'outfit_bot.log')
 ID_FINDER_BOT_LOG = os.path.join(ID_FINDER_BOT_DIR, 'id_finder_bot.log')
-ID_FINDER_COMMAND_LOG = os.path.join(ID_FINDER_BOT_DIR, 'id_finder_command.log') # CORRECTED FILENAME
+ID_FINDER_COMMAND_LOG = os.path.join(ID_FINDER_BOT_DIR, 'id_finder_command.log')
 INVITE_BOT_LOG = os.path.join(INVITE_BOT_DIR, 'invite_bot.log')
-INVITE_BOT_USER_LOG = os.path.join(INVITE_BOT_DIR, 'user_interactions.log') # Added Invite Bot User Log
+INVITE_BOT_USER_LOG = os.path.join(INVITE_BOT_DIR, 'user_interactions.log')
 DASHBOARD_APP_LOG = os.path.join(BASE_DIR, 'app.log')
 
 # Script Files
@@ -68,6 +69,18 @@ UMFRAGE_DATA_FILE = os.path.join(PROJECT_ROOT, 'data', 'umfragen.json')
 outfit_bot_process = None
 id_finder_process = None
 invite_bot_process = None
+
+# --- Constants ---
+AVAILABLE_PERMISSIONS = {
+    "can_warn": "Verwarnen (/warn)",
+    "can_kick": "Kicken (/kick)",
+    "can_ban": "Bannen (/ban)",
+    "can_mute": "Stummschalten (/mute)",
+    "can_unban": "Entbannen (/unban)",
+    "can_clear_warns": "Warns löschen (/clearwarns)",
+    "can_see_logs": "Logs einsehen",
+    "can_manage_admins": "Admins verwalten (Nur Top-Admin)"
+}
 
 # --- Hilfsfunktionen für JSON ---
 def load_json(file_path, default_data={}):
@@ -91,14 +104,11 @@ def get_bot_logs(log_file, lines=100):
 
 def start_bot_process(script_path, log_path):
     global outfit_bot_process
-    # Generic check for any process running the script
-    # This prevents starting multiple instances of the same bot
     
     try:
         cwd = os.path.dirname(script_path)
         py_exec = sys.executable
         
-        # Ensure log directory exists
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
 
         with open(log_path, "a", encoding="utf-8") as log_f:
@@ -380,6 +390,74 @@ def id_finder_dashboard():
 @app.route("/id-finder/commands")
 def id_finder_commands():
     return render_template('id_finder_commands.html')
+
+# --- ADMIN PANEL ROUTES ---
+@app.route("/id-finder/admin-panel")
+def id_finder_admin_panel():
+    admins = load_json(ADMINS_FILE)
+    return render_template('id_finder_admin_panel.html', admins=admins, available_permissions=AVAILABLE_PERMISSIONS)
+
+@app.route("/id-finder/add-admin", methods=['POST'])
+def id_finder_add_admin():
+    admin_id = request.form.get('admin_id', '').strip()
+    admin_name = request.form.get('admin_name', '').strip()
+    
+    if not admin_id or not admin_name:
+        flash("Bitte ID und Namen angeben.", "danger")
+        return redirect(url_for('id_finder_admin_panel'))
+    
+    admins = load_json(ADMINS_FILE)
+    if admin_id in admins:
+        flash("Admin existiert bereits.", "warning")
+        return redirect(url_for('id_finder_admin_panel'))
+
+    # Default permissions (all false initially)
+    default_permissions = {perm: False for perm in AVAILABLE_PERMISSIONS}
+    
+    admins[admin_id] = {
+        "name": admin_name,
+        "permissions": default_permissions
+    }
+    
+    save_json(ADMINS_FILE, admins)
+    flash(f"Admin {admin_name} hinzugefügt.", "success")
+    return redirect(url_for('id_finder_admin_panel'))
+
+@app.route("/id-finder/delete-admin", methods=['POST'])
+def id_finder_delete_admin():
+    admin_id = request.form.get('admin_id')
+    admins = load_json(ADMINS_FILE)
+    
+    if admin_id in admins:
+        del admins[admin_id]
+        save_json(ADMINS_FILE, admins)
+        flash("Admin gelöscht.", "success")
+    else:
+        flash("Admin nicht gefunden.", "danger")
+        
+    return redirect(url_for('id_finder_admin_panel'))
+
+@app.route("/id-finder/update-admin-permissions", methods=['POST'])
+def id_finder_update_admin_permissions():
+    admin_id = request.form.get('admin_id')
+    admins = load_json(ADMINS_FILE)
+    
+    if admin_id not in admins:
+        flash("Fehler: Admin nicht gefunden.", "danger")
+        return redirect(url_for('id_finder_admin_panel'))
+    
+    # Update permissions based on checkboxes
+    new_permissions = {}
+    for perm_key in AVAILABLE_PERMISSIONS:
+        # Checkbox sent 'on' if checked, otherwise nothing
+        new_permissions[perm_key] = (request.form.get(perm_key) == 'on')
+    
+    admins[admin_id]['permissions'] = new_permissions
+    save_json(ADMINS_FILE, admins)
+    
+    flash(f"Rechte für {admins[admin_id]['name']} aktualisiert.", "success")
+    return redirect(url_for('id_finder_admin_panel'))
+
 
 # --- QUIZ & UMFRAGE ROUTES ---
 @app.route("/quiz-settings", methods=['GET', 'POST'])

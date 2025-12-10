@@ -6,18 +6,16 @@ Willkommen zu deinem persönlichen Telegramm-Bot-Control-Panel! Dieses Projekt b
 
 Der NexusMod Bot ist dein ultimatives Werkzeug für die Telegram-Gruppenverwaltung, ausgestattet mit einer Vielzahl an Moderations- und Schutzfunktionen:
 
-*   **Umfassende Moderationswerkzeuge:** Von flexiblen Verwarnungen (`/warn`, `/unwarn`, `/clearwarns`) über präzise Stummschaltungen (`/mute`, `/unmute`, `/mutelist`) bis hin zu effektiven Kick- und Bann-Optionen (`/kick`, `/ban`, `/unban`, `/softban`).
-*   **Nachrichten-Moderation:** Lösche einzelne Nachrichten (`/del`) oder bereinige ganze Chat-Verläufe (`/purge`).
+*   **Umfassende Moderationswerkzeuge:** Von flexiblen Verwarnungen (`/warn`, `/unwarn`, `/clearwarnings`) über präzise Stummschaltungen (`/mute`, `/unmute`) bis hin zu effektiven Kick- und Bann-Optionen (`/kick`, `/ban`, `/unban`).
+*   **Nachrichten-Moderation:** Lösche einzelne Nachrichten (`/del`) oder bereinige ganze Chat-Verläufe (`/purge`). Pinne wichtige Nachrichten (`/pin`, `/unpin`) und sperre bestimmte Inhalte wie Medien oder Links (`/lock`, `/unlock`).
 *   **Starke Auto-Moderation:**
     *   **Anti-Flood:** Verhindert das Überfluten des Chats mit Nachrichten (`/setflood`).
-    *   **CAPS-Lock-Filter:** Löscht Nachrichten mit übermäßig vielen Großbuchstaben (`/setcaps`).
-    *   **Link-Kontrolle:** Erlaubt, blockiert oder beschränkt Links auf eine Whitelist (`/setlinks`, `/whitelist`).
-    *   **Wortfilter:** Automatische Filterung und Aktion bei unerwünschten Wörtern (`/filter add|remove|list`).
-*   **Raid-Modus:** Ein Notfallschalter, der neue Mitglieder automatisch stummschaltet und alle Links blockiert, um die Gruppe bei einem Angriff zu schützen (`/raidmode on|off`).
-*   **Flexibles Rollensystem:** Definiere benutzerdefinierte Rollen und weise Moderatoren eingeschränkte Berechtigungen zu (`/role add|remove`, `/roles`).
+    *   **Link-Kontrolle:** Lege fest, wie mit Links verfahren werden soll (erlauben, verwarnen, stummschalten, bannen) (`/setlinkmode`).
+    *   **Wortfilter:** Automatische Filterung und Aktion bei unerwünschten Wörtern (`/blacklist`).
+*   **Flexibles Rollensystem:** Definiere benutzerdefinierte Rollen und weise Moderatoren eingeschränkte Berechtigungen zu (`/mod add`, `/mod remove`, `/setrole`).
 *   **Zentrale Weboberfläche:** Verwalte alle Einstellungen, starte/stoppe Bots und sieh dir detaillierte Logs über ein intuitives Web-Dashboard an.
 *   **Intelligente Log-Verwaltung:** Getrennte Logs für Befehlsausführungen und Systemfehler, optional in ein spezielles Telegram-Topic postbar.
-*   **ID-Finder-Funktionalität:** Rufe Chat-IDs und User-IDs direkt im Chat ab (`/ChatID`, `/UserID`).
+*   **ID-Finder-Funktionalität:** Rufe Chat-IDs, User-IDs und Topic-IDs direkt im Chat ab (`/chatid`, `/userid`, `/topicid`, `/id`).
 
 ## 🚀 Installation & Start
 
@@ -26,8 +24,6 @@ Eine detaillierte Installationsanleitung findest du in der [INSTALL.md](INSTALL.
 ## 🌐 Web-Dashboard Übersicht
 
 Das Web-Dashboard (erreichbar unter `http://localhost:8080/id-finder` nach dem Start) bietet dir eine zentrale Steuerzentrale:
-
-![NexusMod Dashboard Screenshot](path/to/your/screenshot.png)
 
 *   **Statusanzeige:** Sieh auf einen Blick, ob der Bot läuft oder gestoppt ist.
 *   **Konfiguration:** Gib Bot-Tokens, Haupt-Gruppen-IDs und optionale Log-Topic-IDs ein.
@@ -41,77 +37,72 @@ Hier ist eine Zusammenfassung der Befehle. Für detaillierte Erklärungen besuch
 
 ---
 
-### **Grundlagen & ID**
-*   `/ChatID`
-    *   *Erklärung:* Sendet eine Nachricht mit der ID der Gruppe und des Topics, in dem der Befehl ausgeführt wird.
-*   `/UserID`
-    *   *Erklärung:* Zeigt deine persönliche Telegram User-ID an.
-
-### **Globale Bot-Konfiguration (Nur Top-Admins in der Admin-Gruppe)**
-*   `/setadmingroup`
-    *   *Erklärung:* Setzt den Chat, in dem der Befehl ausgeführt wird, als private Admin-Gruppe für kritische Bot-Einstellungen.
-*   `/setmaingroup [gruppen_id]`
-    *   *Erklärung:* Legt fest, in welcher Gruppe Moderationsaktionen (Mute, Ban etc.) stattfinden sollen.
-*   `/antispam on|off`
-    *   *Erklärung:* Aktiviert oder deaktiviert alle automatischen Moderationsfunktionen wie Flood-Control, Link-Filter etc.
-*   `/raidmode on|off`
-    *   *Erklärung:* Ein Notfallmodus. Wenn aktiviert, werden neue Mitglieder sofort stummgeschaltet und alle Nachrichten mit Links blockiert.
-
-### **Verwarnungssystem**
-*   `/warn @user [grund]`
-    *   *Erklärung:* Verwarnt einen Benutzer. Kann als Antwort auf eine Nachricht oder durch Angabe der User-ID erfolgen.
+### **Basis-Moderation**
+*   `/warn @user [Grund]`
+    *   *Erklärung:* Gibt eine Verwarnung.
 *   `/warnings @user`
-    *   *Erklärung:* Zeigt alle aktiven Verwarnungen für einen bestimmten Benutzer an.
-*   `/unwarn @user [anzahl]`
-    *   *Erklärung:* Entfernt eine (oder die angegebene Anzahl) der letzten Verwarnungen eines Benutzers.
-*   `/clearwarns @user`
-    *   *Erklärung:* Setzt den Verwarnungszähler eines Benutzers komplett auf Null zurück.
-*   `/setwarnlimit [zahl]` (Nur Top-Admin)
-    *   *Erklärung:* Legt fest, nach wie vielen Verwarnungen eine automatische Aktion erfolgen soll.
-*   `/setwarnaction [aktion]` (Nur Top-Admin)
-    *   *Erklärung:* Definiert die Aktion (mute, kick, ban, none), die bei Erreichen des Warn-Limits ausgeführt wird.
-
-### **Stummschaltung, Kick & Ban**
-*   `/mute @user [dauer] [grund]`
-    *   *Erklärung:* Schaltet einen Benutzer stumm. Dauer ist optional (z.B. 30m, 5h, 7d). Ohne Dauer ist der Mute permanent.
+    *   *Erklärung:* Zeigt aktuelle Verwarnungen.
+*   `/unwarn @user`
+    *   *Erklärung:* Entfernt eine Verwarnung.
+*   `/clearwarnings @user`
+    *   *Erklärung:* Setzt Verwarnungen zurück.
+*   `/mute @user 10m [Grund]`
+    *   *Erklärung:* Stummschalten für Dauer (z. B. 10m, 2h, 1d).
 *   `/unmute @user`
-    *   *Erklärung:* Erlaubt einem stummgeschalteten Benutzer wieder zu schreiben.
-*   `/mutelist`
-    *   *Erklärung:* Zeigt alle aktuell stummgeschalteten Benutzer, Grund und verbleibende Dauer an.
-*   `/kick @user [grund]`
-    *   *Erklärung:* Entfernt einen Benutzer aus der Gruppe. Er kann aber sofort wieder beitreten.
-*   `/ban @user [dauer] [grund]`
-    *   *Erklärung:* Verbannt einen Benutzer aus der Gruppe. Dauer ist optional.
-*   `/unban [user_id]`
-    *   *Erklärung:* Hebt eine permanente Verbannung auf. Die User-ID muss angegeben werden.
-*   `/softban @user`
-    *   *Erklärung:* Bannt und entbannt einen Benutzer sofort wieder. Löscht dabei alle Nachrichten des Benutzers aus dem Chat.
+    *   *Erklärung:* Stummschaltung aufheben.
+*   `/ban @user [Grund]`
+    *   *Erklärung:* Bann aus der Gruppe.
+*   `/unban @user`
+    *   *Erklärung:* Bann aufheben.
+*   `/kick @user [Grund]`
+    *   *Erklärung:* Entfernt Nutzer (kann direkt wieder beitreten, je nach Einstellung).
 
-### **Nachrichten-Moderation**
-*   `/del` (als Reply)
-    *   *Erklärung:* Muss als Antwort auf eine Nachricht gesendet werden. Löscht die beantwortete Nachricht und den Befehl selbst.
-*   `/purge [anzahl]` (als Reply)
-    *   *Erklärung:* Muss als Antwort auf eine Nachricht gesendet werden. Löscht die letzten X Nachrichten ab der beantworteten. Standard ist 10.
+### **Nachrichten- und Chat-Management**
+*   `/del`
+    *   *Erklärung:* Löscht die Nachricht, auf die geantwortet wurde.
+*   `/purge`
+    *   *Erklärung:* Löscht mehrere Nachrichten ab der beantworteten Nachricht bis zur aktuellen.
+*   `/pin`
+    *   *Erklärung:* Pinnt die beantwortete Nachricht.
+*   `/unpin`
+    *   *Erklärung:* Entfernt Pin.
+*   `/lock [feature]`
+    *   *Erklärung:* Sperrt z. B. Medien/Links/Sticker. Beispiele: `/lock links`, `/lock media`
+*   `/unlock [feature]`
+    *   *Erklärung:* Hebt die Sperre auf.
 
-### **Auto-Moderation (Nur Top-Admins in der Admin-Gruppe)**
-*   `/setflood [nachrichten]/[sekunden]s`
-    *   *Erklärung:* Legt fest, wie viele Nachrichten ein User in X Sekunden senden darf, bevor sie gelöscht werden. Beispiel: `5/10s`.
-*   `/setcaps [prozent]`
-    *   *Erklärung:* Legt den maximal erlaubten Prozentsatz an Großbuchstaben in einer Nachricht fest (z.B. `70`).
-*   `/setlinks [allow|block|whitelist]`
-    *   *Erklärung:* Erlaubt Links (allow), blockiert sie für alle (block) oder erlaubt sie nur für gewhitelistete User (whitelist).
-*   `/whitelist add|remove [user_id]`
-    *   *Erklärung:* Fügt einen Benutzer zur Link-Whitelist hinzu oder entfernt ihn.
-*   `/filter add|remove|list "wort"`
-    *   *Erklärung:* Fügt ein Wort zur Blacklist hinzu (Nachrichten werden gelöscht), entfernt es oder listet alle Filter. Das Wort muss in Anführungszeichen stehen.
+### **Anti-Spam / Auto-Moderation**
+*   `/antispam on|off`
+    *   *Erklärung:* Aktiviert/Deaktiviert Spam-Schutz.
+*   `/setflood 5`
+    *   *Erklärung:* Max. Nachrichten in kurzer Zeit.
+*   `/setlinkmode allow|warn|mute|ban`
+    *   *Erklärung:* Wie Links behandelt werden.
+*   `/blacklist add [wort]`
+    *   *Erklärung:* Verbietet Wörter/Patterns.
+*   `/blacklist remove [wort]`
+*   `/blacklist list`
 
-### **Rollen-Management (Nur Top-Admins in der Admin-Gruppe)**
-*   `/role add [user_id] [rolle]`
-    *   *Erklärung:* Gibt einem Benutzer eine vordefinierte Rolle (z.B. 'mod'), die ihm Zugriff auf bestimmte Befehle gewährt.
-*   `/role remove [user_id]`
-    *   *Erklärung:* Entfernt die zugewiesene Rolle von einem Benutzer.
-*   `/roles`
-    *   *Erklärung:* Zeigt alle Benutzer an, denen aktuell eine Rolle zugewiesen ist.
+### **Rollen & Rechte**
+*   `/adminlist`
+    *   *Erklärung:* Zeigt Admins (optional inkl. Bot-Rollenlogik).
+*   `/mod add @user`
+    *   *Erklärung:* Fügt Bot-interne Moderatoren hinzu.
+*   `/mod remove @user`
+*   `/permissions`
+    *   *Erklärung:* Zeigt Bot-Rechte/Feature-Flags.
+*   `/setrole @user admin|mod|trusted|user`
+    *   *Erklärung:* Bot-eigenes Rollensystem.
+
+### **Nützlich für deine Entwickler-Praxis**
+*   `/chatid`
+    *   *Erklärung:* Gibt die Chat-ID aus.
+*   `/userid`
+    *   *Erklärung:* Gibt die User-ID aus (eigene oder per Reply).
+*   `/topicid`
+    *   *Erklärung:* Gibt die Topic-/Thread-ID aus (wenn Forum-Topics genutzt werden).
+*   `/id`
+    *   *Erklärung:* Kombi-Ausgabe: User, Chat, Topic.
 
 ---
 

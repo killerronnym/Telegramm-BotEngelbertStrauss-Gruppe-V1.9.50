@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Panel - ID Finder Bot{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <a href="{{ url_for('id_finder_dashboard') }}" class="btn btn-secondary mb-3">← Zurück zum ID-Finder Dashboard</a>
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="display-5">👮 Admin Panel</h1>
+        <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addAdminModal">
+            ➕ Neuen Admin hinzufügen
+        </button>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="card">
+        <div class="card-header">
+            <h3>Liste der Administratoren</h3>
+        </div>
+        <div class="card-body">
+            {% if admins %}
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover align-middle">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Name</th>
+                                <th>Telegram ID</th>
+                                <th>Berechtigungen (Skills)</th>
+                                <th>Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for admin_id, admin_data in admins.items() %}
+                                <tr>
+                                    <td><strong>{{ admin_data.name }}</strong></td>
+                                    <td><code>{{ admin_id }}</code></td>
+                                    <td>
+                                        <span class="badge bg-info text-dark">{{ admin_data.permissions.values() | select("equalto", true) | list | length }} Skills aktiv</span>
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-primary btn-sm me-2" data-bs-toggle="modal" data-bs-target="#editPermsModal{{ admin_id }}">
+                                            ✏️ Rechte
+                                        </button>
+                                        <form method="POST" action="{{ url_for('id_finder_delete_admin') }}" style="display:inline;">
+                                            <input type="hidden" name="admin_id" value="{{ admin_id }}">
+                                            <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Diesen Admin wirklich löschen?')">
+                                                🗑️ Löschen
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+
+                                <!-- Modal für Rechte (Permissions) -->
+                                <div class="modal fade" id="editPermsModal{{ admin_id }}" tabindex="-1" aria-hidden="true">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">Rechte verwalten für: {{ admin_data.name }}</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <form method="POST" action="{{ url_for('id_finder_update_admin_permissions') }}">
+                                                <div class="modal-body">
+                                                    <input type="hidden" name="admin_id" value="{{ admin_id }}">
+                                                    <p class="text-muted">Wähle die Befehle aus, die dieser Admin nutzen darf:</p>
+                                                    
+                                                    <div class="list-group">
+                                                        {% for perm_key, perm_desc in available_permissions.items() %}
+                                                            <label class="list-group-item">
+                                                                <input class="form-check-input me-1" type="checkbox" name="{{ perm_key }}" 
+                                                                    {% if admin_data.permissions.get(perm_key) %}checked{% endif %}>
+                                                                {{ perm_desc }}
+                                                            </label>
+                                                        {% endfor %}
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                                                    <button type="submit" class="btn btn-primary">💾 Speichern</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="alert alert-info text-center">
+                    Noch keine Administratoren angelegt.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal für neuen Admin -->
+<div class="modal fade" id="addAdminModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Neuen Admin hinzufügen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{{ url_for('id_finder_add_admin') }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="admin_name" class="form-label">Name (Beschreibung)</label>
+                        <input type="text" class="form-control" id="admin_name" name="admin_name" required placeholder="z.B. @SuperUser">
+                    </div>
+                    <div class="mb-3">
+                        <label for="admin_id" class="form-label">Telegram User ID</label>
+                        <input type="number" class="form-control" id="admin_id" name="admin_id" required placeholder="123456789">
+                        <div class="form-text">Die ID kann mit dem Befehl <code>/id</code> oder <code>/UserID</code> herausgefunden werden.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="submit" class="btn btn-success">Hinzufügen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,17 @@
+{
+    "5544098336": {
+        "name": "rinno",
+        "permissions": {
+            "can_warn": true,
+            "can_kick": true,
+            "can_ban": true,
+            "can_mute": true,
+            "can_unban": true,
+            "can_clear_warns": true,
+            "can_see_logs": true,
+            "can_manage_admins": true,
+            "can_see_ids": true,
+            "can_manage_messages": true
+        }
+    }
+}
