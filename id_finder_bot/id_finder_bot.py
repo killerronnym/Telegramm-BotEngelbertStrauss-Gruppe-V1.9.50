@@ -3,8 +3,8 @@ import logging
 import os
 import json
 import re
-from datetime import datetime
-from telegram import Update
+from datetime import datetime, timedelta
+from telegram import Update, ChatPermissions
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.error import TelegramError
 
@@ -51,8 +51,8 @@ def load_moderation_data():
 
 def save_moderation_data(data):
     try:
-        with open(MODERATION_DATA_FILE, 'w') as f:
-            json.dump(data, f, indent=4)
+        with open(MODERATION_DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
     except Exception as e:
         logger.error(f"Fehler beim Speichern der Moderationsdaten: {e}")
 
@@ -90,7 +90,7 @@ def get_reply_parameters(config, update: Update):
 async def get_target_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Extrahiert den Zielnutzer aus der Nachricht (Reply oder Argument)."""
     target_user = None
-    args = context.args
+    args = list(context.args) # Create a mutable copy
     
     if update.message.reply_to_message:
         target_user = update.message.reply_to_message.from_user
@@ -103,9 +103,6 @@ async def get_target_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 target_user = member.user
                 args = args[1:] # Argument entfernen, da verarbeitet
             except Exception:
-                # Nutzer nicht im Chat gefunden oder ID ungültig, wir geben die ID zurück falls wir kein User-Objekt haben
-                # Für einfache Bans reicht manchmal die ID, aber für schönere Nachrichten brauchen wir den User.
-                # Hier geben wir None zurück, Handler muss damit umgehen.
                 pass
         except ValueError:
             pass # Erstes Argument war keine ID
@@ -134,6 +131,23 @@ async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(response, parse_mode='Markdown')
     log_command(user.id, user.full_name, "/id")
+
+async def get_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    response = f"💬 Die ID dieses Chats ist: `{chat.id}`"
+    if update.effective_message.message_thread_id:
+        response += f"\n🧵 Topic ID: `{update.effective_message.message_thread_id}`"
+    await update.message.reply_text(response, parse_mode='Markdown')
+    log_command(update.effective_user.id, update.effective_user.full_name, "/ChatID")
+
+async def get_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    response = f"👤 Deine User ID ist: `{user.id}`"
+    if update.message.reply_to_message:
+        target_user = update.message.reply_to_message.from_user
+        response += f"\n\n👇 **Ziel-Nachricht User ID** 👇\n👤 User ID: `{target_user.id}`"
+    await update.message.reply_text(response, parse_mode='Markdown')
+    log_command(user.id, user.full_name, "/UserID")
 
 
 async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -225,24 +239,61 @@ async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Fehler beim Bannen: {e}")
 
 async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Einfaches Mute für 1 Stunde als Beispiel, könnte erweitert werden
     target_user, args = await get_target_user(update, context)
     if not target_user:
-        await update.message.reply_text("Zielnutzer nicht gefunden.")
+        await update.message.reply_text("Bitte antworte auf eine Nachricht oder gib eine User-ID an, um jemanden stummzuschalten.")
         return
-        
-    reason = " ".join(args) if args else "Kein Grund angegeben"
-    duration = timedelta(hours=1)
+
+    duration_str = None
+    reason = "Kein Grund angegeben"
+
+    if args:
+        # Check if the first arg is a duration (e.g., "1h", "30m", "7d")
+        duration_match = re.match(r'(\d+)([hmd])', args[0])
+        if duration_match:
+            amount = int(duration_match.group(1))
+            unit = duration_match.group(2)
+            if unit == 'h':
+                duration = timedelta(hours=amount)
+            elif unit == 'm':
+                duration = timedelta(minutes=amount)
+            elif unit == 'd':
+                duration = timedelta(days=amount)
+            duration_str = args.pop(0) # Remove duration from args
+            reason = " ".join(args) if args else "Kein Grund angegeben"
+        else:
+            reason = " ".join(args)
+
+    if not duration_str: # Default to 1 hour if no duration was specified
+        duration = timedelta(hours=1)
+        duration_str = "1h"
+
+    until_date = datetime.now() + duration
     
     try:
-        permissions = telegram.ChatPermissions(can_send_messages=False)
-        # permissions Argument je nach python-telegram-bot Version unterschiedlich, hier vereinfacht
-        # In v20+ heißt es chat_permissions und until_date ist notwendig
-        # Wir setzen es einfach mal nicht um, da es komplexer ist ohne genaue Versionskenntnis.
-        # Platzhalter Implementierung:
-        await update.message.reply_text(f"🤐 Mute-Funktion ist noch nicht vollständig implementiert.\nUser: {target_user.full_name}")
+        await context.bot.restrict_chat_member(
+            chat_id=update.effective_chat.id,
+            user_id=target_user.id,
+            permissions=ChatPermissions(can_send_messages=False),
+            until_date=until_date
+        )
         
-    except Exception as e:
+        log_command(update.effective_user.id, update.effective_user.full_name, "/mute", target_user.id, f"{duration_str} {reason}")
+        
+        config = load_config()
+        reply_params = get_reply_parameters(config, update)
+        msg_text = (
+            f"🤐 Benutzer {target_user.full_name} (`{target_user.id}`) wurde für {duration_str} stummgeschaltet."
+            f"\nGrund: {reason}\nEntbannt am: {until_date.strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+        
+        try:
+            await context.bot.send_message(text=msg_text, parse_mode='Markdown', **reply_params)
+        except Exception as e:
+            logger.error(f"Konnte Mute-Nachricht nicht senden: {e}")
+            await update.message.reply_text(msg_text, parse_mode='Markdown')
+
+    except TelegramError as e:
         await update.message.reply_text(f"Fehler beim Muten: {e}")
 
 
@@ -250,14 +301,15 @@ async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 if __name__ == "__main__":
     config = load_config()
     token = config.get("bot_token")
-    is_enabled = config.get("is_enabled", False)
     
-    if not token or not is_enabled:
+    if not token:
         logger.info("ID Finder Bot ist deaktiviert oder Token fehlt.")
     else:
         app = ApplicationBuilder().token(token).build()
         
         app.add_handler(CommandHandler("id", get_id))
+        app.add_handler(CommandHandler("ChatID", get_chat_id))
+        app.add_handler(CommandHandler("UserID", get_user_id))
         app.add_handler(CommandHandler("warn", warn_user))
         app.add_handler(CommandHandler("kick", kick_user))
         app.add_handler(CommandHandler("ban", ban_user))

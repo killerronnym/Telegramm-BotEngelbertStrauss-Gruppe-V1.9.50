@@ -1,8 +1,8 @@
 {
     "is_enabled": true,
-    "bot_token": "7635905106:AAHuzxw5lw3fhXHx_8b9Wlw_WwGVxACbKAA",
+    "bot_token": "8508220461:AAFLKm2ffyaXs5rmlR2yIGs0FgFq4ASUN-s",
     "admin_group_id": null,
-    "main_group_id": null,
+    "main_group_id": "-1003405727637",
     "log_topic_id": null,
     "warn_limit": 3,
     "warn_action": "none",

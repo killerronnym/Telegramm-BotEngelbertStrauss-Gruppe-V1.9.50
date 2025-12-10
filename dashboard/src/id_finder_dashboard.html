@@ -64,23 +64,32 @@
     <div class="row">
         <div class="col-md-6 mb-4">
             <div class="card h-100">
-                <div class="card-header">
+                <div class="card-header d-flex justify-content-between align-items-center">
                     <h3>📜 Befehls-Logbuch</h3>
+                    <form method="POST" action="{{ url_for('id_finder_dashboard') }}">
+                        <button type="submit" name="action" value="clear_command_log" class="btn btn-danger btn-sm">🗑️ Logs leeren</button>
+                    </form>
                 </div>
                 <div class="card-body">
-                    <pre class="log-display bg-dark text-white p-3 rounded" style="height: 300px; overflow-y: scroll; font-family: monospace; font-size: 0.9rem; white-space: pre-wrap;">{% for line in command_logs %}{{ line.strip() }}
-{% endfor %}</pre>
+                    <!-- Anzeige der command_logs -->
+                    <div style="background-color: #212529; color: #f8f9fa; border-radius: 5px; padding: 15px; height: 300px; overflow-y: scroll; font-family: monospace; white-space: pre-wrap;">
+{% for line in command_logs %}{{ line }}{% endfor %}
+                    </div>
                 </div>
             </div>
         </div>
         <div class="col-md-6 mb-4">
             <div class="card h-100">
-                <div class="card-header">
+                <div class="card-header d-flex justify-content-between align-items-center">
                     <h3>🖥️ System- & Fehler-Log</h3>
+                     <form method="POST" action="{{ url_for('id_finder_dashboard') }}">
+                        <button type="submit" name="action" value="clear_system_log" class="btn btn-danger btn-sm">🗑️ Logs leeren</button>
+                    </form>
                 </div>
                 <div class="card-body">
-                    <pre class="log-display bg-dark text-white p-3 rounded" style="height: 300px; overflow-y: scroll; font-family: monospace; font-size: 0.9rem; white-space: pre-wrap;">{% for line in system_logs %}{{ line.strip() }}
-{% endfor %}</pre>
+                    <div style="background-color: #212529; color: #f8f9fa; border-radius: 5px; padding: 15px; height: 300px; overflow-y: scroll; font-family: monospace; white-space: pre-wrap;">
+{% for line in system_logs %}{{ line }}{% endfor %}
+                    </div>
                 </div>
             </div>
         </div>

@@ -49,6 +49,7 @@ DASHBOARD_CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
 # Log Files
 OUTFIT_BOT_LOG = os.path.join(OUTFIT_BOT_DIR, 'outfit_bot.log')
 ID_FINDER_BOT_LOG = os.path.join(ID_FINDER_BOT_DIR, 'id_finder_bot.log')
+ID_FINDER_COMMAND_LOG = os.path.join(ID_FINDER_BOT_DIR, 'id_finder_command.log') # CORRECTED FILENAME
 INVITE_BOT_LOG = os.path.join(INVITE_BOT_DIR, 'invite_bot.log')
 INVITE_BOT_USER_LOG = os.path.join(INVITE_BOT_DIR, 'user_interactions.log') # Added Invite Bot User Log
 DASHBOARD_APP_LOG = os.path.join(BASE_DIR, 'app.log')
@@ -83,10 +84,10 @@ def is_bot_running(process):
     return process and process.poll() is None
 
 def get_bot_logs(log_file, lines=100):
-    if not os.path.exists(log_file): return ["Keine Log-Datei vorhanden."]
+    if not os.path.exists(log_file): return [f"Keine Log-Datei vorhanden unter: {log_file}"]
     try:
         with open(log_file, 'r', encoding='utf-8') as f: return list(reversed(f.readlines()[-lines:]))
-    except Exception as e: return [f"Fehler beim Lesen der Logs: {e}"]
+    except Exception as e: return [f"Fehler beim Lesen der Logs ({log_file}): {e}"]
 
 def start_bot_process(script_path, log_path):
     global outfit_bot_process
@@ -338,6 +339,20 @@ def id_finder_dashboard():
             success, msg = stop_id_finder_bot()
             flash(msg, "success" if success else "danger")
 
+        elif action == 'clear_system_log':
+            try:
+                with open(ID_FINDER_BOT_LOG, 'w') as f: f.write('')
+                flash("System- & Fehler-Log erfolgreich geleert.", "success")
+            except Exception as e:
+                flash(f"Fehler beim Leeren des Logs: {e}", "danger")
+
+        elif action == 'clear_command_log':
+            try:
+                with open(ID_FINDER_COMMAND_LOG, 'w') as f: f.write('')
+                flash("Befehls-Logbuch erfolgreich geleert.", "success")
+            except Exception as e:
+                flash(f"Fehler beim Leeren des Logs: {e}", "danger")
+
         elif action == 'save_config':
             was_running = is_id_finder_running()
             if was_running: stop_id_finder_bot()
@@ -358,7 +373,7 @@ def id_finder_dashboard():
 
     config = load_json(ID_FINDER_CONFIG_FILE)
     system_logs = get_bot_logs(ID_FINDER_BOT_LOG)
-    command_logs = [] # Placeholder, implement command logs file if needed for ID finder
+    command_logs = get_bot_logs(ID_FINDER_COMMAND_LOG)
 
     return render_template('id_finder_dashboard.html', config=config, is_running=is_id_finder_running(), system_logs=system_logs, command_logs=command_logs)
 

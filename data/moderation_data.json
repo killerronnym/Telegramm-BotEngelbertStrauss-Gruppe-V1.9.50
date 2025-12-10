@@ -1,5 +1,16 @@
 {
     "warns": {},
     "mutes": {},
-    "bans": {}
+    "bans": {},
+    "1032410054": {
+        "warns": 1,
+        "history": [
+            {
+                "type": "warn",
+                "reason": "@Kronym Verwarnung",
+                "date": "2025-12-10T16:37:42.655742",
+                "by": 5544098336
+            }
+        ]
+    }
 }
