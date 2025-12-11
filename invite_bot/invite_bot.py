@@ -37,7 +37,8 @@ DATA_DIR = Path(os.path.join(PROJECT_ROOT, "data"))
 DATA_DIR.mkdir(exist_ok=True)
 PROFILES_FILE = DATA_DIR / "profiles.json"
 
-FREIWILLIG_HINT = "_Diese Frage kannst du mit **nein** überspringen\\._"
+FREIWILLIG_HINT = "_Diese Frage kannst du mit **nein** überspringen\._"
+MAX_TEXT_LENGTH = 180 # Maximale Zeichenlänge für Freitextfelder
 
 def log_user_interaction(user_id: int, question: str, answer: str):
     """Loggt die Eingaben des Benutzers in eine separate Datei."""
@@ -175,33 +176,49 @@ async def get_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_hobbies(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
-    log_user_interaction(update.message.from_user.id, "Hobbys", text)
+    user_id = update.message.from_user.id
+    if len(text) > MAX_TEXT_LENGTH:
+        await update.message.reply_text(f"Ups, dein Text ist zu lang\! Bitte versuche es mit maximal {MAX_TEXT_LENGTH} Zeichen noch einmal\\.", parse_mode="MarkdownV2")
+        return ASK_HOBBIES
+    log_user_interaction(user_id, "Hobbys", text)
     if is_valid(text):
-        user_data_temp[update.message.from_user.id]["hobbies"] = text
+        user_data_temp[user_id]["hobbies"] = text
     await update.message.reply_text(f"📱 Trage hier deinen Instagram oder einen anderen Social Media Account ein:\n\n{FREIWILLIG_HINT}", parse_mode="MarkdownV2")
     return ASK_INSTAGRAM
 
 async def get_instagram(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
-    log_user_interaction(update.message.from_user.id, "Instagram", text)
+    user_id = update.message.from_user.id
+    if len(text) > MAX_TEXT_LENGTH:
+        await update.message.reply_text(f"Ups, dein Text ist zu lang\! Bitte versuche es mit maximal {MAX_TEXT_LENGTH} Zeichen noch einmal\\.", parse_mode="MarkdownV2")
+        return ASK_INSTAGRAM
+    log_user_interaction(user_id, "Instagram", text)
     if is_valid(text):
-        user_data_temp[update.message.from_user.id]["instagram"] = text
+        user_data_temp[user_id]["instagram"] = text
     await update.message.reply_text(f"💬 Möchtest du noch etwas über dich sagen?\n\n{FREIWILLIG_HINT}", parse_mode="MarkdownV2")
     return ASK_OTHER
 
 async def get_other(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
-    log_user_interaction(update.message.from_user.id, "Sonstiges", text)
+    user_id = update.message.from_user.id
+    if len(text) > MAX_TEXT_LENGTH:
+        await update.message.reply_text(f"Ups, dein Text ist zu lang\! Bitte versuche es mit maximal {MAX_TEXT_LENGTH} Zeichen noch einmal\\.", parse_mode="MarkdownV2")
+        return ASK_OTHER
+    log_user_interaction(user_id, "Sonstiges", text)
     if is_valid(text):
-        user_data_temp[update.message.from_user.id]["other"] = text
+        user_data_temp[user_id]["other"] = text
     await update.message.reply_text(f"🏳️‍🌈 Wie ist deine Sexualität?\n\n{FREIWILLIG_HINT}", parse_mode="MarkdownV2")
     return ASK_SEXUALITY
 
 async def get_sexuality(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
-    log_user_interaction(update.message.from_user.id, "Sexualität", text)
+    user_id = update.message.from_user.id
+    if len(text) > MAX_TEXT_LENGTH:
+        await update.message.reply_text(f"Ups, dein Text ist zu lang\! Bitte versuche es mit maximal {MAX_TEXT_LENGTH} Zeichen noch einmal\\.", parse_mode="MarkdownV2")
+        return ASK_SEXUALITY
+    log_user_interaction(user_id, "Sexualität", text)
     if is_valid(text):
-        user_data_temp[update.message.from_user.id]["sexuality"] = text
+        user_data_temp[user_id]["sexuality"] = text
     regeln = ( "📜 *Bevor du in die Gruppe kommst, lies bitte unsere Regeln:*\n\n" "✅ *DOS:*\n" "• Respektvoller Umgang\n" "• Überwiegend gute Laune 😄\n\n" "❌ *DON'TS:*\n" "✖️ Beleidigungen\n" "✖️ Diskriminierung\n" "✖️ Hardcore\-Inhalte\n" "✖️ Blut oder offene Wunden\n" "✖️ Inhalte mit Kindern\n" "✖️ Inhalte mit Tieren \\(sexuell\\)\\n" "✖️ Inhalte mit Bezug auf Tod\n" "✖️ Exkremente\n\n" "_Verstöße werden durch Admins geprüft und bei Wiederholung erfolgt Ausschluss\\._\n\n" "👉 *Wenn du einverstanden bist, bestätige mit OK\\.*" )
     await update.message.reply_text(regeln, parse_mode="MarkdownV2")
     return ASK_RULES
@@ -369,6 +386,33 @@ async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE
     remove_profile(user.id)
 
 
+async def handle_new_chat_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    config = load_bot_settings_config()
+    GROUP_ID = int(config.get("main_chat_id", 0)) if config.get("main_chat_id") else 0
+    TOPIC_ID_STR = config.get("topic_id")
+    TOPIC_ID = int(TOPIC_ID_STR) if TOPIC_ID_STR and TOPIC_ID_STR.isdigit() else None
+    repost_setting = config.get("repost_profile_for_existing_members", True)
+
+    if not update.message or not update.message.new_chat_members: return
+
+    for member in update.message.new_chat_members:
+        # Ignoriere den Bot selbst, wenn er beitritt
+        if member.id == context.bot.id: continue
+
+        user_id = member.id
+        profile = load_profile(user_id)
+        if profile:
+            logger.info(f"[handle_new_chat_members] Neues Mitglied {user_id} erkannt, Profil vorhanden. Poste Steckbrief.")
+            success = await _send_profile_to_group(user_id, profile, GROUP_ID, TOPIC_ID, context)
+            if success:
+                logger.info(f"[handle_new_chat_members] Steckbrief für {user_id} erfolgreich gepostet.")
+            else:
+                logger.error(f"[handle_new_chat_members] Fehler beim Posten des Steckbriefs für {user_id}.")
+            remove_profile(user_id)
+        else:
+            logger.info(f"[handle_new_chat_members] Neues Mitglied {user_id} erkannt, aber kein Profil gefunden.")
+
+
 async def handle_member_left(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.left_chat_member: return
     user = update.message.left_chat_member
@@ -406,6 +450,7 @@ if __name__ == "__main__":
         app.add_handler(CommandHandler("start", welcome))
         app.add_handler(conv_handler)
         app.add_handler(ChatJoinRequestHandler(handle_join_request))
+        app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members)) # Neuer Handler für neue Mitglieder
         app.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, handle_member_left))
 
         developer_filter = filters.Regex(re.compile(r'^wer ist dein entwickler\??$', re.IGNORECASE))
