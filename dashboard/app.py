@@ -1,4 +1,9 @@
 import os
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+from flask_session import Session
+from werkzeug.security import generate_password_hash, check_password_hash
+import hashlib
+import os
 import json
 import logging
 from logging.handlers import RotatingFileHandler
@@ -56,11 +61,37 @@ log = logging.getLogger(__name__)
 from werkzeug.utils import secure_filename
 import uuid
 app = Flask(__name__, template_folder="src")
+
+# --- Session Configuration ---
+app.config["SESSION_TYPE"] = "filesystem"
+app.config["SESSION_FILE_DIR"] = os.path.join(BASE_DIR, "flask_session")
+os.makedirs(app.config["SESSION_FILE_DIR"], exist_ok=True)
+app.config["SESSION_PERMANENT"] = False
+app.config["SESSION_USE_SIGNER"] = True
+Session(app)
+
+USERS_FILE = os.path.join(BASE_DIR, "users.json")
+def load_web_users():
+    if not os.path.exists(USERS_FILE): return {}
+    with open(USERS_FILE, "r") as f: return json.load(f)
+
+def save_web_users(users):
+    with open(USERS_FILE, "w") as f: json.dump(users, f, indent=4)
+
+def login_required(f):
+    from functools import wraps
+    from flask import session, redirect, url_for, request
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if "user" not in session:
+            return redirect(url_for("login", next=request.url))
+        return f(*args, **kwargs)
+    return decorated_function
 app.secret_key = "b13f172933b9a1274adb024d47fc7552d2e85864693cb9a2"
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 # --- Globale Variablen & Dateipfade ---
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
 
 # Bot Directories
@@ -1465,6 +1496,7 @@ def _build_minecraft_template_payload():
 # ✅ Minecraft Routes: Endpoints müssen GENAU so heißen wie im Template!
 # -------------------------------------------------------------------
 @app.route("/minecraft", methods=["GET", "POST"], endpoint="minecraft_status_page")
+@login_required
 def minecraft_status_page():
     if request.method == "POST":
         return minecraft_status_save()
@@ -2408,6 +2440,7 @@ def save_topic_mapping():
     return redirect(url_for("broadcast_manager"))
 
 @app.route("/broadcast")
+@login_required
 def broadcast_manager():
     broadcasts = load_broadcasts()
     # Sortieren: Pending zuerst, dann nach Datum
@@ -2553,6 +2586,7 @@ def start_broadcast_scheduler():
     return t
 
 @app.route("/")
+@login_required
 def index():
     # ✅ minecraft_route_exists: damit Templates optional anzeigen können
     return render_template("index.html", bot_status=build_bot_status(), minecraft_route_exists=True)
@@ -2560,6 +2594,7 @@ def index():
 
 # --- OUTFIT BOT ROUTES ---
 @app.route("/outfit-bot/dashboard")
+@login_required
 def outfit_bot_dashboard():
     config = load_json(OUTFIT_BOT_CONFIG_FILE, {})
     duel_status = {"active": False}
@@ -2688,6 +2723,7 @@ def outfit_bot_end_duel():
 
 # --- INVITE BOT ROUTES ---
 @app.route("/bot-settings", methods=["GET", "POST"])
+@login_required
 def bot_settings():
     if request.method == "POST":
         action = request.form.get("action")
@@ -2758,6 +2794,7 @@ def bot_settings():
 
 # --- ID FINDER BOT ROUTES ---
 @app.route("/id-finder", methods=["GET", "POST"])
+@login_required
 def id_finder_dashboard():
     if request.method == "POST":
         action = request.form.get("action")
@@ -3294,6 +3331,7 @@ def id_finder_update_admin_permissions():
 
 # --- QUIZ ROUTES ---
 @app.route("/quiz-settings", methods=["GET", "POST"])
+@login_required
 def quiz_settings():
     if request.method == "POST":
         action = request.form.get("action")
@@ -3396,6 +3434,7 @@ def quiz_settings():
 
 # --- UMFRAGE ROUTES ---
 @app.route("/umfrage-settings", methods=["GET", "POST"])
+@login_required
 def umfrage_settings():
     if request.method == "POST":
         action = request.form.get("action")
@@ -3523,7 +3562,110 @@ def cleanup_processes():
 atexit.register(cleanup_processes)
 
 
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    from flask import request, render_template, session, flash, redirect, url_for
+    if request.method == "POST":
+        username = request.form.get("username").strip().lower()
+        password = request.form.get("password")
+        users = load_web_users()
+        if username in users:
+            u_data = users[username]
+            if check_password_hash(u_data["password"], password):
+                session["user"] = username
+                session["role"] = u_data.get("role", "user")
+                flash(f"Willkommen, {username}!", "success")
+                return redirect(url_for("index"))
+        flash("Ungültiger Benutzername oder Passwort.", "danger")
+    return render_template("login.html")
+
+@app.route("/logout")
+def logout():
+    from flask import session, flash, redirect, url_for
+    session.clear()
+    flash("Abgemeldet.", "info")
+    return redirect(url_for("login"))
+
+@app.route("/admin/users")
+@login_required
+def manage_users():
+    from flask import session, render_template, redirect, url_for
+    if session.get("role") != "admin": return redirect(url_for("index"))
+    return render_template("manage_users.html", users=load_web_users())
+
+@app.route("/admin/users/add", methods=["POST"])
+@login_required
+def add_user():
+    from flask import session, request, abort, flash, redirect, url_for
+    if session.get("role") != "admin": return abort(403)
+    username = request.form.get("username").strip().lower()
+    password = request.form.get("password")
+    role = request.form.get("role", "user")
+    if username and password:
+        users = load_web_users()
+        if username not in users:
+            users[username] = {"password": generate_password_hash(password), "role": role}
+            save_web_users(users)
+            flash(f"Benutzer {username} erstellt.", "success")
+        else:
+            flash("Benutzer existiert bereits.", "warning")
+    return redirect(url_for("manage_users"))
+
+@app.route("/admin/users/delete/<username>", methods=["POST"])
+@login_required
+def delete_user(username):
+    from flask import session, abort, redirect, url_for
+    if session.get("role") != "admin" or username == session.get("user"): return abort(403)
+    users = load_web_users()
+    if username in users:
+        users.pop(username)
+        save_web_users(users)
+    return redirect(url_for("manage_users"))
+@app.route("/admin/users/edit/<username>", methods=["POST"])
+@login_required
+def edit_user(username):
+    from flask import session, request, abort, flash, redirect, url_for
+    if session.get("role") != "admin": return abort(403)
+    
+    new_username = request.form.get("new_username", "").strip().lower()
+    new_password = request.form.get("new_password", "").strip()
+    new_role = request.form.get("new_role", "").strip()
+    
+    users = load_web_users()
+    if username not in users:
+        flash("Benutzer nicht gefunden.", "danger")
+        return redirect(url_for("manage_users"))
+        
+    user_data = users.pop(username)
+    
+    # Update Username
+    target_username = username
+    if new_username and new_username != username:
+        if new_username in users:
+            flash(f"Benutzername {new_username} bereits vergeben.", "danger")
+            users[username] = user_data # restore
+            return redirect(url_for("manage_users"))
+        target_username = new_username
+        # If we edited ourselves, update session
+        if session.get("user") == username:
+            session["user"] = new_username
+            
+    # Update Password
+    if new_password:
+        user_data["password"] = generate_password_hash(new_password)
+        
+    # Update Role
+    if new_role:
+        user_data["role"] = new_role
+        if session.get("user") == target_username:
+             session["role"] = new_role
+             
+    users[target_username] = user_data
+    save_web_users(users)
+    flash(f"Benutzer {target_username} wurde aktualisiert.", "success")
+    return redirect(url_for("manage_users"))
 if __name__ == "__main__":
     migrate_admins_permissions()
     start_scheduler_thread()
     app.run(host="0.0.0.0", port=9002, debug=False)
+
