@@ -1808,7 +1808,7 @@ def load_user_messages(uid: str, limit: int = 200, q: str = "", media_only: bool
             except Exception:
                 continue
 
-            has_media = bool(obj.get("has_media")) or bool(obj.get("media"))
+            has_media = bool(obj.get("has_media"))
             if media_only and not has_media:
                 continue
 
@@ -1937,7 +1937,7 @@ def _msg_to_template(obj: dict, reg_map: dict = None) -> dict:
     reg_map = reg_map or {}
 
     media = obj.get("media") or {}
-    has_media = bool(obj.get("has_media")) or bool(media)
+    has_media = bool(obj.get("has_media"))
 
     msg_type = "text"
     if has_media:
@@ -2256,7 +2256,7 @@ def build_group_activity(days: int = 30, chat_id=None) -> dict:
                 u = per_user[au]
                 u['user_id'] = au
                 u['messages'] += 1
-                has_m = bool(m.get('has_media') or m.get('media'))
+                has_m = bool(m.get('has_media'))
                 if has_m:
                     media_shared += 1
                     u['media'] += 1
