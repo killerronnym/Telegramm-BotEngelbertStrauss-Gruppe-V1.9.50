@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}User Detail | ID-Finder{% endblock %}
+
+{% block content %}
+<style>
+    .dashboard-container { padding: 2.5rem; }
+    .btn-back { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-muted); color: var(--text-secondary); font-weight: 500; border-radius: 8px; padding: 0.5rem 1rem; transition: all 0.2s ease; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
+    .btn-back:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+    
+    .card { background: var(--card-base); border: 1px solid var(--border-muted); border-radius: 12px; margin-bottom: 1.5rem; }
+    .card-header { background: rgba(0, 0, 0, 0.1); border-bottom: 1px solid var(--border-muted); padding: 1rem 1.5rem; }
+    
+    .profile-card { background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-muted); border-radius: 12px; padding: 1.5rem; }
+    .user-avatar-lg { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; background: #2d3748; display: flex; align-items: center; justify-content: center; font-size: 2rem; color: #a0aec0; }
+    
+    .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; }
+    .info-item label { display: block; font-size: 0.7rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; margin-bottom: 0.25rem; }
+    .info-item span { display: block; font-size: 0.95rem; font-weight: 500; color: var(--text-primary); }
+
+    .msg-table { font-size: 0.85rem; }
+    .msg-table th { background: rgba(0, 0, 0, 0.2); color: var(--text-dim); text-transform: uppercase; font-size: 0.7rem; padding: 0.75rem 1rem; }
+    .msg-table td { padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.03); }
+    
+    .msg-content { color: var(--text-primary); line-height: 1.4; }
+    .msg-meta { font-size: 0.75rem; color: var(--text-dim); }
+
+    .btn-quick-action { font-weight: 600; border: none; padding: 0.5rem 1rem; border-radius: 8px; color: white; display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none; transition: all 0.2s; font-size: 0.8rem; }
+    .btn-amber { background-color: #f59e0b; color: #111; }
+    .btn-rose { background-color: #e11d48; }
+</style>
+
+<div class="dashboard-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <a href="{{ url_for('id_finder_dashboard') }}" class="btn-back">
+            <i class="bi bi-arrow-left"></i> Zurück zum ID-Finder Dashboard
+        </a>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('id_finder_analytics') }}" class="btn-quick-action btn-rose">
+                <i class="bi bi-bar-chart-line-fill"></i> Analytics
+            </a>
+            <a href="{{ url_for('id_finder_admin_panel') }}" class="btn-quick-action btn-amber">
+                <i class="bi bi-shield-lock-fill"></i> Admin Panel
+            </a>
+        </div>
+    </div>
+
+    <div class="d-flex align-items-center gap-3 mb-4">
+        <div class="user-avatar-lg">
+            <i class="bi bi-person-fill"></i>
+        </div>
+        <div>
+            <h2 class="fw-bold mb-0 text-white">User Detail</h2>
+            <div class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 px-2 mt-1">ID {{ user.id }}</div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6><i class="bi bi-person-lines-fill me-2"></i>Profil / Registry</h6>
+            <div class="d-flex gap-2">
+                <button class="btn btn-info btn-sm px-3" onclick="copyToClipboard('{{ user.id }}')">Copy ID</button>
+                <button class="btn btn-danger btn-sm px-3" style="background-color: #e11d48; border: none;">🪄 Hierarchie löschen</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="profile-card h-100">
+                        <div class="d-flex flex-column gap-3">
+                            <div class="d-flex align-items-center gap-3">
+                                <i class="bi bi-person text-primary"></i>
+                                <div>
+                                    <label class="form-label-small m-0">Name:</label>
+                                    <div class="text-white fw-bold">{{ user.full_name or 'Unbekannt' }}</div>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center gap-3">
+                                <i class="bi bi-robot text-primary"></i>
+                                <div>
+                                    <label class="form-label-small m-0">Username:</label>
+                                    <div class="text-white">{% if user.username %}@{{ user.username }}{% else %}—{% endif %}</div>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center gap-3">
+                                <i class="bi bi-hash text-primary"></i>
+                                <div>
+                                    <label class="form-label-small m-0">User-ID:</label>
+                                    <div class="text-rose-300 fw-mono">{{ user.id }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="profile-card h-100">
+                        <div class="d-flex flex-column gap-3">
+                            <div class="d-flex align-items-center gap-3">
+                                <i class="bi bi-calendar-plus text-primary"></i>
+                                <div>
+                                    <label class="form-label-small m-0">First Seen:</label>
+                                    <div class="text-white">{{ user.first_seen or '—' }}</div>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center gap-3">
+                                <i class="bi bi-clock-history text-primary"></i>
+                                <div>
+                                    <label class="form-label-small m-0">Last Seen:</label>
+                                    <div class="text-white">{{ user.last_seen or '—' }}</div>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center gap-3">
+                                <i class="bi bi-chat-dots text-primary"></i>
+                                <div>
+                                    <label class="form-label-small m-0">Chats:</label>
+                                    <div class="text-rose-300 small">{{ user.groups_seen|join(', ') if user.groups_seen else '—' }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-3 small text-secondary">
+                Hinweis: Verlauf kann nur angezeigt werden, wenn dein Bot die Nachrichten **mitloggt** (Telegram liefert keine alte Historie nach).
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6><i class="bi bi-chat-left-text-fill me-2"></i>Chatverlauf (Bot-Log)</h6>
+            <span class="badge bg-dark">{{ messages|length }} Einträge</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="p-3 border-bottom border-white border-opacity-5">
+                <div class="row g-2">
+                    <div class="col">
+                        <label class="form-label-small">Suche (Text / Caption / Dateiname)</label>
+                        <input type="text" class="form-control" placeholder="z.B. 'Strauss', '.pdf', 📷">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label-small">Filter</label>
+                        <select class="form-select">
+                            <option>Alle</option>
+                        </select>
+                    </div>
+                    <div class="col-auto d-flex align-items-end">
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="likedOnly">
+                            <label class="form-check-label small text-secondary" for="likedOnly">❤️ Nur gelikte</label>
+                        </div>
+                    </div>
+                    <div class="col-auto d-flex align-items-end">
+                        <button class="btn btn-primary mb-1 px-4"><i class="bi bi-search me-2"></i>Anwenden</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table msg-table mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 150px;">Zeit</th>
+                            <th style="width: 100px;">Typ</th>
+                            <th>Inhalt</th>
+                            <th style="width: 200px;">Meta</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if messages %}
+                            {% for m in messages %}
+                            <tr>
+                                <td class="text-rose-300 small">{{ m.ts }}</td>
+                                <td class="fw-bold">{{ m.type or 'text' }}</td>
+                                <td class="msg-content">
+                                    {% if m.text %}{{ m.text }}{% endif %}
+                                    {% if m.has_media %}<div class="badge bg-secondary">media</div>{% endif %}
+                                </td>
+                                <td class="msg-meta">
+                                    <div>Chat: <span class="text-rose-300">{{ m.chat_id }}</span></div>
+                                    <div>Msg: <span class="text-rose-300">{{ m.msg_id }}</span></div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr><td colspan="4" class="text-center py-5 text-muted">Keine Nachrichten geloggt.</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            alert('ID kopiert: ' + text);
+        });
+    }
+</script>
+{% endblock %}
