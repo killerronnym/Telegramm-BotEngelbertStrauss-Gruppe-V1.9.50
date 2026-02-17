@@ -1,7 +1,7 @@
 {
-    "bot_token": "8241505829:AAHhD4o-NnnN9LTHmbfmfEU3VAWY7of7K7c",
+    "bot_token": "7520803994:AAGPynp1vlWVjTLRK7s2EPVaMzHyROTetgc",
     "main_chat_id": "-1002206300882",
-    "topic_id": null,
+    "topic_id": "",
     "is_enabled": true,
     "repost_profile_for_existing_members": true,
     "link_ttl_minutes": 15,
@@ -14,7 +14,9 @@
             "label": "Wie ist dein Name? Es reicht dein Vorname.",
             "type": "text",
             "required": true,
-            "enabled": true
+            "enabled": true,
+            "emoji": "🔹",
+            "display_name": "Name :"
         },
         {
             "id": "age",
@@ -23,14 +25,18 @@
             "required": true,
             "enabled": true,
             "min_value": 12,
-            "max_value": 99
+            "max_value": 99,
+            "emoji": "🎂",
+            "display_name": "🎂 Alter"
         },
         {
             "id": "state",
             "label": "Aus welchem Bundesland kommst du? (z.B. NRW, Bayern, Berlin ...)",
             "type": "text",
             "required": true,
-            "enabled": true
+            "enabled": true,
+            "emoji": "📍",
+            "display_name": "📍Bundesland "
         },
         {
             "id": "photo",
@@ -44,28 +50,36 @@
             "label": "🎯 Was sind deine Hobbys oder Interessen?",
             "type": "text",
             "required": false,
-            "enabled": true
+            "enabled": true,
+            "emoji": "🎯",
+            "display_name": "🎯 Hobbys"
         },
         {
             "id": "instagram",
             "label": "📱 Trage hier deinen Instagram oder einen anderen Social Media Account ein:",
             "type": "text",
             "required": false,
-            "enabled": true
+            "enabled": true,
+            "emoji": "🔹",
+            "display_name": "📱 Social Media"
         },
         {
             "id": "other",
             "label": "💬 Möchtest du noch etwas über dich sagen?",
             "type": "text",
             "required": false,
-            "enabled": true
+            "enabled": true,
+            "emoji": "🔹",
+            "display_name": "💬 Möchtest"
         },
         {
             "id": "sexuality",
             "label": "🏳️‍🌈 Wie ist deine Sexualität?",
             "type": "text",
             "required": false,
-            "enabled": true
+            "enabled": true,
+            "emoji": "🔹",
+            "display_name": "🏳️‍🌈 Sexualität"
         }
     ]
 }

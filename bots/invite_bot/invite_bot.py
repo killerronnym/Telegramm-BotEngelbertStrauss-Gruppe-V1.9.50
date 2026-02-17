@@ -41,6 +41,17 @@ CONFIG_FILE = Path(BASE_DIR) / 'invite_bot_config.json'
 PROFILES_FILE = DATA_DIR / "profiles.json"
 USER_INTERACTIONS_LOG_FILE = Path(BASE_DIR) / 'user_interactions.log'
 
+# Map internal field IDs to user-friendly labels for the final post
+FIELD_LABELS = {
+    "name": "Name",
+    "age": "Alter",
+    "state": "Bundesland",
+    "hobbies": "Hobbys",
+    "instagram": "Social Media",
+    "other": "Sonstiges",
+    "sexuality": "Sexualität"
+}
+
 def load_config():
     default = {
         "is_enabled": False,
@@ -103,7 +114,6 @@ async def ask_next_field(update: Update, context: ContextTypes.DEFAULT_TYPE, con
     current_idx = context.user_data.get("form_idx", 0)
     
     if current_idx >= len(fields):
-        # ✅ FIX: Load customizable rules message
         regeln = config.get("rules_message", "Bitte bestätige die Regeln mit OK.")
         try:
             await update.effective_message.reply_text(regeln, parse_mode="MarkdownV2")
@@ -158,52 +168,25 @@ async def handle_field_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
     field = fields[idx]
     user_input = ""
     
-    # Validation Logic
     if field["type"] == "photo":
         if not update.message.photo:
             if not field.get("required") and update.message.text and update.message.text.lower() == "nein": user_input = None
             else:
                 await update.message.reply_text("Bitte sende ein Foto.")
-                log_user_interaction(update.effective_user.id, update.effective_user.username, "Input Fehler", f"Erwartete Foto für {field['id']}")
                 return FILLING_FORM
         else: user_input = update.message.photo[-1].file_id
     elif field["type"] == "number":
         user_input = update.message.text.strip() if update.message.text else ""
-        if not user_input and field.get("required"):
-            await update.message.reply_text("Bitte gib eine Zahl ein.")
-            return FILLING_FORM
-        if user_input.lower() == "nein" and not field.get("required"):
-            user_input = None
-        else:
-            if not user_input.isdigit():
-                await update.message.reply_text("Bitte gib dein Alter als reine Zahl ein (z.B. 25).")
-                log_user_interaction(update.effective_user.id, update.effective_user.username, "Input Fehler", f"Keine Zahl für {field['id']}: {user_input}")
+        if not user_input.isdigit():
+            if not field.get("required") and user_input.lower() == "nein": user_input = None
+            else:
+                await update.message.reply_text("Bitte gib eine Zahl ein.")
                 return FILLING_FORM
-            
-            val = int(user_input)
-            min_v = field.get("min_value")
-            max_v = field.get("max_value")
-            
-            if min_v is not None and val < min_v:
-                await update.message.reply_text(f"Du musst mindestens {min_v} Jahre alt sein.")
-                log_user_interaction(update.effective_user.id, update.effective_user.username, "Validierung Fehler", f"Zu jung ({val} < {min_v})")
-                return FILLING_FORM
-            if max_v is not None and val > max_v:
-                await update.message.reply_text(f"Das Alter darf maximal {max_v} sein.")
-                log_user_interaction(update.effective_user.id, update.effective_user.username, "Validierung Fehler", f"Zu alt ({val} > {max_v})")
-                return FILLING_FORM
-
-    else: # Text
+    else:
         user_input = update.message.text.strip() if update.message.text else ""
-        if not user_input and field.get("required"):
-            await update.message.reply_text("Bitte gib eine Antwort ein.")
-            log_user_interaction(update.effective_user.id, update.effective_user.username, "Input Fehler", f"Leerer Text für {field['id']}")
-            return FILLING_FORM
-        if user_input and user_input.lower() == "nein" and not field.get("required"): user_input = None
+        if user_input.lower() == "nein" and not field.get("required"): user_input = None
 
     context.user_data["answers"][field["id"]] = user_input
-    log_detail = "Foto" if field["type"] == "photo" and user_input else (user_input if user_input else "Übersprungen")
-    log_user_interaction(update.effective_user.id, update.effective_user.username, "Antwort erhalten", f"Feld: {field['id']} | Wert: {log_detail}")
     context.user_data["form_idx"] = idx + 1
     return await ask_next_field(update, context, config)
 
@@ -211,7 +194,7 @@ async def rules_confirmed(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text.strip().lower() != "ok":
         await update.message.reply_text("Bitte antworte mit *OK*, um fortzufahren\\.", parse_mode="MarkdownV2")
         return CONFIRM_RULES
-    log_user_interaction(update.effective_user.id, update.effective_user.username, "Regeln akzeptiert", "Abgeschlossen")
+    
     user_id = update.effective_user.id
     profile = context.user_data["answers"]
     profile["created_at"] = datetime.utcnow().isoformat()
@@ -221,55 +204,85 @@ async def rules_confirmed(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         link = await context.bot.create_chat_invite_link(chat_id=group_id, expire_date=datetime.utcnow() + timedelta(minutes=config.get("link_ttl_minutes", 15)), creates_join_request=True)
         await update.message.reply_text(f"✅ Hier ist dein Link:\n{link.invite_link}")
-        log_user_interaction(user_id, update.effective_user.username, "Link gesendet", link.invite_link)
     except Exception as e:
         logger.error(f"Link Error: {e}")
-        await update.message.reply_text("Fehler beim Link.")
+        await update.message.reply_text("Fehler beim Erstellen des Links.")
     return ConversationHandler.END
 
 async def post_profile_to_group(context, profile, config):
     chat_id = int(config["main_chat_id"])
     topic_id = config.get("topic_id")
     def esc(t): return escape_md(str(t))
-    user_link = f"[{esc(profile.get('username') or profile.get('first_name'))}](tg://user?id={profile['telegram_id']})"
-    lines = ["🎉 *Neuer Steckbrief\\!*", f"👤 *User:* {user_link}"]
+    
+    user_name = profile.get('first_name') or profile.get('username') or "Unbekannt"
+    user_link = f"[{esc(user_name)}](tg://user?id={profile['telegram_id']})"
+    
+    lines = ["🎉 *Willkommen in der Gruppe\\!*", f"👤 *User:* {user_link}"]
     photo_id = None
+    
+    # Static mappings for cleaner output
+    EMOJI_MAP = {
+        "name": "👤 *Name:*",
+        "age": "🎂 *Alter:*",
+        "state": "📍 *Bundesland:*",
+        "hobbies": "🎯 *Hobbys:*",
+        "instagram": "🔗 *Telegram/Social:*",
+        "other": "💬 *Sonstiges:*",
+        "sexuality": "🏳️‍🌈 *Sexualität:*"
+    }
+
     for f in config.get("form_fields", []):
         val = profile.get(f["id"])
         if val:
-            if f["type"] == "photo": photo_id = val
-            else: lines.append(f"🔹 *{esc(f['label'])}* {esc(val)}")
+            if f["type"] == "photo":
+                photo_id = val
+            else:
+                label = EMOJI_MAP.get(f["id"], f"🔹 *{esc(f['id'].capitalize())}:*")
+                lines.append(f"{label} {esc(val)}")
+    
+    # Add joined timestamp
+    now_str = datetime.now().strftime("%d.%m.%Y – %H:%M")
+    lines.append(f"🕒 *Beigetreten am:* {esc(now_str)}")
+    
     text = "\n".join(lines)
     try:
-        if photo_id: await context.bot.send_photo(chat_id=chat_id, photo=photo_id, caption=text, parse_mode="MarkdownV2", message_thread_id=topic_id)
-        else: await context.bot.send_message(chat_id=chat_id, text=text, parse_mode="MarkdownV2", message_thread_id=topic_id)
-    except Exception as e: logger.error(f"Post failed: {e}")
+        if photo_id:
+            await context.bot.send_photo(chat_id=chat_id, photo=photo_id, caption=text, parse_mode="MarkdownV2", message_thread_id=topic_id)
+        else:
+            await context.bot.send_message(chat_id=chat_id, text=text, parse_mode="MarkdownV2", message_thread_id=topic_id)
+    except Exception as e:
+        logger.error(f"Post failed: {e}")
 
 async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.chat_join_request.from_user.id
     config = load_config()
-    await context.bot.approve_chat_join_request(chat_id=int(config["main_chat_id"]), user_id=user_id)
-    profiles = _load_all_profiles()
-    profile = profiles.get(str(user_id))
-    if profile:
-        await post_profile_to_group(context, profile, config)
-        remove_profile(user_id)
+    try:
+        await context.bot.approve_chat_join_request(chat_id=int(config["main_chat_id"]), user_id=user_id)
+        profiles = _load_all_profiles()
+        profile = profiles.get(str(user_id))
+        if profile:
+            await post_profile_to_group(context, profile, config)
+            remove_profile(user_id)
+    except Exception as e:
+        logger.error(f"Join request approval failed: {e}")
 
 if __name__ == "__main__":
     config = load_config()
     if not config.get("bot_token"):
         logger.error("Kein Token konfiguriert!")
         sys.exit(1)
-    logger.info("Bot-System startet...")
+    
     app = ApplicationBuilder().token(config["bot_token"]).build()
     conv = ConversationHandler(
         entry_points=[CommandHandler("letsgo", start_form)],
-        states={FILLING_FORM: [MessageHandler(filters.ALL & ~filters.COMMAND, handle_field_input)], CONFIRM_RULES: [MessageHandler(filters.TEXT & ~filters.COMMAND, rules_confirmed)]},
+        states={
+            FILLING_FORM: [MessageHandler(filters.ALL & ~filters.COMMAND, handle_field_input)],
+            CONFIRM_RULES: [MessageHandler(filters.TEXT & ~filters.COMMAND, rules_confirmed)]
+        },
         fallbacks=[CommandHandler("start", welcome)],
     )
     app.add_handler(CommandHandler("start", welcome))
     app.add_handler(CommandHandler("datenschutz", datenschutz))
     app.add_handler(conv)
     app.add_handler(ChatJoinRequestHandler(handle_join_request))
-    logger.info("Bot ist bereit und wartet auf Nachrichten.")
     app.run_polling()

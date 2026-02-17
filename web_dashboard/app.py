@@ -275,8 +275,7 @@ def id_finder_save_config():
         "message_logging_ignore_commands": "message_logging_ignore_commands" in request.form,
         "message_logging_groups_only": "message_logging_groups_only" in request.form
     })
-    save_json(ID_FINDER_CONFIG_FILE, cfg)
-    flash("Konfiguration gespeichert.", "success")
+    save_json(ID_FINDER_CONFIG_FILE, cfg); flash("Konfiguration gespeichert.", "success")
     return redirect(url_for("id_finder_dashboard"))
 
 @app.route("/id-finder/delete-user/<user_id>", methods=["POST"])
@@ -315,15 +314,11 @@ def api_id_finder_user_activity(user_id):
         with open(ACTIVITY_LOG_FILE, "r", encoding="utf-8") as f:
             for line in f:
                 try:
-                    m = json.loads(line)
-                    if str(m["user_id"]) == str(user_id):
-                        ts = _parse_dt(m["ts"])
-                        if not ts: continue
+                    m = json.loads(line); ts = _parse_dt(m["ts"])
+                    if ts and str(m["user_id"]) == str(user_id):
                         date_str = ts.date().isoformat()
                         if date_str in user_timeline:
-                            user_timeline[date_str] += 1
-                            user_hours[ts.hour] += 1
-                            user_weekdays[ts.weekday()] += 1
+                            user_timeline[date_str] += 1; user_hours[ts.hour] += 1; user_weekdays[ts.weekday()] += 1
                 except: continue
     return jsonify({"timeline": [user_timeline[label] for label in activity["timeline"]["labels"]], "hours": user_hours, "weekdays": user_weekdays})
 
@@ -382,40 +377,53 @@ def id_finder_update_admin_permissions():
     return redirect(url_for("id_finder_admin_panel"))
 
 # --- 👋 EINLADUNGS-BOT ---
-@app.route("/bot-settings")
+@app.route("/bot-settings", methods=["GET", "POST"])
 @login_required
 def bot_settings(): 
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "start_invite_bot":
+            success, msg = start_bot_process("invite"); flash(msg, "success" if success else "danger")
+        elif action == "stop_invite_bot":
+            success, msg = stop_bot_process_by_name("invite"); flash(msg, "info")
+        elif action == "save_base_config":
+            cfg = load_json(INVITE_BOT_CONFIG_FILE); cfg.update({"bot_token": request.form.get("bot_token"), "main_chat_id": request.form.get("main_chat_id"), "topic_id": request.form.get("topic_id"), "link_ttl_minutes": int(request.form.get("link_ttl_minutes", 15)), "is_enabled": "is_enabled" in request.form}); save_json(INVITE_BOT_CONFIG_FILE, cfg); flash("Konfiguration gespeichert.", "success")
+        return redirect(url_for("bot_settings"))
     return render_template("bot_settings.html", config=load_json(INVITE_BOT_CONFIG_FILE), is_invite_running=is_bot_running("invite"), invite_bot_logs=get_bot_logs(INVITE_BOT_LOG), user_interaction_logs=get_bot_logs(INVITE_BOT_USER_LOG), bot_status=build_bot_status())
 
 @app.route("/bot-settings/save-content", methods=["POST"])
 @login_required
 def save_invite_bot_content():
-    cfg = load_json(INVITE_BOT_CONFIG_FILE)
-    cfg.update({"start_message": request.form.get("start_message"), "rules_message": request.form.get("rules_message"), "privacy_policy": request.form.get("privacy_policy")})
-    save_json(INVITE_BOT_CONFIG_FILE, cfg); flash("Texte gespeichert.", "success")
+    cfg = load_json(INVITE_BOT_CONFIG_FILE); cfg.update({"start_message": request.form.get("start_message"), "rules_message": request.form.get("rules_message"), "privacy_policy": request.form.get("privacy_policy")}); save_json(INVITE_BOT_CONFIG_FILE, cfg); flash("Texte gespeichert.", "success")
     return redirect(url_for("bot_settings"))
 
 @app.route("/bot-settings/add-field", methods=["POST"])
 @login_required
 def add_invite_bot_field():
-    cfg = load_json(INVITE_BOT_CONFIG_FILE, {"form_fields": []})
-    cfg["form_fields"].append({"id": str(uuid.uuid4())[:8], "label": request.form.get("label"), "type": request.form.get("type"), "required": "required" in request.form, "enabled": True})
-    save_json(INVITE_BOT_CONFIG_FILE, cfg)
+    cfg = load_json(INVITE_BOT_CONFIG_FILE, {"form_fields": []}); cfg["form_fields"].append({"id": request.form.get("field_id"), "label": request.form.get("label"), "emoji": request.form.get("emoji"), "display_name": request.form.get("display_name"), "type": request.form.get("type"), "required": "required" in request.form, "enabled": True}); save_json(INVITE_BOT_CONFIG_FILE, cfg); flash("Feld hinzugefügt.", "success")
+    return redirect(url_for("bot_settings"))
+
+@app.route("/bot-settings/edit-field", methods=["POST"])
+@login_required
+def edit_invite_bot_field():
+    cfg = load_json(INVITE_BOT_CONFIG_FILE, {"form_fields": []}); fid = request.form.get("field_id")
+    for f in cfg["form_fields"]:
+        if f["id"] == fid: f.update({"label": request.form.get("label"), "emoji": request.form.get("emoji"), "display_name": request.form.get("display_name"), "type": request.form.get("type"), "required": "required" in request.form, "enabled": "enabled" in request.form}); break
+    save_json(INVITE_BOT_CONFIG_FILE, cfg); flash("Feld aktualisiert.", "success")
     return redirect(url_for("bot_settings"))
 
 @app.route("/bot-settings/delete-field", methods=["POST"])
 @login_required
 def delete_invite_bot_field():
-    cfg = load_json(INVITE_BOT_CONFIG_FILE, {"form_fields": []})
-    cfg["form_fields"] = [f for f in cfg["form_fields"] if f["id"] != request.form.get("field_id")]
-    save_json(INVITE_BOT_CONFIG_FILE, cfg)
+    cfg = load_json(INVITE_BOT_CONFIG_FILE, {"form_fields": []}); fid = request.form.get("field_id")
+    cfg["form_fields"] = [f for f in cfg["form_fields"] if f["id"] != fid]
+    save_json(INVITE_BOT_CONFIG_FILE, cfg); flash("Feld gelöscht.", "info")
     return redirect(url_for("bot_settings"))
 
 @app.route("/invite-bot-move-field/<field_id>/<direction>")
 @login_required
 def invite_bot_move_field(field_id, direction):
-    cfg = load_json(INVITE_BOT_CONFIG_FILE, {"form_fields": []})
-    f = cfg["form_fields"]; i = next((idx for idx, x in enumerate(f) if x["id"] == field_id), -1)
+    cfg = load_json(INVITE_BOT_CONFIG_FILE, {"form_fields": []}); f = cfg["form_fields"]; i = next((idx for idx, x in enumerate(f) if x["id"] == field_id), -1)
     if direction == "up" and i > 0: f[i], f[i-1] = f[i-1], f[i]
     elif direction == "down" and i < len(f)-1: f[i], f[i+1] = f[i+1], f[i]
     save_json(INVITE_BOT_CONFIG_FILE, cfg); return redirect(url_for("bot_settings"))
@@ -423,36 +431,46 @@ def invite_bot_move_field(field_id, direction):
 # --- 📢 NACHRICHT PLANER ---
 @app.route("/broadcast")
 @login_required
-def broadcast_manager(): 
-    return render_template("broadcast_manager.html", broadcasts=load_json(BROADCAST_DATA_FILE, []), bot_status=build_bot_status(), known_topics=load_json(TOPIC_REGISTRY_FILE, {}))
+def broadcast_manager(): return render_template("broadcast_manager.html", broadcasts=load_json(BROADCAST_DATA_FILE, []), bot_status=build_bot_status(), known_topics=load_json(TOPIC_REGISTRY_FILE, {}))
 
 @app.route("/broadcast/save", methods=["POST"])
 @login_required
 def save_broadcast():
-    b = load_json(BROADCAST_DATA_FILE, [])
-    b.append({"id": str(uuid.uuid4())[:8], "text": request.form.get("text"), "topic_id": request.form.get("topic_id"), "status": "pending", "scheduled_at": request.form.get("scheduled_at")})
-    save_json(BROADCAST_DATA_FILE, b); flash("Nachricht gespeichert.", "success")
+    b_list = load_json(BROADCAST_DATA_FILE, [])
+    text = request.form.get("text")
+    topic_id = request.form.get("topic_id")
+    send_mode = request.form.get("send_mode", "standard")
+    scheduled_at = request.form.get("scheduled_at")
+    pin_message = "pin_message" in request.form
+    silent_send = "silent_send" in request.form
+    action = request.form.get("action")
+    media_file = request.files.get("media")
+    media_name = None
+    if media_file and media_file.filename:
+        upload_dir = os.path.join(DATA_DIR, "broadcast_uploads")
+        os.makedirs(upload_dir, exist_ok=True)
+        media_name = f"{uuid.uuid4()[:8]}_{media_file.filename}"
+        media_file.save(os.path.join(upload_dir, media_name))
+    new_b = {"id": str(uuid.uuid4())[:8], "text": text, "topic_id": topic_id, "send_mode": send_mode, "media_name": media_name, "scheduled_at": scheduled_at if action == "schedule" else None, "pin_message": pin_message, "silent_send": silent_send, "status": "pending", "created_at": datetime.now().isoformat()}
+    b_list.append(new_b); save_json(BROADCAST_DATA_FILE, b_list); flash("Broadcast gespeichert.", "success")
     return redirect(url_for("broadcast_manager"))
 
 @app.route("/broadcast/topics/save", methods=["POST"])
 @login_required
 def save_topic_mapping():
-    t = load_json(TOPIC_REGISTRY_FILE, {})
-    t[request.form.get("topic_id")] = request.form.get("topic_name")
-    save_json(TOPIC_REGISTRY_FILE, t)
+    t = load_json(TOPIC_REGISTRY_FILE, {}); t[request.form.get("topic_id")] = request.form.get("topic_name"); save_json(TOPIC_REGISTRY_FILE, t)
     return redirect(url_for("broadcast_manager"))
 
 @app.route("/broadcast/delete/<broadcast_id>", methods=["POST"])
 @login_required
 def delete_broadcast(broadcast_id):
-    b = [x for x in load_json(BROADCAST_DATA_FILE, []) if x.get("id") != broadcast_id]
-    save_json(BROADCAST_DATA_FILE, b); flash("Eintrag gelöscht.", "info")
+    b = [x for x in load_json(BROADCAST_DATA_FILE, []) if x.get("id") != broadcast_id]; save_json(BROADCAST_DATA_FILE, b); flash("Eintrag gelöscht.", "info")
     return redirect(url_for("broadcast_manager"))
 
 @app.route("/broadcast/topics/delete/<topic_id>", methods=["POST"])
 @login_required
 def delete_topic_mapping(topic_id):
-    t = load_json(TOPIC_REGISTRY_FILE, {})
+    t = load_json(TOPIC_REGISTRY_FILE, {}); 
     if topic_id in t: del t[topic_id]
     save_json(TOPIC_REGISTRY_FILE, t); flash("Topic gelöscht.", "info")
     return redirect(url_for("broadcast_manager"))
@@ -460,28 +478,31 @@ def delete_topic_mapping(topic_id):
 # --- 👗 OUTFIT BOT ---
 @app.route("/outfit-bot/dashboard")
 @login_required
-def outfit_bot_dashboard(): 
-    return render_template("outfit_bot_dashboard.html", config=load_json(OUTFIT_BOT_CONFIG_FILE), is_running=is_bot_running("outfit"), logs=get_bot_logs(OUTFIT_BOT_LOG), bot_status=build_bot_status(), duel_status={"active": False})
+def outfit_bot_dashboard(): return render_template("outfit_bot_dashboard.html", config=load_json(OUTFIT_BOT_CONFIG_FILE), is_running=is_bot_running("outfit"), logs=get_bot_logs(OUTFIT_BOT_LOG), bot_status=build_bot_status(), duel_status={"active": False})
 
 @app.route("/outfit-bot/save-config", methods=["POST"])
 @login_required
 def outfit_bot_save_config():
-    cfg = load_json(OUTFIT_BOT_CONFIG_FILE)
-    cfg.update({"BOT_TOKEN": request.form.get("BOT_TOKEN"), "CHAT_ID": request.form.get("CHAT_ID"), "AUTO_POST_ENABLED": "AUTO_POST_ENABLED" in request.form})
-    save_json(OUTFIT_BOT_CONFIG_FILE, cfg); flash("Outfit Konfiguration gespeichert.", "success")
+    cfg = load_json(OUTFIT_BOT_CONFIG_FILE); cfg.update({"BOT_TOKEN": request.form.get("BOT_TOKEN"), "CHAT_ID": request.form.get("CHAT_ID"), "AUTO_POST_ENABLED": "AUTO_POST_ENABLED" in request.form}); save_json(OUTFIT_BOT_CONFIG_FILE, cfg); flash("Outfit Konfiguration gespeichert.", "success")
     return redirect(url_for("outfit_bot_dashboard"))
 
 @app.route("/outfit-bot/start-contest", methods=["POST"])
 @login_required
-def outfit_bot_start_contest(): flash("Wettbewerb gestartet.", "info"); return redirect(url_for("outfit_bot_dashboard"))
+def outfit_bot_start_contest():
+    with open(os.path.join(OUTFIT_BOT_DIR, "command_start_contest.tmp"), "w") as f: f.write("1")
+    flash("Befehl gesendet.", "info"); return redirect(url_for("outfit_bot_dashboard"))
 
 @app.route("/outfit-bot/announce-winner", methods=["POST"])
 @login_required
-def outfit_bot_announce_winner(): flash("Gewinner ausgelost.", "info"); return redirect(url_for("outfit_bot_dashboard"))
+def outfit_bot_announce_winner():
+    with open(os.path.join(OUTFIT_BOT_DIR, "command_announce_winner.tmp"), "w") as f: f.write("1")
+    flash("Befehl gesendet.", "info"); return redirect(url_for("outfit_bot_dashboard"))
 
 @app.route("/outfit-bot/end-duel", methods=["POST"])
 @login_required
-def outfit_bot_end_duel(): flash("Duell beendet.", "info"); return redirect(url_for("outfit_bot_dashboard"))
+def outfit_bot_end_duel():
+    with open(os.path.join(OUTFIT_BOT_DIR, "command_end_duel.tmp"), "w") as f: f.write("1")
+    flash("Befehl gesendet.", "info"); return redirect(url_for("outfit_bot_dashboard"))
 
 @app.route("/outfit-bot/clear-logs", methods=["POST"])
 @login_required
@@ -492,8 +513,7 @@ def outfit_bot_clear_logs():
 # --- 👥 BENUTZERVERWALTUNG ---
 @app.route("/admin/users")
 @login_required
-def manage_users(): 
-    return render_template("manage_users.html", users=load_json(USERS_FILE, {}))
+def manage_users(): return render_template("manage_users.html", users=load_json(USERS_FILE, {}))
 
 @app.route("/admin/users/add", methods=["POST"])
 @login_required
@@ -505,9 +525,9 @@ def add_user():
 @app.route("/admin/users/edit/<username>", methods=["POST"])
 @login_required
 def edit_user(username):
-    u = load_json(USERS_FILE, {})
+    u = load_json(USERS_FILE, {}); 
     if username in u:
-        data = u.pop(username); new_name = request.form.get("new_username") or username
+        data = u.pop(username); new_name = request.form.get("new_username") or username; 
         if request.form.get("new_password"): data["password"] = generate_password_hash(request.form.get("new_password"))
         data["role"] = request.form.get("new_role"); u[new_name] = data; save_json(USERS_FILE, u)
     return redirect(url_for("manage_users"))
@@ -515,7 +535,7 @@ def edit_user(username):
 @app.route("/admin/users/delete/<username>", methods=["POST"])
 @login_required
 def delete_user(username):
-    u = load_json(USERS_FILE, {})
+    u = load_json(USERS_FILE, {}); 
     if username in u and username != session.get("user"): del u[username]; save_json(USERS_FILE, u)
     return redirect(url_for("manage_users"))
 
@@ -548,26 +568,28 @@ def minecraft_status_reset_message(): return redirect(url_for("minecraft_status_
 @app.route("/quiz-settings", methods=["GET", "POST"])
 @login_required
 def quiz_settings():
-    cfg = load_json(QUIZ_BOT_CONFIG_FILE)
+    cfg = load_json(QUIZ_BOT_CONFIG_FILE); 
     if request.method == "POST":
         action = request.form.get("action")
         if action == "save_settings": cfg.update({"bot_token": request.form.get("token"), "channel_id": request.form.get("channel_id")}); save_json(QUIZ_BOT_CONFIG_FILE, cfg); flash("Gespeichert.", "success")
         elif action == "save_schedule": cfg["schedule"] = {"time": request.form.get("schedule_time"), "enabled": "schedule_enabled" in request.form, "days": [int(d) for d in request.form.getlist("schedule_days")]}; save_json(QUIZ_BOT_CONFIG_FILE, cfg); flash("Zeitplan gespeichert.", "success")
         elif action == "clear_log":
-            with open(QUIZ_BOT_LOG, "w") as f: f.write("")
+            if os.path.exists(QUIZ_BOT_LOG):
+                with open(QUIZ_BOT_LOG, "w") as f: f.write("")
         return redirect(url_for("quiz_settings"))
     return render_template("quiz_settings.html", config={"quiz": cfg}, is_running=is_bot_running("quiz"), logs=get_bot_logs(QUIZ_BOT_LOG), bot_status=build_bot_status(), schedule=cfg.get("schedule", {}))
 
 @app.route("/umfrage-settings", methods=["GET", "POST"])
 @login_required
 def umfrage_settings():
-    cfg = load_json(UMFRAGE_BOT_CONFIG_FILE)
+    cfg = load_json(UMFRAGE_BOT_CONFIG_FILE); 
     if request.method == "POST":
         action = request.form.get("action")
         if action == "save_settings": cfg.update({"bot_token": request.form.get("token"), "channel_id": request.form.get("channel_id")}); save_json(UMFRAGE_BOT_CONFIG_FILE, cfg); flash("Gespeichert.", "success")
         elif action == "save_schedule": cfg["schedule"] = {"time": request.form.get("schedule_time"), "enabled": "schedule_enabled" in request.form, "days": [int(d) for d in request.form.getlist("schedule_days")]}; save_json(UMFRAGE_BOT_CONFIG_FILE, cfg); flash("Zeitplan gespeichert.", "success")
         elif action == "clear_log":
-            with open(UMFRAGE_BOT_LOG, "w") as f: f.write("")
+            if os.path.exists(UMFRAGE_BOT_LOG):
+                with open(UMFRAGE_BOT_LOG, "w") as f: f.write("")
         return redirect(url_for("umfrage_settings"))
     return render_template("umfrage_settings.html", config={"umfrage": cfg}, is_running=is_bot_running("umfrage"), logs=get_bot_logs(UMFRAGE_BOT_LOG), bot_status=build_bot_status(), schedule=cfg.get("schedule", {}))
 
@@ -588,5 +610,4 @@ def tg_avatar_proxy(user_id):
         if os.path.exists(path): return send_file(path)
     return abort(404)
 
-if __name__ == "__main__": 
-    app.run(host="0.0.0.0", port=9002, debug=False)
+if __name__ == "__main__": app.run(host="0.0.0.0", port=9002, debug=False)
