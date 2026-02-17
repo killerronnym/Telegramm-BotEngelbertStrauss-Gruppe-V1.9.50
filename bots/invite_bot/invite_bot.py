@@ -41,17 +41,6 @@ CONFIG_FILE = Path(BASE_DIR) / 'invite_bot_config.json'
 PROFILES_FILE = DATA_DIR / "profiles.json"
 USER_INTERACTIONS_LOG_FILE = Path(BASE_DIR) / 'user_interactions.log'
 
-# Map internal field IDs to user-friendly labels for the final post
-FIELD_LABELS = {
-    "name": "Name",
-    "age": "Alter",
-    "state": "Bundesland",
-    "hobbies": "Hobbys",
-    "instagram": "Social Media",
-    "other": "Sonstiges",
-    "sexuality": "Sexualität"
-}
-
 def load_config():
     default = {
         "is_enabled": False,
@@ -220,24 +209,16 @@ async def post_profile_to_group(context, profile, config):
     lines = ["🎉 *Willkommen in der Gruppe\\!*", f"👤 *User:* {user_link}"]
     photo_id = None
     
-    # Static mappings for cleaner output
-    EMOJI_MAP = {
-        "name": "👤 *Name:*",
-        "age": "🎂 *Alter:*",
-        "state": "📍 *Bundesland:*",
-        "hobbies": "🎯 *Hobbys:*",
-        "instagram": "🔗 *Telegram/Social:*",
-        "other": "💬 *Sonstiges:*",
-        "sexuality": "🏳️‍🌈 *Sexualität:*"
-    }
-
+    # Dynamically build lines based on form_fields configuration
     for f in config.get("form_fields", []):
         val = profile.get(f["id"])
         if val:
             if f["type"] == "photo":
                 photo_id = val
             else:
-                label = EMOJI_MAP.get(f["id"], f"🔹 *{esc(f['id'].capitalize())}:*")
+                emoji = f.get("emoji", "🔹")
+                display_name = f.get("display_name", f["id"].capitalize())
+                label = f"{emoji} *{esc(display_name)}:*"
                 lines.append(f"{label} {esc(val)}")
     
     # Add joined timestamp
