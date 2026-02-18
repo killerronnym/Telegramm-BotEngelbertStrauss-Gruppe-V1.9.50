@@ -4,7 +4,7 @@ import json
 import sys
 import asyncio
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 # --- Paths ---
 BOT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -23,7 +23,7 @@ os.makedirs(USER_MESSAGE_DIR, exist_ok=True)
 # --- Logging ---
 LOG_FILE = os.path.join(BOT_DIR, "id_finder_bot.log")
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format="%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s",
     level=logging.INFO,
     handlers=[logging.FileHandler(LOG_FILE, encoding='utf-8'), logging.StreamHandler(sys.stdout)]
 )
@@ -125,44 +125,141 @@ def schedule_registry_persistence(app: Application):
         logger.info("Automatisches Speichern der Benutzer-Registry alle 60s geplant.")
 
 # --- Broadcast Engine ---
-async def check_broadcasts(context: ContextTypes.DEFAULT_TYPE):
-    broadcasts = await load_json_async(BROADCAST_DATA_FILE, [])
-    main_group = CONFIG_CACHE.get("main_group_id")
-    if not main_group: return
+async def update_broadcast_status(broadcast_id: str, new_status: str, sent_at: str = None, error_msg: str = None):
+    """Helper to update the status of a single broadcast item in the file."""
+    broadcasts: List[Dict[str, Any]] = await load_json_async(BROADCAST_DATA_FILE, [])
+    found = False
+    for i, b in enumerate(broadcasts):
+        if b.get("id") == broadcast_id:
+            b["status"] = new_status
+            if sent_at:
+                b["sent_at"] = sent_at
+            if error_msg:
+                b["error_msg"] = error_msg
+            broadcasts[i] = b
+            found = True
+            break
+    if found:
+        await save_json_async(BROADCAST_DATA_FILE, broadcasts)
+    else:
+        logger.warning(f"Attempted to update non-existent broadcast ID: {broadcast_id}")
 
-    changed = False
-    now = datetime.now()
+
+async def send_scheduled_broadcast(context: ContextTypes.DEFAULT_TYPE, broadcast_id: str):
+    logger.info(f"Attempting to send scheduled broadcast {broadcast_id}...")
+    broadcasts: List[Dict[str, Any]] = await load_json_async(BROADCAST_DATA_FILE, [])
+    broadcast_item = next((b for b in broadcasts if b.get("id") == broadcast_id), None)
+
+    if not broadcast_item:
+        logger.error(f"Broadcast {broadcast_id} not found in file. Cannot send.")
+        return
+
+    main_group = CONFIG_CACHE.get("main_group_id")
+    if not main_group:
+        logger.error(f"Cannot send broadcast {broadcast_id}: main_group_id not configured.")
+        await update_broadcast_status(broadcast_id, "error", error_msg="Main group ID not configured.")
+        return
+
+    if broadcast_item.get("status") == "sent":
+        logger.info(f"Broadcast {broadcast_id} already sent. Skipping.")
+        return # Already sent, avoid re-sending if job somehow triggered again
+
+    try:
+        thread_id = int(broadcast_item["topic_id"]) if str(broadcast_item.get("topic_id")).isdigit() else None
+        media_path = None
+        if broadcast_item.get("media_name"):
+            media_path = os.path.join(UPLOAD_DIR, broadcast_item["media_name"])
+            if not os.path.exists(media_path):
+                logger.error(f"Media file for broadcast {broadcast_id} not found: {media_path}. Marking as error.")
+                await update_broadcast_status(broadcast_id, "error", error_msg=f"Media file not found: {media_path}")
+                return
+
+        # Placeholder for actual Telegram bot sending logic
+        if media_path:
+            logger.info(f"Simulating sending media '{media_path}' for broadcast {broadcast_id} to chat {main_group} (topic: {thread_id}).")
+            # await context.bot.send_photo(chat_id=main_group, photo=open(media_path, 'rb'), caption=broadcast_item["text"], message_thread_id=thread_id)
+        else:
+            await context.bot.send_message(
+                chat_id=main_group,
+                text=broadcast_item["text"],
+                message_thread_id=thread_id,
+                disable_notification=broadcast_item.get("silent_send", False)
+            )
+            logger.info(f"Text broadcast {broadcast_id} sent to chat {main_group} (topic: {thread_id}).")
+
+        if broadcast_item.get("pin_message"):
+            logger.info(f"Simulating pinning message for broadcast {broadcast_id}.")
+            # message_to_pin = await context.bot.send_message(...)
+            # await message_to_pin.pin(disable_notification=True)
+
+        await update_broadcast_status(broadcast_id, "sent", sent_at=datetime.now().isoformat())
+        logger.info(f"Broadcast {broadcast_id} successfully sent and status updated.")
+
+    except Exception as e:
+        logger.error(f"Error during actual sending of broadcast {broadcast_id}: {e}")
+        await update_broadcast_status(broadcast_id, "error", error_msg=str(e))
+
+
+async def check_and_schedule_broadcasts(context: ContextTypes.DEFAULT_TYPE):
+    logger.info("Checking and scheduling broadcasts...")
+    broadcasts: List[Dict[str, Any]] = await load_json_async(BROADCAST_DATA_FILE, [])
+    
+    current_jobs = context.job_queue.get_jobs_by_name("broadcast_job_")
+    scheduled_broadcast_ids = {job.name.replace("broadcast_job_", "") for job in current_jobs}
 
     for b in broadcasts:
-        if b.get("status") != "pending": continue
-        
-        try:
-            if b.get("scheduled_at") and datetime.fromisoformat(b["scheduled_at"]) > now: continue
-        except (ValueError, TypeError):
-            logger.error(f"Ungültiges Datumsformat für Broadcast {b.get('id')}")
+        broadcast_id = b.get("id")
+        if not broadcast_id:
+            logger.error(f"Broadcast item without ID found: {b}. Skipping.")
+            continue
+
+        if b.get("status") == "sent" or b.get("status") == "error":
+            continue
+
+        if broadcast_id in scheduled_broadcast_ids and b.get("status") == "scheduled":
             continue
 
         try:
-            thread_id = int(b["topic_id"]) if str(b.get("topic_id")).isdigit() else None
-            media_path = os.path.join(UPLOAD_DIR, b["media_name"]) if b.get("media_name") else None
-            
-            # Sending Logic (simplified for brevity)
-            # ... (implement send photo/document/message) ...
+            scheduled_at_str = b.get("scheduled_at")
+            now = datetime.now()
 
-            b["status"] = "sent"
-            b["sent_at"] = now.isoformat()
-            changed = True
-            logger.info(f"Broadcast {b.get('id')} gesendet.")
+            if scheduled_at_str:
+                scheduled_dt = datetime.fromisoformat(scheduled_at_str)
 
+                if scheduled_dt > now:
+                    if broadcast_id not in scheduled_broadcast_ids:
+                        context.job_queue.run_once(
+                            lambda ctx, bid=broadcast_id: send_scheduled_broadcast(ctx, bid),
+                            when=scheduled_dt,
+                            name=f"broadcast_job_{broadcast_id}"
+                        )
+                        await update_broadcast_status(broadcast_id, "scheduled")
+                        logger.info(f"Broadcast {broadcast_id} scheduled for {scheduled_dt}.")
+                    else:
+                        logger.debug(f"Broadcast {broadcast_id} is already scheduled in job queue.")
+                else:
+                    logger.info(f"Broadcast {broadcast_id} is past due or due now. Sending immediately.")
+                    await send_scheduled_broadcast(context, broadcast_id)
+            else:
+                logger.info(f"Broadcast {broadcast_id} has no schedule. Sending immediately.")
+                await send_scheduled_broadcast(context, broadcast_id)
+
+        except (ValueError, TypeError) as e:
+            logger.error(f"Invalid scheduled_at format for broadcast {broadcast_id}: {e}. Marking as error.")
+            await update_broadcast_status(broadcast_id, "error", error_msg=f"Invalid date format: {e}")
         except Exception as e:
-            logger.error(f"Fehler bei Broadcast {b.get('id')}: {e}")
-            b["status"] = "error"
-            changed = True
+            logger.error(f"Error processing broadcast {broadcast_id} for scheduling/sending: {e}. Marking as error.")
+            await update_broadcast_status(broadcast_id, "error", error_msg=str(e))
     
-    if changed:
-        await save_json_async(BROADCAST_DATA_FILE, broadcasts)
+    logger.info("Broadcast scheduling round complete.")
 
 # --- Activity Tracking ---
+# Data Redundancy Note:
+# Messages are currently logged to both `ACTIVITY_LOG_FILE` (global chronological log)
+# and `USER_MESSAGE_DIR/{uid}.jsonl` (individual user message history).
+# This creates data redundancy but allows for efficient retrieval of a user's recent messages
+# without scanning the entire global activity log, which is beneficial for dashboard performance.
+# A more normalized approach would typically involve a database (as suggested in TODO.md).
 async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global _USER_REGISTRY_CACHE, _USER_REGISTRY_DIRTY
     msg, user, chat = update.effective_message, update.effective_user, update.effective_chat
@@ -277,8 +374,12 @@ async def main():
     app.add_handler(CommandHandler("id", get_id))
 
     schedule_registry_persistence(app)
+    
     if app.job_queue:
-        app.job_queue.run_repeating(check_broadcasts, interval=15, first=10)
+        # Initial check and schedule all pending broadcasts
+        await check_and_schedule_broadcasts(app.job_queue.job_queue_context())
+        # Periodically re-check for new broadcasts added externally (e.g., via dashboard)
+        app.job_queue.run_repeating(check_and_schedule_broadcasts, interval=300, first=60, name="periodic_broadcast_reschedule_check")
 
     logger.info("ID-Finder Bot gestartet...")
     await app.run_polling(allowed_updates=Update.ALL_TYPES)

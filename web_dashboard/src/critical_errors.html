@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Kritische Fehler{% endblock %}
+
+{% block content %}
+<style>
+    .dashboard-container { padding: 2.5rem; }
+    .card { background: var(--card-base); border: 1px solid var(--border-muted); border-radius: 12px; margin-bottom: 1.5rem; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3); }
+    .card-header { background: rgba(0, 0, 0, 0.1); border-bottom: 1px solid var(--border-muted); padding: 1rem 1.5rem; }
+    .card-header h6 { margin-bottom: 0; font-weight: 600; font-size: 0.85rem; letter-spacing: 0.02em; color: var(--text-primary); display: flex; align-items: center; gap: 0.75rem; }
+    .log-display { background: #000; color: #e0e0e0; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; padding: 1.5rem; border-radius: 8px; border: 1px solid #1e293b; line-height: 1.6; white-space: pre-wrap; word-break: break-all; }
+    .log-display .log-line.text-success { color: #28a745 !important; }
+    .btn-quick-action { font-weight: 600; border: none; padding: 0.6rem 1.25rem; border-radius: 8px; color: white; display: inline-flex; align-items-center; gap: 0.5rem; text-decoration: none; transition: all 0.2s; font-size: 0.85rem; }
+    .btn-quick-action:hover { transform: translateY(-2px); color: white; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+    .btn-rose { background-color: #e11d48; }
+    .btn-rose:hover { background-color: #be123c; }
+    .btn-secondary-custom { background-color: #4a5568; }
+    .btn-secondary-custom:hover { background-color: #2d3748; }
+</style>
+
+<div class="dashboard-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex align-items-center gap-3">
+            <div class="bg-danger bg-opacity-10 p-2 rounded-3">
+                <i class="bi bi-bug-fill text-danger h4 mb-0"></i>
+            </div>
+            <div>
+                <h1 class="fw-bold mb-0 h3 text-white">🚨 Kritische Fehler</h1>
+            </div>
+        </div>
+        <div>
+            <a href="{{ url_for('index') }}" class="btn btn-quick-action btn-secondary-custom">
+                 <i class="bi bi-arrow-left-circle"></i> Zurück zum Dashboard
+            </a>
+            <form action="{{ url_for('clear_critical_errors') }}" method="POST" style="display: inline-block;" onsubmit="return confirm('Möchten Sie wirklich alle kritischen Fehlerprotokolle löschen?');">
+                <button type="submit" class="btn btn-quick-action btn-rose">
+                     <i class="bi bi-trash"></i> Logs löschen
+                </button>
+            </form>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="card">
+        <div class="card-header">
+            <h6><i class="bi bi-file-earmark-text-fill text-danger"></i> Fehlerprotokoll (Neueste zuerst)</h6>
+        </div>
+        <div class="card-body p-0">
+            <div class="log-display" style="max-height: 70vh; overflow-y: auto;">
+                {% if critical_logs %}
+                    {% for line in critical_logs %}
+                        <div class="log-line">{{ line | e }}</div>
+                    {% endfor %}
+                {% else %}
+                    <div class="log-line text-success">Keine kritischen Fehler gefunden. Alles bestens!</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
