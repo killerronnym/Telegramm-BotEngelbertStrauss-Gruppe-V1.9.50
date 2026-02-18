@@ -163,22 +163,30 @@
                             <th style="width: 150px;">Zeit</th>
                             <th style="width: 100px;">Typ</th>
                             <th>Inhalt</th>
-                            <th style="width: 200px;">Meta</th>
+                            <th style="width: 200px;">Meta / Aktion</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% if messages %}
                             {% for m in messages %}
+                            {% set msg_id = m.message_id or m.msg_id %}
                             <tr>
                                 <td class="text-rose-300 small">{{ m.ts | datetimeformat }}</td>
-                                <td class="fw-bold">{{ m.type or 'text' }}</td>
+                                <td class="fw-bold">{{ m.type or m.msg_type or 'text' }}</td>
                                 <td class="msg-content">
                                     {% if m.text %}{{ m.text }}{% endif %}
-                                    {% if m.has_media %}<div class="badge bg-secondary">media</div>{% endif %}
+                                    {% if m.has_media %}<div class="badge bg-secondary">media ({{ m.media_kind or '?' }})</div>{% endif %}
                                 </td>
                                 <td class="msg-meta">
-                                    <div>Chat: <span class="text-rose-300">{{ m.chat_id }}</span></div>
-                                    <div>Msg: <span class="text-rose-300">{{ m.msg_id }}</span></div>
+                                    <div class="mb-2">Chat: <span class="text-rose-300">{{ m.chat_id }}</span></div>
+                                    <div class="mb-2">Msg: <span class="text-rose-300">{{ msg_id }}</span></div>
+                                    {% if msg_id and m.chat_id %}
+                                    <form action="{{ url_for('id_finder_delete_telegram_message', user_id=user.id, chat_id=m.chat_id, message_id=msg_id) }}" method="POST" onsubmit="return confirm('Nachricht wirklich aus dem Telegram-Chat löschen?')">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm w-100 py-1" style="font-size: 0.7rem;">
+                                            <i class="bi bi-trash-fill"></i> In Telegram löschen
+                                        </button>
+                                    </form>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}

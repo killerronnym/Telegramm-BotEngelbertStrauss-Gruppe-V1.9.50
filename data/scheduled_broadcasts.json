@@ -19,8 +19,9 @@
         "scheduled_at": null,
         "pin_message": true,
         "silent_send": true,
-        "status": "pending",
-        "created_at": "2026-02-17T20:22:35.341508"
+        "status": "sent",
+        "created_at": "2026-02-17T20:22:35.341508",
+        "sent_at": "2026-02-18T23:29:17.832116"
     },
     {
         "id": "2c64f85c",
@@ -31,7 +32,8 @@
         "scheduled_at": null,
         "pin_message": false,
         "silent_send": false,
-        "status": "pending",
-        "created_at": "2026-02-17T20:52:29.554107"
+        "status": "sent",
+        "created_at": "2026-02-17T20:52:29.554107",
+        "sent_at": "2026-02-18T23:29:17.916971"
     }
 ]

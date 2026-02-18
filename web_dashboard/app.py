@@ -583,6 +583,60 @@ def id_finder_user_detail(user_id):
         flash(f"Fehler beim Laden der User-Details: {e}", "danger")
         return redirect(url_for("id_finder_dashboard"))
 
+@app.route("/id-finder/delete-message/<user_id>/<chat_id>/<message_id>", methods=["POST"])
+@login_required
+def id_finder_delete_telegram_message(user_id, chat_id, message_id):
+    try:
+        cfg = load_json(ID_FINDER_CONFIG_FILE)
+        token = cfg.get("bot_token")
+        if not token:
+            flash("Bot-Token nicht konfiguriert.", "danger")
+            return redirect(url_for('id_finder_user_detail', user_id=user_id))
+        
+        # Call Telegram API to delete message
+        url = f"https://api.telegram.org/bot{token}/deleteMessage"
+        params = urllib.parse.urlencode({"chat_id": chat_id, "message_id": message_id}).encode("utf-8")
+        req = urllib.request.Request(url, data=params)
+        
+        try:
+            with urllib.request.urlopen(req) as response:
+                res_data = json.loads(response.read().decode())
+                if res_data.get("ok"):
+                    flash("Nachricht im Chat gelöscht.", "success")
+                else:
+                    flash(f"Telegram Fehler: {res_data.get('description')}", "warning")
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode()
+            err_json = json.loads(err_body)
+            flash(f"Telegram Fehler (HTTP {e.code}): {err_json.get('description')}", "warning")
+        
+        # Remove from local log regardless of Telegram success (user wants it gone from dashboard)
+        _remove_message_from_logs(user_id, message_id)
+            
+    except Exception as e:
+        log.error(f"Error deleting message: {e}")
+        flash(f"Interner Fehler beim Löschen: {e}", "danger")
+    
+    return redirect(url_for('id_finder_user_detail', user_id=user_id))
+
+def _remove_message_from_logs(user_id, message_id):
+    # Remove from user's individual log
+    user_log = os.path.join(USER_MESSAGE_DIR, f"{user_id}.jsonl")
+    if os.path.exists(user_log):
+        lines = []
+        with open(user_log, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    data = json.loads(line)
+                    # Handle both message_id and msg_id for legacy reasons
+                    m_id = data.get("message_id") or data.get("msg_id")
+                    if str(m_id) != str(message_id):
+                        lines.append(line)
+                except:
+                    lines.append(line)
+        with open(user_log, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+
 @app.route("/id-finder/commands")
 @login_required
 def id_finder_commands(): 
