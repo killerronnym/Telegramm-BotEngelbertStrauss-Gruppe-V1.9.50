@@ -84,6 +84,11 @@
                             <textarea class="form-control font-monospace" name="rules_message" rows="4">{{ config.rules_message or '' }}</textarea>
                         </div>
                         <div class="mb-3">
+                            <label class="small text-secondary fw-bold mb-1">Nachricht bei Sperre</label>
+                            <textarea class="form-control font-monospace" name="blocked_message" rows="4">{{ config.blocked_message or '' }}</textarea>
+                            <div class="form-text small text-white-50">Wird gesendet, wenn ein gebannter User /letsgo schreibt.</div>
+                        </div>
+                        <div class="mb-3">
                             <label class="small text-secondary fw-bold mb-1">Datenschutz</label>
                             <textarea class="form-control font-monospace" name="privacy_policy" rows="5">{{ config.privacy_policy or '' }}</textarea>
                         </div>

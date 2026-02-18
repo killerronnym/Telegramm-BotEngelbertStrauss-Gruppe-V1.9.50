@@ -6,7 +6,7 @@ import sys
 import asyncio
 from pathlib import Path
 from datetime import datetime, timedelta
-from telegram import Update, ChatInviteLink
+from telegram import Update, ChatInviteLink, ChatMember
 from telegram.constants import ParseMode
 from telegram.error import TelegramError
 from telegram.ext import (
@@ -55,6 +55,7 @@ def load_config():
         "repost_profile_for_existing_members": True,
         "start_message": "Willkommen! Nutze /letsgo zum Starten.",
         "rules_message": "Bitte bestätige die Regeln mit OK.",
+        "blocked_message": "Du wurdest aus dieser Gruppe verbannt und kannst nicht erneut beitreten.",
         "privacy_policy": "Datenschutzerklärung wurde noch nicht konfiguriert.",
         "form_fields": []
     }
@@ -153,6 +154,33 @@ async def start_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not config.get("main_chat_id"):
         await update.message.reply_text("⚠️ Bot ist noch nicht fertig konfiguriert (Gruppen-ID fehlt).")
         return ConversationHandler.END
+
+    # --- Ban Check (Sofortige Prüfung) ---
+    try:
+        user_id = update.effective_user.id
+        group_id = int(config["main_chat_id"])
+        
+        # Get member status
+        chat_member = await context.bot.get_chat_member(group_id, user_id)
+        
+        # Check if banned/kicked
+        # Note: In recent python-telegram-bot versions, status is a string constant or enum
+        status = getattr(chat_member, "status", str(chat_member.status))
+        
+        if status in ["kicked", "banned", "left"] and getattr(chat_member, "is_member", False) is False:
+             # Wait, 'left' is normal for new users. Only check for BANNED/KICKED.
+             pass
+
+        if status in ["kicked", "banned"]:
+            blocked_msg = config.get("blocked_message", "Du wurdest aus dieser Gruppe verbannt und kannst nicht erneut beitreten.")
+            log_user_interaction(user_id, update.effective_user.username, "Start verweigert", "User ist gebannt")
+            await update.message.reply_text(f"⛔ {blocked_msg}")
+            return ConversationHandler.END
+            
+    except Exception as e:
+        # If bot is not admin or other error, log it but let user proceed (fail-open or fail-close?)
+        # Fail-open is better for UX, admins should ensure bot has rights.
+        logger.warning(f"Ban check failed for user {update.effective_user.id}: {e}")
         
     context.user_data["form_idx"] = 0
     context.user_data["answers"] = {

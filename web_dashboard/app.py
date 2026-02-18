@@ -444,7 +444,15 @@ def bot_settings():
 @app.route("/bot-settings/save-content", methods=["POST"])
 @login_required
 def save_invite_bot_content():
-    cfg = load_json(INVITE_BOT_CONFIG_FILE); cfg.update({"start_message": request.form.get("start_message"), "rules_message": request.form.get("rules_message"), "privacy_policy": request.form.get("privacy_policy")}); save_json(INVITE_BOT_CONFIG_FILE, cfg); flash("Texte gespeichert.", "success")
+    cfg = load_json(INVITE_BOT_CONFIG_FILE)
+    cfg.update({
+        "start_message": request.form.get("start_message"),
+        "rules_message": request.form.get("rules_message"),
+        "blocked_message": request.form.get("blocked_message"),
+        "privacy_policy": request.form.get("privacy_policy")
+    })
+    save_json(INVITE_BOT_CONFIG_FILE, cfg)
+    flash("Texte gespeichert.", "success")
     return redirect(url_for("bot_settings"))
 
 @app.route("/bot-settings/add-field", methods=["POST"])
