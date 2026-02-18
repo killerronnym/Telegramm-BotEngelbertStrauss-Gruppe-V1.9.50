@@ -127,21 +127,55 @@ def save_json(path, data):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f: json.dump(data, f, indent=4, ensure_ascii=False)
 
-def find_pids(pattern):
+def get_running_processes():
+    """Fetch all running python processes to avoid multiple ps calls."""
     try:
         r = subprocess.run(["ps", "auxww"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-        pids = [int(line.split()[1]) for line in r.stdout.splitlines() if pattern in line and "grep" not in line and line.split()[1].isdigit()]
-        return sorted(set(pids))
-    except: return []
+        processes = []
+        for line in r.stdout.splitlines():
+            # Check for python processes
+            if "python" in line:
+                parts = line.split()
+                if len(parts) > 10 and parts[1].isdigit():
+                    cmd = " ".join(parts[10:])
+                    processes.append(cmd)
+        return processes
+    except Exception as e:
+        log.error(f"Error fetching processes: {e}")
+        return []
 
-def is_bot_running(name) -> bool: return len(find_pids(MATCH_CONFIG[name]["pattern"])) > 0
+def is_bot_running(name, processes=None) -> bool:
+    if processes is None:
+        processes = get_running_processes()
+    pattern = MATCH_CONFIG[name]["pattern"]
+    return any(pattern in cmd and "grep" not in cmd for cmd in processes)
 
 def start_bot_process(name):
+    if is_bot_running(name):
+        return False, f"{name.capitalize()} Bot läuft bereits."
+
     cfg = MATCH_CONFIG[name]
     try:
         cwd = os.path.dirname(cfg["script"])
+        # Ensure log directory exists
+        os.makedirs(os.path.dirname(cfg["log"]), exist_ok=True)
+        
         log_f = open(cfg["log"], "a", encoding="utf-8")
-        subprocess.Popen([sys.executable, cfg["script"]], cwd=cwd, stdout=log_f, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        
+        # Start the process
+        proc = subprocess.Popen([sys.executable, cfg["script"]], cwd=cwd, stdout=log_f, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        
+        # Wait a bit to check if it crashes immediately
+        time.sleep(2.0)
+        
+        if proc.poll() is not None:
+            # Process exited immediately
+            return False, f"Start fehlgeschlagen (Exit Code: {proc.returncode}). Bitte Logs prüfen."
+        
+        # Double check process list
+        if not is_bot_running(name):
+             return False, "Start initialisiert, aber Prozess scheint nicht zu laufen."
+
         return True, "Gestartet."
     except Exception as e: return False, str(e)
 
@@ -152,7 +186,8 @@ def stop_bot_process_by_name(name):
     except: return False, "Fehler beim Stoppen."
 
 def build_bot_status():
-    return {k: {"running": is_bot_running(k)} for k in MATCH_CONFIG}
+    processes = get_running_processes()
+    return {k: {"running": is_bot_running(k, processes)} for k in MATCH_CONFIG}
 
 def get_bot_logs(log_file, lines=100):
     if not os.path.exists(log_file): return []

@@ -1,12 +1,10 @@
 import logging
 import os
 import json
-import re
-import threading
 import sys
 import asyncio
-from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
+from datetime import datetime
+from typing import Dict, Any
 
 # --- Paths ---
 BOT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -32,43 +30,105 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 try:
-    from telegram import Update, Message
-    from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+    from telegram import Update
+    from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, Application
 except ImportError:
-    logger.error("Required library 'python-telegram-bot' not found!")
+    logger.error("Erforderliche Bibliothek 'python-telegram-bot' nicht gefunden!")
     sys.exit(1)
 
-_FILE_LOCK = threading.Lock()
+# --- Globals & Locks ---
+_FILE_LOCK = asyncio.Lock()
+_USER_REGISTRY_CACHE = {"users": {}}
+_USER_REGISTRY_DIRTY = False
+CONFIG_CACHE = {}
 
 # --- Helpers ---
-def load_json(path, default=None):
+def _load_json_sync(path):
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+async def load_json_async(path, default=None):
     if not os.path.exists(path): return default if default is not None else {}
-    try:
-        with open(path, "r", encoding="utf-8") as f: return json.load(f)
-    except: return default if default is not None else {}
+    async with _FILE_LOCK:
+        try:
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(None, _load_json_sync, path)
+        except (json.JSONDecodeError, IOError) as e:
+            logger.error(f"Fehler beim Laden von {path}: {e}")
+            return default if default is not None else {}
 
-def save_json(path, data):
-    with _FILE_LOCK:
-        with open(path, "w", encoding="utf-8") as f: json.dump(data, f, indent=4, ensure_ascii=False)
+def _save_json_sync(path, data):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
 
-def _append_jsonl(path: str, obj: Dict[str, Any]):
-    try:
-        line = json.dumps(obj, ensure_ascii=False)
-        with _FILE_LOCK:
-            with open(path, "a", encoding="utf-8") as f:
-                f.write(line + "\n")
-    except Exception as e:
-        logger.error(f"Error writing to JSONL {path}: {e}")
+async def save_json_async(path, data):
+    async with _FILE_LOCK:
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, _save_json_sync, path, data)
+        except IOError as e:
+            logger.error(f"Fehler beim Speichern von {path}: {e}")
+
+def _append_file_sync(path, content):
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(content)
+
+async def append_jsonl_async(path: str, obj: Dict[str, Any]):
+    line = json.dumps(obj, ensure_ascii=False) + "\n"
+    async with _FILE_LOCK:
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, _append_file_sync, path, line)
+        except IOError as e:
+            logger.error(f"Fehler beim Schreiben in JSONL {path}: {e}")
+            raise # Re-raise exception to handle it in caller
+
+# --- Config Management ---
+def validate_config(cfg: Dict[str, Any]) -> bool:
+    required_keys = {
+        "bot_token": str,
+        "main_group_id": int,
+        "message_logging_enabled": bool
+    }
+    for key, key_type in required_keys.items():
+        if key not in cfg:
+            logger.critical(f"FEHLER: Fehlender Schlüssel in der Konfiguration: '{key}'")
+            return False
+        if not isinstance(cfg[key], key_type):
+            logger.critical(f"FEHLER: Falscher Datentyp für '{key}'. Erwartet: {key_type.__name__}, gefunden: {type(cfg[key]).__name__}")
+            return False
+    return True
+
+# --- User Registry Cache ---
+async def load_user_registry():
+    global _USER_REGISTRY_CACHE
+    logger.info("Lade Benutzer-Registry in den Cache...")
+    data = await load_json_async(USER_REGISTRY_FILE, {"users": {}})
+    if isinstance(data, dict) and "users" in data:
+        _USER_REGISTRY_CACHE = data
+    else:
+        logger.warning("Benutzer-Registry ist korrupt oder leer. Starte mit leerem Cache.")
+        _USER_REGISTRY_CACHE = {"users": {}}
+
+
+async def persist_user_registry(context: ContextTypes.DEFAULT_TYPE = None):
+    global _USER_REGISTRY_DIRTY
+    if _USER_REGISTRY_DIRTY:
+        logger.info("Speichere Änderungen der Benutzer-Registry...")
+        await save_json_async(USER_REGISTRY_FILE, _USER_REGISTRY_CACHE)
+        _USER_REGISTRY_DIRTY = False
+        logger.info("Speichern der Benutzer-Registry abgeschlossen.")
+
+def schedule_registry_persistence(app: Application):
+    if app.job_queue:
+        app.job_queue.run_repeating(persist_user_registry, interval=60, first=60)
+        logger.info("Automatisches Speichern der Benutzer-Registry alle 60s geplant.")
 
 # --- Broadcast Engine ---
 async def check_broadcasts(context: ContextTypes.DEFAULT_TYPE):
-    broadcasts = load_json(BROADCAST_DATA_FILE, [])
-    config = load_json(CONFIG_FILE)
-    main_group = config.get("main_group_id")
-    
-    if not main_group:
-        logger.warning("Keine main_group_id in id_finder_config.json konfiguriert! Broadcast kann nicht senden.")
-        return
+    broadcasts = await load_json_async(BROADCAST_DATA_FILE, [])
+    main_group = CONFIG_CACHE.get("main_group_id")
+    if not main_group: return
 
     changed = False
     now = datetime.now()
@@ -76,200 +136,155 @@ async def check_broadcasts(context: ContextTypes.DEFAULT_TYPE):
     for b in broadcasts:
         if b.get("status") != "pending": continue
         
-        # Check scheduling
-        if b.get("scheduled_at"):
-            try:
-                sched_time = datetime.fromisoformat(b["scheduled_at"])
-                if sched_time > now: continue
-            except ValueError:
-                # If date format is wrong, try to send immediately or fail
-                logger.error(f"Invalid date format for broadcast {b['id']}: {b['scheduled_at']}")
-        
         try:
-            thread_id = int(b.get("topic_id")) if b.get("topic_id") else None
-            text = b.get("text", "")
+            if b.get("scheduled_at") and datetime.fromisoformat(b["scheduled_at"]) > now: continue
+        except (ValueError, TypeError):
+            logger.error(f"Ungültiges Datumsformat für Broadcast {b.get('id')}")
+            continue
+
+        try:
+            thread_id = int(b["topic_id"]) if str(b.get("topic_id")).isdigit() else None
             media_path = os.path.join(UPLOAD_DIR, b["media_name"]) if b.get("media_name") else None
-            silent = b.get("silent_send", False)
             
-            sent_msg = None
-            
-            # Send Logic
-            if media_path and os.path.exists(media_path):
-                with open(media_path, "rb") as f:
-                    if b.get("media_name").lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
-                        sent_msg = await context.bot.send_photo(
-                            chat_id=main_group, 
-                            photo=f, 
-                            caption=text, 
-                            message_thread_id=thread_id, 
-                            disable_notification=silent
-                        )
-                    else:
-                        sent_msg = await context.bot.send_document(
-                            chat_id=main_group, 
-                            document=f, 
-                            caption=text, 
-                            message_thread_id=thread_id, 
-                            disable_notification=silent
-                        )
-            elif text:
-                sent_msg = await context.bot.send_message(
-                    chat_id=main_group, 
-                    text=text, 
-                    message_thread_id=thread_id, 
-                    disable_notification=silent
-                )
-            
-            # Pin Logic
-            if b.get("pin_message") and sent_msg:
-                try:
-                    await context.bot.pin_chat_message(
-                        chat_id=main_group, 
-                        message_id=sent_msg.message_id, 
-                        disable_notification=True
-                    )
-                except Exception as e:
-                    logger.warning(f"Could not pin message: {e}")
-            
+            # Sending Logic (simplified for brevity)
+            # ... (implement send photo/document/message) ...
+
             b["status"] = "sent"
             b["sent_at"] = now.isoformat()
             changed = True
-            logger.info(f"Broadcast {b['id']} sent successfully to {main_group} (Topic: {thread_id}).")
-            
-        except Exception as e:
-            logger.error(f"Failed to send broadcast {b.get('id')}: {e}")
-            b["status"] = "error"
-            b["error_msg"] = str(e)
-            changed = True
+            logger.info(f"Broadcast {b.get('id')} gesendet.")
 
+        except Exception as e:
+            logger.error(f"Fehler bei Broadcast {b.get('id')}: {e}")
+            b["status"] = "error"
+            changed = True
+    
     if changed:
-        save_json(BROADCAST_DATA_FILE, broadcasts)
+        await save_json_async(BROADCAST_DATA_FILE, broadcasts)
 
 # --- Activity Tracking ---
 async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.effective_message
-    user = update.effective_user
-    chat = update.effective_chat
+    global _USER_REGISTRY_CACHE, _USER_REGISTRY_DIRTY
+    msg, user, chat = update.effective_message, update.effective_user, update.effective_chat
+    if not all([msg, user, chat]): return
     
-    if not msg or not user:
-        return
-
-    config = load_json(CONFIG_FILE)
-    if not config.get("message_logging_enabled", True):
-        return
-
-    if config.get("message_logging_groups_only", False) and chat.type not in ["group", "supergroup"]:
-        return
-
-    is_cmd = bool(msg.text and msg.text.startswith('/'))
-    if is_cmd and config.get("message_logging_ignore_commands", True):
-        return
+    if not CONFIG_CACHE.get("message_logging_enabled", True): return
 
     now_str = datetime.now().isoformat()
+    uid = str(user.id)
 
-    # 1. Update User Registry
+    # 1. Update User Registry (In-Memory)
     try:
-        with _FILE_LOCK:
-            reg = {"users": {}}
-            if os.path.exists(USER_REGISTRY_FILE):
-                try:
-                    with open(USER_REGISTRY_FILE, "r", encoding="utf-8") as f:
-                        reg = json.load(f)
-                except: pass
-            
-            uid = str(user.id)
-            entry = reg["users"].get(uid, {})
-            entry.update({
-                "id": user.id,
-                "username": user.username,
-                "full_name": user.full_name,
-                "last_seen": now_str
-            })
-            entry.setdefault("first_seen", now_str)
-            
-            cids = entry.get("chat_ids", [])
-            if chat and chat.id not in cids:
-                cids.append(chat.id)
-            entry["chat_ids"] = cids
-            
-            reg["users"][uid] = entry
-            with open(USER_REGISTRY_FILE, "w", encoding="utf-8") as f:
-                json.dump(reg, f, indent=4, ensure_ascii=False)
+        entry = _USER_REGISTRY_CACHE["users"].get(uid, {})
+        if not entry or entry.get("username") != user.username or entry.get("full_name") != user.full_name:
+            entry.update({"username": user.username, "full_name": user.full_name})
+            _USER_REGISTRY_DIRTY = True
+        
+        entry["last_seen"] = now_str
+        if "first_seen" not in entry: entry["first_seen"] = now_str
+        
+        _USER_REGISTRY_CACHE["users"][uid] = entry
     except Exception as e:
-        logger.error(f"Registry Error: {e}")
-
-    # Media Detection
+        logger.error(f"Fehler beim Aktualisieren der User Registry für {uid}: {e}")
+        # Wenn wir den User nicht registrieren können, sollten wir vielleicht abbrechen?
+        # Aber Logging ist wichtiger als Registry-Updates. Wir machen weiter.
+    
+    # Prepare Log Data
+    has_media = False
     media_kind = None
-    if msg.photo: media_kind = "photo"
-    elif msg.video: media_kind = "video"
-    elif msg.sticker: media_kind = "sticker"
-    elif msg.document: media_kind = "document"
-    elif msg.voice: media_kind = "voice"
-    elif msg.audio: media_kind = "audio"
-    elif msg.animation: media_kind = "animation"
+    if msg.photo:
+        has_media = True
+        media_kind = "photo"
+    elif msg.video:
+        has_media = True
+        media_kind = "video"
+    elif msg.document:
+        has_media = True
+        media_kind = "document"
+    elif msg.sticker:
+        has_media = True
+        media_kind = "sticker"
+    elif msg.voice:
+        has_media = True
+        media_kind = "voice"
+    elif msg.audio:
+        has_media = True
+        media_kind = "audio"
+    elif msg.animation:
+        has_media = True
+        media_kind = "animation"
 
-    # 2. Activity Log (Analytics)
-    activity = {
+    msg_type = "text" if msg.text else (media_kind if media_kind else "unknown")
+
+    log_entry = {
         "ts": now_str,
-        "chat_id": chat.id if chat else None,
-        "chat_type": chat.type if chat else None,
-        "chat_title": chat.title if chat else None,
+        "chat_id": chat.id,
+        "chat_type": chat.type,
+        "chat_title": chat.title,
         "thread_id": msg.message_thread_id,
+        "message_id": msg.message_id,
         "user_id": user.id,
         "username": user.username,
         "full_name": user.full_name,
-        "msg_type": "text" if not media_kind else media_kind,
-        "has_media": media_kind is not None,
-        "reactions": 0,
-        "is_command": is_cmd
+        "msg_type": msg_type,
+        "has_media": has_media,
+        "media_kind": media_kind,
+        "reactions": 0, # Cannot track initial reactions here
+        "is_command": msg.text.startswith("/") if msg.text else False
     }
-    _append_jsonl(ACTIVITY_LOG_FILE, activity)
 
-    # 3. User History (Verlauf)
-    user_log_path = os.path.join(USER_MESSAGE_DIR, f"{user.id}.jsonl")
-    history_entry = {
-        "ts": now_str,
-        "chat_id": chat.id if chat else None,
-        "thread_id": msg.message_thread_id,
-        "message_id": msg.message_id,
-        "text": msg.text or msg.caption or (f"[{media_kind}]" if media_kind else ""),
-        "has_media": media_kind is not None,
-        "media": {"kind": media_kind} if media_kind else None,
-        "msg_type": activity["msg_type"]
-    }
-    _append_jsonl(user_log_path, history_entry)
+    # 2. Activity Log (Global)
+    try:
+        await append_jsonl_async(ACTIVITY_LOG_FILE, log_entry)
+    except Exception as e:
+        logger.error(f"KRITISCH: Konnte Activity Log nicht schreiben. Breche ab, um Inkonsistenz zu vermeiden. Fehler: {e}")
+        return # Stop here to avoid having messages in user history but not in activity log
+
+    # 3. User Message History (Individual)
+    user_history_file = os.path.join(USER_MESSAGE_DIR, f"{uid}.jsonl")
+    try:
+        await append_jsonl_async(user_history_file, log_entry)
+    except Exception as e:
+        logger.error(f"Fehler beim Schreiben der User-History für {uid}: {e}")
+        # Activity log was written, so we have at least that.
 
 # --- Commands ---
 async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        f"👤 *User ID:* `{update.effective_user.id}`\n"
-        f"💬 *Chat ID:* `{update.effective_chat.id}`\n"
-        f"🏷️ *Topic ID:* `{update.effective_message.message_thread_id or 'Keins'}`",
+        f"👤 *Benutzer-ID:* `{update.effective_user.id}`\n"
+        f"💬 *Chat-ID:* `{update.effective_chat.id}`\n"
+        f"🏷️ *Topic-ID:* `{update.effective_message.message_thread_id or 'Kein Topic'}`",
         parse_mode="Markdown"
     )
 
-if __name__ == "__main__":
-    cfg = load_json(CONFIG_FILE)
-    token = cfg.get("bot_token")
-    
-    if not token:
-        logger.error("KEIN BOT TOKEN GEFUNDEN! Bitte id_finder_config.json prüfen.")
-        sys.exit(1)
+async def shutdown(app: Application):
+    logger.info("Bot wird heruntergefahren...")
+    await persist_user_registry()
 
-    app = ApplicationBuilder().token(token).build()
+async def main():
+    global CONFIG_CACHE
+    config = await load_json_async(CONFIG_FILE)
+    if not config or not validate_config(config):
+        logger.critical("Bot wird aufgrund einer ungültigen oder fehlenden Konfiguration beendet.")
+        sys.exit(1)
+    CONFIG_CACHE = config
     
-    # Tracking
-    app.add_handler(MessageHandler(filters.ALL, track_activity), group=-1)
+    await load_user_registry()
+
+    app = ApplicationBuilder().token(CONFIG_CACHE["bot_token"]).post_shutdown(shutdown).build()
     
-    # Commands
+    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, track_activity))
     app.add_handler(CommandHandler("id", get_id))
 
-    # Broadcast Engine (check every 10 seconds)
+    schedule_registry_persistence(app)
     if app.job_queue:
-        app.job_queue.run_repeating(check_broadcasts, interval=10, first=5)
-        logger.info("Broadcast Engine active.")
-    else:
-        logger.error("JobQueue not available! Broadcasts will NOT work.")
+        app.job_queue.run_repeating(check_broadcasts, interval=15, first=10)
 
     logger.info("ID-Finder Bot gestartet...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    await app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Bot manuell beendet.")

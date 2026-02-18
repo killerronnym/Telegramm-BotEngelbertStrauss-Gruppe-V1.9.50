@@ -4,13 +4,18 @@ import asyncio
 import logging
 import re
 import time
+import socket
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple, List
 
 from telegram import Update
-from telegram.ext import CommandHandler, ContextTypes
+from telegram.ext import CommandHandler, ContextTypes, Application
 
-from mcstatus import JavaServer
+# Try importing mcstatus, handle potential missing dependency
+try:
+    from mcstatus import JavaServer
+except ImportError:
+    JavaServer = None
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +32,7 @@ def _project_root() -> str:
 def _find_config_path() -> str:
     here = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(here)
+    # Search in multiple locations for robustness
     candidates = [
         os.path.join(project_root, "data", "minecraft_status_config.json"),
         os.path.join(here, "minecraft_status_config.json"),
@@ -36,7 +42,8 @@ def _find_config_path() -> str:
     for p in candidates:
         if os.path.exists(p):
             return p
-    return candidates[0]
+    # Fallback to standard location
+    return os.path.join(project_root, "data", "minecraft_status_config.json")
 
 
 CONFIG_PATH = _find_config_path()
@@ -95,9 +102,15 @@ def _load_cfg() -> Dict[str, Any]:
 def _atomic_write_json(path: str, data: Dict[str, Any]) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp_path = f"{path}.tmp"
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    os.replace(tmp_path, path)
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_path, path)
+    except Exception as e:
+        log.error(f"Failed to atomic write {path}: {e}")
+        if os.path.exists(tmp_path):
+            try: os.remove(tmp_path)
+            except: pass
 
 
 def _save_cfg(cfg: Dict[str, Any]) -> None:
@@ -109,7 +122,11 @@ def _save_cfg(cfg: Dict[str, Any]) -> None:
 
 # --- Helpers ------------------------------------------------------------------
 def _cfg_host_port(cfg: Dict[str, Any]) -> Tuple[str, int]:
-    host = str(cfg.get("mc_host") or cfg.get("host") or "127.0.0.1").strip()
+    host = str(cfg.get("mc_host") or cfg.get("host") or "").strip()
+    # If no host is configured, we can't do anything
+    if not host: 
+        return "", 25565
+        
     port_raw = cfg.get("mc_port")
     if port_raw in (None, "", "null"):
         port_raw = cfg.get("port")
@@ -131,33 +148,58 @@ def _cfg_display_host_port(cfg: Dict[str, Any], host: str, port: int) -> Tuple[s
     return display_host, display_port
 
 
-async def _fetch_status(host: str, port: int, timeout_seconds: int):
-    timeout_seconds = max(1, min(int(timeout_seconds or 5), 10))
+async def _fetch_status(host: str, port: int, timeout_seconds: int) -> Tuple[Any, int]:
+    if not JavaServer:
+        raise ImportError("mcstatus library not installed")
+
+    timeout_seconds = max(1, min(int(timeout_seconds or 5), 15))
+    
     def _blocking():
         t0 = time.monotonic()
+        # Lookup can also take time (DNS), so we include it in the measurement/timeout logic implicitly via wrapper
         server = JavaServer.lookup(f"{host}:{port}")
         st = server.status()
-        ping_ms = int((time.monotonic() - t0) * 1000)
+        duration = time.monotonic() - t0
+        ping_ms = int(duration * 1000)
         return st, ping_ms
-    return await asyncio.wait_for(
-        asyncio.to_thread(_blocking),
-        timeout=timeout_seconds + 1
-    )
+
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(_blocking),
+            timeout=timeout_seconds
+        )
+    except asyncio.TimeoutError:
+        raise TimeoutError(f"Connection timed out after {timeout_seconds}s")
+    except socket.gaierror:
+        raise OSError("DNS resolution failed")
+    except ConnectionRefusedError:
+        raise OSError("Connection refused")
+    except Exception as e:
+        # Re-raise as is or wrap if needed
+        raise e
 
 
 def _sanitize_text(s: str) -> str:
     if not s:
         return ""
-    s = re.sub(r"§.", "", s)
+    # Remove Minecraft color codes (§x)
+    s = re.sub(r"§.", "", str(s))
+    # Remove HTML-like tags just in case
     s = re.sub(r"<[^>]+>", "", s)
-    return "".join(ch for ch in s if ch == "\n" or ord(ch) >= 32).replace("\r", "\n").strip()
+    # Keep only printable chars and newlines, limit length
+    cleaned = "".join(ch for ch in s if ch == "\n" or (ord(ch) >= 32 and ord(ch) != 127)).replace("\r", "\n").strip()
+    return cleaned[:1000] # Limit length to prevent log spam or UI issues
 
 
 def _motd_plain(status) -> str:
     try:
-        return str(getattr(status.motd, "to_plain", lambda: status.motd)())
+        if hasattr(status, "motd"):
+            if callable(getattr(status.motd, "to_plain", None)):
+                return status.motd.to_plain()
+            return str(status.motd)
+        return ""
     except Exception:
-        return str(getattr(status, "motd", ""))
+        return ""
 
 
 def _status_to_cache(
@@ -190,22 +232,40 @@ def _status_to_cache(
         "online_names": [],
         "error": error,
     }
+    
     if not ok or status is None:
         return base
-    ver = str(getattr(getattr(status, "version", None), "name", "") or "") or None
-    online = int(getattr(getattr(status, "players", None), "online", 0))
-    maxp = int(getattr(getattr(status, "players", None), "max", 0))
-    sample = getattr(getattr(status, "players", None), "sample", []) or []
-    names: List[str] = [_sanitize_text(p.name) for p in sample[:40] if getattr(p, "name", None)]
-    motd = _sanitize_text(_motd_plain(status)).replace("\n", " ").strip() or None
-    base.update({
-        "version": ver,
-        "motd": motd,
-        "players": f"{online}/{maxp}",
-        "player_count": online,
-        "max_players": maxp,
-        "online_names": names,
-    })
+
+    try:
+        # Safely extract data
+        ver = str(getattr(getattr(status, "version", None), "name", "") or "") or None
+        
+        players_obj = getattr(status, "players", None)
+        online = int(getattr(players_obj, "online", 0))
+        maxp = int(getattr(players_obj, "max", 0))
+        sample = getattr(players_obj, "sample", []) or []
+        
+        names: List[str] = []
+        if sample:
+            for p in sample[:40]: # Limit to 40
+                p_name = getattr(p, "name", None)
+                if p_name:
+                    names.append(_sanitize_text(p_name))
+        
+        motd = _sanitize_text(_motd_plain(status)).replace("\n", " ").strip() or None
+        
+        base.update({
+            "version": ver,
+            "motd": motd,
+            "players": f"{online}/{maxp}",
+            "player_count": online,
+            "max_players": maxp,
+            "online_names": names,
+        })
+    except Exception as e:
+        log.error(f"Error parsing status object: {e}")
+        base["error"] = "Error parsing server response"
+        
     return base
 
 
@@ -217,29 +277,45 @@ def _write_status_cache(cache: Dict[str, Any]) -> None:
 
 
 def _fmt_status_text(status, display_host: str, display_port: int, name: str) -> str:
-    motd = _sanitize_text(_motd_plain(status)).replace("\n", " ").strip()
-    ver = str(getattr(getattr(status, "version", None), "name", "") or "")
-    online = int(getattr(getattr(status, "players", None), "online", 0))
-    maxp = int(getattr(getattr(status, "players", None), "max", 0))
-    sample = getattr(getattr(status, "players", None), "sample", []) or []
-    players = [f"• {_sanitize_text(p.name)}" for p in sample[:20] if getattr(p, "name", None)]
-    lines = [
-        "🟢 Online",
-        f"⛏️ {name}",
-        f"🌐 {display_host}:{display_port}",
-    ]
-    if ver: lines.append(f"🧩 Version: {ver}")
-    if motd: lines.append(f"💬 MOTD: {motd}")
-    lines.append(f"👥 Spieler: {online}/{maxp}")
-    if players:
-        lines.append("")
-        lines.append("👥 Player:")
-        lines.extend(players)
-    return "\n".join(lines)
+    try:
+        motd = _sanitize_text(_motd_plain(status)).replace("\n", " ").strip()
+        ver = str(getattr(getattr(status, "version", None), "name", "") or "")
+        
+        players_obj = getattr(status, "players", None)
+        online = int(getattr(players_obj, "online", 0))
+        maxp = int(getattr(players_obj, "max", 0))
+        sample = getattr(players_obj, "sample", []) or []
+        
+        players = []
+        if sample:
+            for p in sample[:20]: # Limit to 20 for telegram message
+                p_name = getattr(p, "name", None)
+                if p_name:
+                    players.append(f"• {_sanitize_text(p_name)}")
+                    
+        lines = [
+            "🟢 Online",
+            f"⛏️ {name}",
+            f"🌐 {display_host}:{display_port}",
+        ]
+        if ver: lines.append(f"🧩 Version: {ver}")
+        if motd: lines.append(f"💬 MOTD: {motd}")
+        lines.append(f"👥 Spieler: {online}/{maxp}")
+        if players:
+            lines.append("")
+            lines.append("👥 Player:")
+            lines.extend(players)
+            
+        return "\n".join(lines)
+    except Exception as e:
+        log.error(f"Error formatting status text: {e}")
+        return f"🟢 Online\n⛏️ {name}\n🌐 {display_host}:{display_port}\n(Fehler beim Verarbeiten der Details)"
 
 
 # --- Telegram Status Job ------------------------------------------------------
 async def _send_or_edit_status(context: ContextTypes.DEFAULT_TYPE):
+    if not context.job: return # Safety check
+
     async with _status_lock:
         cfg = _load_cfg()
         host, port = _cfg_host_port(cfg)
@@ -249,8 +325,12 @@ async def _send_or_edit_status(context: ContextTypes.DEFAULT_TYPE):
         chat_id = str(cfg.get("chat_id", "")).strip()
         topic_id = cfg.get("topic_id")
 
-        if not host or not chat_id:
-            log.warning("Minecraft bridge: config missing host/chat_id in %s", CONFIG_PATH)
+        if not host:
+            # Silent return if no host configured (yet)
+            return
+
+        if not chat_id:
+            # Log only once or nicely if chat_id missing
             return
 
         try:
@@ -268,9 +348,14 @@ async def _send_or_edit_status(context: ContextTypes.DEFAULT_TYPE):
 
         # --- Fetch status + cache schreiben ---
         text: str
+        status = None
+        ping_ms = None
+        error_msg = None
+        
         try:
             status, ping_ms = await _fetch_status(host, port, timeout_seconds)
             text = _fmt_status_text(status, display_host, display_port, name)
+            
             cache = _status_to_cache(
                 ok=True,
                 host=host, port=port,
@@ -278,19 +363,23 @@ async def _send_or_edit_status(context: ContextTypes.DEFAULT_TYPE):
                 name=name, status=status, ping_ms=ping_ms
             )
             _write_status_cache(cache)
+            
         except Exception as e:
+            error_msg = f"{type(e).__name__}: {e}"
+            log.info(f"Minecraft Server {host}:{port} offline/unreachable: {error_msg}")
+            
             text = (
                 f"🔴 Offline\n"
                 f"⛏️ {name}\n"
                 f"🌐 {display_host}:{display_port}\n\n"
-                f"Der Server ist gerade nicht erreichbar – bitte später nochmal schauen 😊"
+                f"Der Server ist gerade nicht erreichbar."
             )
             cache = _status_to_cache(
                 ok=False,
                 host=host, port=port,
                 display_host=display_host, display_port=display_port,
                 name=name, status=None, ping_ms=None,
-                error=f"{type(e).__name__}: {e}"
+                error=error_msg
             )
             _write_status_cache(cache)
 
@@ -316,6 +405,7 @@ async def _send_or_edit_status(context: ContextTypes.DEFAULT_TYPE):
         if msg_id and created_at_raw:
             try:
                 ca_dt = datetime.fromisoformat(str(created_at_raw))
+                # Rotate after 23 hours to stay fresh in chat
                 if (datetime.now() - ca_dt).total_seconds() > 23 * 3600:
                     must_rotate = True
             except Exception:
@@ -327,7 +417,7 @@ async def _send_or_edit_status(context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.delete_message(chat_id=chat_id_int, message_id=msg_id)
                 log.info("Minecraft bridge: rotated status message (deleted old %s).", msg_id)
             except Exception as e_del:
-                log.warning("Minecraft bridge: could not delete old status message %s for rotation: %s (%s)", msg_id, type(e_del).__name__, e_del)
+                log.warning("Minecraft bridge: could not delete old status message %s for rotation: %s", msg_id, e_del)
 
             msg_id = None
             cfg["status_message_id"] = None
@@ -347,14 +437,13 @@ async def _send_or_edit_status(context: ContextTypes.DEFAULT_TYPE):
             except Exception as e_edit:
                 msg_lower = str(e_edit).lower()
                 if "message is not modified" in msg_lower:
-                    return
+                    return # No changes, all good
 
-                log.info("Minecraft bridge: edit failed for %s (%s: %s). Attempting delete and new post.", msg_id, type(e_edit).__name__, e_edit)
+                log.info("Minecraft bridge: edit failed for %s (%s). Attempting delete and new post.", msg_id, e_edit)
                 try:
                     await context.bot.delete_message(chat_id=chat_id_int, message_id=msg_id)
-                    log.info("Minecraft bridge: deleted old status message %s after edit failure.", msg_id)
-                except Exception as e_del:
-                    log.warning("Minecraft bridge: could not delete old status message %s after edit failure: %s (%s)", msg_id, type(e_del).__name__, e_del)
+                except Exception:
+                    pass # Ignore if already deleted
 
                 msg_id = None
                 cfg["status_message_id"] = None
@@ -375,7 +464,7 @@ async def _send_or_edit_status(context: ContextTypes.DEFAULT_TYPE):
             _save_cfg(cfg)
             log.info("Minecraft bridge: sent new status message %s", sent.message_id)
         except Exception as e_send:
-            log.error("Minecraft bridge: failed to send new status message: %s (%s)", type(e_send).__name__, e_send)
+            log.error("Minecraft bridge: failed to send new status message: %s", e_send)
 
 
 async def _job_callback(context: ContextTypes.DEFAULT_TYPE):
@@ -390,18 +479,30 @@ async def cmd_player(update: Update, context: ContextTypes.DEFAULT_TYPE):
     timeout_seconds = int(cfg.get("timeout_seconds") or 5)
     display_host, display_port = _cfg_display_host_port(cfg, host, port)
     delete_after = int(cfg.get("delete_player_seconds") or 8)
+    
     if not update.message: return
+    
+    m = None
     try:
         status, _ping_ms = await _fetch_status(host, port, timeout_seconds)
         online = int(status.players.online)
         maxp = int(status.players.max)
-        names = [_sanitize_text(p.name) for p in (status.players.sample or [])[:40] if getattr(p, "name", None)]
+        
+        names = []
+        if status.players.sample:
+            names = [_sanitize_text(p.name) for p in status.players.sample if getattr(p, "name", None)]
+            names = names[:40] # Limit
+            
         txt = f"⛏️ {name}\n🌐 {display_host}:{display_port}\n👥 Spieler online: {online}/{maxp}"
         if names: txt += "\n" + "\n".join(f"• {n}" for n in names)
+        
         m = await update.message.reply_text(txt)
+    except ImportError:
+        m = await update.message.reply_text("🔴 Fehler: 'mcstatus' Bibliothek fehlt.")
     except Exception as e:
         m = await update.message.reply_text(f"🔴 Server nicht erreichbar ({type(e).__name__})")
-    if delete_after > 0 and context.job_queue:
+        
+    if m and delete_after > 0 and context.job_queue:
         async def _del(c: ContextTypes.DEFAULT_TYPE):
             try: await c.bot.delete_message(chat_id=m.chat_id, message_id=m.message_id)
             except Exception: pass
@@ -409,15 +510,21 @@ async def cmd_player(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # --- Registration -------------------------------------------------------------
-def register_minecraft(app) -> None:
+def register_minecraft(app: Application) -> None:
+    if not JavaServer:
+        log.error("❌ 'mcstatus' library not found. Minecraft bridge disabled.")
+        return
+
     cfg = _load_cfg()
     every = max(10, min(int(cfg.get("update_seconds") or 30), 3600))
+    
     app.add_handler(CommandHandler("player", cmd_player))
+    
     if app.job_queue:
-        app.job_queue.run_once(_job_callback, when=15)
-        app.job_queue.run_repeating(_job_callback, interval=every, first=every)
-        log.info("Minecraft bridge job scheduled every %ss (config: %s).", every, CONFIG_PATH)
-        log.info("Minecraft status cache path: %s", STATUS_CACHE_PATH)
+        # Run first update slightly delayed to allow bot startup to finish
+        app.job_queue.run_once(_job_callback, when=10)
+        app.job_queue.run_repeating(_job_callback, interval=every, first=20)
+        log.info("Minecraft bridge job scheduled every %ss.", every)
     else:
         log.warning("Minecraft bridge: job_queue not available – status auto-update disabled.")
 
@@ -425,20 +532,27 @@ def register_minecraft(app) -> None:
 # --- CLI / Debug --------------------------------------------------------------
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+    
+    if not JavaServer:
+        print("❌ 'mcstatus' library not installed. Please run: pip install mcstatus")
+        exit(1)
+        
     cfg = _load_cfg()
     host, port = _cfg_host_port(cfg)
     display_host, display_port = _cfg_display_host_port(cfg, host, port)
     name = cfg.get("name", "Minecraft Server")
+    
     async def _main():
-        print("🔍 Teste Minecraft-Status…")
-        print(f"Host: {host}:{port}")
+        print(f"🔍 Teste Minecraft-Status für {host}:{port}...")
         try:
             status, ping_ms = await _fetch_status(host, port, cfg.get("timeout_seconds", 5))
             text = _fmt_status_text(status, display_host, display_port, name)
-            print("\n✅ ONLINE\n")
-            print(f"Ping: {ping_ms} ms\n")
+            print("\n✅ ONLINE")
+            print(f"Ping: {ping_ms} ms")
+            print("-" * 20)
             print(text)
         except Exception as e:
             print("\n🔴 OFFLINE / FEHLER")
-            print(type(e).__name__, str(e))
+            print(f"{type(e).__name__}: {e}")
+            
     asyncio.run(_main())

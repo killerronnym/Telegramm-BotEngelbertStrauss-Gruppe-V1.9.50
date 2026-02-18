@@ -5,8 +5,9 @@ import random
 import asyncio
 import logging
 import hashlib
-from datetime import datetime, time as dt_time
+from datetime import datetime, time as dt_time, timedelta
 from telegram import Bot
+from telegram.error import TelegramError
 
 # ----------------- Setup -----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -14,6 +15,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(BASE_DIR))
 
 CONFIG_FILE = os.path.join(BASE_DIR, "umfrage_bot_config.json")
 TRIGGER_FILE = os.path.join(BASE_DIR, "send_now.tmp")
+STATE_FILE = os.path.join(BASE_DIR, "umfrage_bot_state.json") # Stores last run date
 
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 POLL_FILE = os.path.join(DATA_DIR, "umfragen.json")
@@ -49,6 +51,21 @@ def save_json(path, data):
     except Exception as e:
         log.error(f"Error saving JSON to {path}: {e}")
 
+def get_last_sent_date():
+    state = load_json(STATE_FILE, {})
+    date_str = state.get("last_sent_date")
+    if date_str:
+        try:
+            return datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return None
+    return None
+
+def set_last_sent_date(date_obj):
+    state = load_json(STATE_FILE, {})
+    state["last_sent_date"] = date_obj.strftime("%Y-%m-%d")
+    save_json(STATE_FILE, state)
+
 def poll_fingerprint(p: dict) -> str:
     frage = str(p.get("frage", "")).strip()
     optionen = p.get("optionen", [])
@@ -62,107 +79,139 @@ async def send_poll():
     cfg = load_json(CONFIG_FILE, {})
     token = cfg.get("bot_token", "").strip()
     chat_id = cfg.get("channel_id", "").strip()
-    topic_id = cfg.get("topic_id", "").strip()
+    topic_id = cfg.get("topic_id", "")
 
     if not token or not chat_id:
         log.warning("Bot token or channel_id is not configured.")
-        return False, "Konfiguration (Token/Channel ID) fehlt."
+        return False
 
-    polls = load_json(POLL_FILE, [])
-    if not polls:
-        return False, "Keine Umfragen in 'data/umfragen.json' gefunden."
+    all_polls = load_json(POLL_FILE, [])
+    if not all_polls:
+        log.error("No polls found in umfragen.json")
+        return False
 
     used_hashes = set(load_json(USED_FILE, []))
-    available_polls = [p for p in polls if poll_fingerprint(p) not in used_hashes]
+    available_polls = [p for p in all_polls if poll_fingerprint(p) not in used_hashes]
 
     if not available_polls:
-        log.info("All polls have been sent.")
-        return False, "Alle Umfragen wurden bereits gestellt."
+        log.info("All polls have been sent. Resetting history.")
+        # Optional: Reset used questions
+        # used_hashes = set()
+        # save_json(USED_FILE, [])
+        # available_polls = all_polls
+        return False
 
     poll_data = random.choice(available_polls)
     
     frage = poll_data.get("frage", "").strip()
     optionen = poll_data.get("optionen", [])
+    allows_multiple_answers = poll_data.get("allows_multiple_answers", False) # Default False
 
-    if not frage or len(optionen) < 2:
-        log.warning(f"Skipping invalid poll: {poll_data}")
-        return False, "Ungültige Umfrage übersprungen."
+    # --- Validation ---
+    if len(frage) > 300:
+        log.warning(f"Poll question too long ({len(frage)} chars). Skipping.")
+        return False
+        
+    if len(optionen) < 2 or len(optionen) > 10:
+        log.warning(f"Invalid number of options ({len(optionen)}). Skipping.")
+        return False
+
+    for opt in optionen:
+        if len(str(opt)) > 100:
+            log.warning(f"Option too long ({len(str(opt))} chars). Skipping.")
+            return False
 
     try:
         bot = Bot(token=token)
-        message_thread_id = int(topic_id) if topic_id and topic_id.isdigit() else None
         
+        # Handle Topic ID
+        message_thread_id = None
+        if topic_id and str(topic_id).strip().lower() != "null":
+             if str(topic_id).isdigit():
+                 message_thread_id = int(topic_id)
+        
+        log.info(f"Sending poll to {chat_id} (Topic: {message_thread_id}): {frage}")
+
         await bot.send_poll(
             chat_id=chat_id,
             question=frage,
             options=optionen,
             is_anonymous=False,
-            allows_multiple_answers=False,
+            allows_multiple_answers=allows_multiple_answers,
             message_thread_id=message_thread_id
         )
-        log.info(f"Successfully sent poll: {frage}")
         
         used_hashes.add(poll_fingerprint(poll_data))
         save_json(USED_FILE, list(used_hashes))
         
-        return True, "Umfrage erfolgreich gesendet."
+        log.info("Poll sent successfully.")
+        return True
+        
+    except TelegramError as e:
+        log.error(f"Telegram API Error: {e}")
+        return False
     except Exception as e:
-        log.error(f"Failed to send poll: {e}")
-        return False, f"Fehler beim Senden: {e}"
+        log.error(f"Unexpected error sending poll: {e}")
+        return False
 
 # ----------------- Scheduler and Trigger -----------------
-def check_triggers():
+def process_trigger():
     if os.path.exists(TRIGGER_FILE):
-        log.info("'send_now.tmp' trigger detected.")
+        log.info("Manual trigger detected.")
         try:
             os.remove(TRIGGER_FILE)
             asyncio.run(send_poll())
         except Exception as e:
-            log.error(f"Error processing trigger file: {e}")
+            log.error(f"Error processing trigger: {e}")
 
-def check_schedule(last_sent_date):
+def check_schedule():
     cfg = load_json(CONFIG_FILE, {})
     schedule = cfg.get("schedule", {})
     
     if not schedule.get("enabled"):
-        return False
+        return
 
-    now = datetime.now()
-    today = now.date()
-    
-    if last_sent_date == today:
-        return False
-
-    scheduled_time_str = schedule.get("time")
-    if not scheduled_time_str:
-        return False
+    time_str = schedule.get("time")
+    if not time_str: return
 
     try:
-        scheduled_time = dt_time.fromisoformat(scheduled_time_str)
+        scheduled_time = datetime.strptime(time_str, "%H:%M").time()
     except ValueError:
-        log.error(f"Invalid time format in schedule: {scheduled_time_str}")
-        return False
+        log.error(f"Invalid schedule time format: {time_str}")
+        return
 
-    scheduled_days = schedule.get("days", [])
+    now = datetime.now()
+    today_date = now.date()
     
-    if now.weekday() in scheduled_days and now.time() >= scheduled_time:
-        log.info(f"Scheduled time reached for today. Sending poll.")
-        asyncio.run(send_poll())
-        return True
+    # Check if already sent today
+    last_sent = get_last_sent_date()
+    if last_sent == today_date:
+        return
 
-    return False
+    # Check correct day of week
+    allowed_days = schedule.get("days", [])
+    if now.weekday() not in allowed_days:
+        return
+
+    # Check time
+    if now.time() >= scheduled_time:
+        log.info("Scheduled time reached. Sending poll...")
+        success = asyncio.run(send_poll())
+        if success:
+            set_last_sent_date(today_date)
+            log.info(f"Schedule marked as done for {today_date}")
 
 # ----------------- Main Loop -----------------
 def main():
     log.info("Umfrage Bot started.")
-    last_sent_date = None
     
     while True:
-        check_triggers()
+        try:
+            process_trigger()
+            check_schedule()
+        except Exception as e:
+            log.error(f"Error in main loop: {e}")
         
-        if check_schedule(last_sent_date):
-            last_sent_date = datetime.now().date()
-
         time.sleep(10)
 
 if __name__ == "__main__":

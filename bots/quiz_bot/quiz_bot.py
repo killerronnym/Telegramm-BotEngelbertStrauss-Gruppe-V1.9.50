@@ -5,15 +5,18 @@ import random
 import asyncio
 import logging
 import hashlib
-from datetime import datetime, time as dt_time
+from datetime import datetime, time as dt_time, timedelta
 from telegram import Bot
+from telegram.error import TelegramError
 
 # ----------------- Setup -----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(os.path.dirname(BASE_DIR)) # Navigate up to the project root
+# Navigate up to the project root: bots/quiz_bot -> bots -> project_root
+PROJECT_ROOT = os.path.dirname(os.path.dirname(BASE_DIR))
 
 CONFIG_FILE = os.path.join(BASE_DIR, "quiz_bot_config.json")
-TRIGGER_FILE = os.path.join(BASE_DIR, "send_now.tmp") # Corrected trigger file name
+TRIGGER_FILE = os.path.join(BASE_DIR, "send_now.tmp")
+STATE_FILE = os.path.join(BASE_DIR, "quiz_bot_state.json") # To store last run date
 
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 QUIZ_FILE = os.path.join(DATA_DIR, "quizfragen.json")
@@ -49,6 +52,21 @@ def save_json(path, data):
     except Exception as e:
         log.error(f"Error saving JSON to {path}: {e}")
 
+def get_last_sent_date():
+    state = load_json(STATE_FILE, {})
+    date_str = state.get("last_sent_date")
+    if date_str:
+        try:
+            return datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return None
+    return None
+
+def set_last_sent_date(date_obj):
+    state = load_json(STATE_FILE, {})
+    state["last_sent_date"] = date_obj.strftime("%Y-%m-%d")
+    save_json(STATE_FILE, state)
+
 def question_fingerprint(q: dict) -> str:
     frage = str(q.get("frage", "")).strip()
     optionen = q.get("optionen", [])
@@ -61,118 +79,149 @@ def question_fingerprint(q: dict) -> str:
 async def send_quiz():
     cfg = load_json(CONFIG_FILE, {})
     token = cfg.get("bot_token", "").strip()
-    chat_id = cfg.get("channel_id", "").strip()
-    topic_id = cfg.get("topic_id", "").strip()
+    chat_id = cfg.get("channel_id", "").strip() # Can be channel or group ID
+    topic_id = cfg.get("topic_id", "")
 
     if not token or not chat_id:
         log.warning("Bot token or channel_id is not configured.")
-        return False, "Konfiguration (Token/Channel ID) fehlt."
+        return False
 
-    questions = load_json(QUIZ_FILE, [])
-    if not questions:
-        return False, "Keine Quizfragen in 'data/quizfragen.json' gefunden."
+    all_questions = load_json(QUIZ_FILE, [])
+    if not all_questions:
+        log.error("No questions found in quizfragen.json")
+        return False
 
     used_hashes = set(load_json(USED_FILE, []))
-    available_questions = [q for q in questions if question_fingerprint(q) not in used_hashes]
+    available_questions = [q for q in all_questions if question_fingerprint(q) not in used_hashes]
 
     if not available_questions:
-        log.info("All quiz questions have been sent. Resetting the list.")
-        # Optional: Reset used questions if all have been sent
-        # used_hashes = set()
-        # save_json(USED_FILE, [])
-        # available_questions = questions
-        return False, "Alle Quizfragen wurden bereits gestellt."
+        log.info("All questions have been asked. Resetting history.")
+        used_hashes = set()
+        save_json(USED_FILE, [])
+        available_questions = all_questions
 
+    # Select random question
     question_data = random.choice(available_questions)
     
     frage = question_data.get("frage", "").strip()
     optionen = question_data.get("optionen", [])
-    antwort = question_data.get("antwort", 0)
+    antwort_idx = int(question_data.get("antwort", 0))
 
-    if not frage or len(optionen) < 2:
-        log.warning(f"Skipping invalid question: {question_data}")
-        return False, "Ungültige Frage übersprungen."
+    # --- Validation for Telegram API Limits ---
+    if len(frage) > 300:
+        log.warning(f"Question too long ({len(frage)} chars). Skipping.")
+        return False
+    
+    if len(optionen) < 2 or len(optionen) > 10:
+        log.warning(f"Invalid number of options ({len(optionen)}). Skipping.")
+        return False
+        
+    for opt in optionen:
+        if len(str(opt)) > 100:
+             log.warning(f"Option too long ({len(str(opt))} chars). Skipping.")
+             return False
+
+    if antwort_idx < 0 or antwort_idx >= len(optionen):
+        log.warning(f"Invalid correct option index {antwort_idx}. Skipping.")
+        return False
 
     try:
         bot = Bot(token=token)
-        message_thread_id = int(topic_id) if topic_id and topic_id.isdigit() else None
+        
+        # Handle Topic ID
+        message_thread_id = None
+        if topic_id and str(topic_id).strip().lower() != "null":
+             if str(topic_id).isdigit():
+                 message_thread_id = int(topic_id)
+        
+        log.info(f"Sending quiz to {chat_id} (Topic: {message_thread_id}): {frage}")
         
         await bot.send_poll(
             chat_id=chat_id,
             question=frage,
             options=optionen,
-            is_anonymous=False,
             type='quiz',
-            correct_option_id=antwort,
+            correct_option_id=antwort_idx,
+            is_anonymous=False, # Quiz is usually not anonymous to show winners, but configurable? Standard: False
             message_thread_id=message_thread_id
         )
-        log.info(f"Successfully sent quiz: {frage}")
         
         # Mark as used
         used_hashes.add(question_fingerprint(question_data))
         save_json(USED_FILE, list(used_hashes))
         
-        return True, "Quiz erfolgreich gesendet."
+        log.info("Quiz sent successfully.")
+        return True
+
+    except TelegramError as e:
+        log.error(f"Telegram API Error: {e}")
+        return False
     except Exception as e:
-        log.error(f"Failed to send quiz: {e}")
-        return False, f"Fehler beim Senden: {e}"
+        log.error(f"Unexpected error sending quiz: {e}")
+        return False
 
 # ----------------- Scheduler and Trigger -----------------
-def check_triggers():
+def process_trigger():
     if os.path.exists(TRIGGER_FILE):
-        log.info("'send_now.tmp' trigger detected.")
+        log.info("Manual trigger detected.")
         try:
             os.remove(TRIGGER_FILE)
             asyncio.run(send_quiz())
         except Exception as e:
-            log.error(f"Error processing trigger file: {e}")
+            log.error(f"Error processing trigger: {e}")
 
-def check_schedule(last_sent_date):
+def check_schedule():
     cfg = load_json(CONFIG_FILE, {})
     schedule = cfg.get("schedule", {})
     
     if not schedule.get("enabled"):
-        return False
+        return
 
-    now = datetime.now()
-    today = now.date()
-    
-    # Avoid sending more than once a day
-    if last_sent_date == today:
-        return False
-
-    scheduled_time_str = schedule.get("time")
-    if not scheduled_time_str:
-        return False
+    time_str = schedule.get("time")
+    if not time_str: return
 
     try:
-        scheduled_time = dt_time.fromisoformat(scheduled_time_str)
+        scheduled_time = datetime.strptime(time_str, "%H:%M").time()
     except ValueError:
-        log.error(f"Invalid time format in schedule: {scheduled_time_str}")
-        return False
+        log.error(f"Invalid schedule time format: {time_str}")
+        return
 
-    scheduled_days = schedule.get("days", [])
+    now = datetime.now()
+    today_date = now.date()
     
-    # Check if today is a scheduled day and the time is right
-    if now.weekday() in scheduled_days and now.time() >= scheduled_time:
-        log.info(f"Scheduled time reached for today. Sending quiz.")
-        asyncio.run(send_quiz())
-        return True # Indicates that a quiz was sent
+    # Check if already sent today
+    last_sent = get_last_sent_date()
+    if last_sent == today_date:
+        return
 
-    return False
+    # Check correct day of week
+    allowed_days = schedule.get("days", [])
+    if now.weekday() not in allowed_days:
+        return
+
+    # Check if time is reached (with 1 minute tolerance to avoid double send in same minute if loop is fast)
+    # Actually, since we check last_sent_date, we just need to know if current time >= scheduled time
+    if now.time() >= scheduled_time:
+        log.info("Scheduled time reached. Sending quiz...")
+        success = asyncio.run(send_quiz())
+        if success:
+            set_last_sent_date(today_date)
+            log.info(f"Schedule marked as done for {today_date}")
 
 # ----------------- Main Loop -----------------
 def main():
     log.info("Quiz Bot started.")
-    last_sent_date = None
+    
+    # Startup check: write PID or similar? Not needed, handled by dashboard.
     
     while True:
-        check_triggers()
+        try:
+            process_trigger()
+            check_schedule()
+        except Exception as e:
+            log.error(f"Error in main loop: {e}")
         
-        if check_schedule(last_sent_date):
-            last_sent_date = datetime.now().date()
-
-        time.sleep(10) # Check every 10 seconds
+        time.sleep(10)
 
 if __name__ == "__main__":
     main()

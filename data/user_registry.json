@@ -13,13 +13,14 @@
         },
         "901190371": {
             "first_seen": "2025-12-17T01:40:35",
-            "last_seen": "2025-12-17T01:40:35",
+            "last_seen": "2026-02-18T14:16:41.523112",
             "full_name": "Ludger G.",
             "is_bot": false,
             "username": "LudgerG",
             "chat_ids": [
                 -1002206300882
-            ]
+            ],
+            "id": 901190371
         },
         "1087968824": {
             "first_seen": "2025-12-17T01:40:35",
@@ -215,23 +216,25 @@
         },
         "430531261": {
             "first_seen": "2025-12-18T07:41:44+01:00",
-            "last_seen": "2025-12-30T15:26:36+01:00",
-            "full_name": "Sven / Sam Ehemals Ich Doppelpunkt-Klammer-Zu",
+            "last_seen": "2026-02-18T14:16:41.298846",
+            "full_name": "Sven🦺 / Sam🐶",
             "is_bot": false,
             "username": "Einfach_ich7",
             "chat_ids": [
                 -1002206300882
-            ]
+            ],
+            "id": 430531261
         },
         "866865585": {
             "first_seen": "2025-12-18T09:16:54+01:00",
-            "last_seen": "2026-01-01T20:24:57+01:00",
+            "last_seen": "2026-02-18T14:16:41.601494",
             "full_name": "Christian",
             "is_bot": false,
             "username": "alpha_strauss_84",
             "chat_ids": [
                 -1002206300882
-            ]
+            ],
+            "id": 866865585
         },
         "6005935333": {
             "first_seen": "2025-12-18T11:49:56+01:00",
@@ -455,23 +458,25 @@
         },
         "453315338": {
             "first_seen": "2025-12-24T07:39:19+01:00",
-            "last_seen": "2026-01-01T19:58:23+01:00",
+            "last_seen": "2026-02-18T14:16:41.578412",
             "full_name": "Naturbursche93",
             "is_bot": false,
             "username": "Naturbursche93",
             "chat_ids": [
                 -1002206300882
-            ]
+            ],
+            "id": 453315338
         },
         "5038667449": {
             "first_seen": "2025-12-24T08:51:47+01:00",
-            "last_seen": "2026-01-01T19:58:24+01:00",
+            "last_seen": "2026-02-18T14:16:41.336723",
             "full_name": "Matthias",
             "is_bot": false,
-            "username": "",
+            "username": null,
             "chat_ids": [
                 -1002206300882
-            ]
+            ],
+            "id": 5038667449
         },
         "5465187040": {
             "first_seen": "2025-12-24T09:47:46+01:00",
@@ -525,13 +530,14 @@
         },
         "8283399624": {
             "first_seen": "2025-12-28T08:39:21+01:00",
-            "last_seen": "2025-12-28T12:03:04+01:00",
+            "last_seen": "2026-02-18T14:16:41.587550",
             "full_name": "Frank",
             "is_bot": false,
-            "username": "",
+            "username": null,
             "chat_ids": [
                 -1002206300882
-            ]
+            ],
+            "id": 8283399624
         },
         "5197342838": {
             "first_seen": "2025-12-28T08:39:45+01:00",
@@ -729,6 +735,16 @@
             "full_name": "Schnuffi",
             "is_bot": false,
             "username": "Schnuffi96",
+            "chat_ids": [
+                -1002206300882
+            ]
+        },
+        "8341845733": {
+            "id": 8341845733,
+            "username": "pupzushi",
+            "full_name": "Pup_zushiズシ🐾",
+            "last_seen": "2026-02-18T14:16:41.232697",
+            "first_seen": "2026-02-18T14:16:41.232697",
             "chat_ids": [
                 -1002206300882
             ]

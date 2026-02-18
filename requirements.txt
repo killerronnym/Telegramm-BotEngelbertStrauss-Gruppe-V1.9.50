@@ -9,3 +9,5 @@ APScheduler
 pytz
 pyTelegramBotAPI
 schedule
+mcstatus
+gunicorn
