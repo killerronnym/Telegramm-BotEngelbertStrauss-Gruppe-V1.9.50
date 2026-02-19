@@ -154,7 +154,7 @@ threading.Thread(target=auto_delete_task, daemon=True).start()
 @app.route("/")
 @login_required
 def index():
-    return render_template("index.html", bot_status={k: {"running": "pattern" in str(subprocess.run(["ps", "aux"], stdout=subprocess.PIPE, text=True).stdout)} for k in MATCH_CONFIG})
+    return render_template("index.html", bot_status={k: {"running": MATCH_CONFIG[k]["pattern"] in str(subprocess.run(["ps", "aux"], stdout=subprocess.PIPE, text=True).stdout)} for k in MATCH_CONFIG})
 
 @app.route('/live_moderation')
 @login_required
@@ -179,84 +179,44 @@ def live_moderation():
     return render_template('live_moderation.html', topics=topics_data, messages=messages, 
                            selected_chat_id=selected_chat_id, selected_topic_id=selected_topic_id, mod_cfg=mod_cfg)
 
-@app.route("/id-finder/save-mod-config", methods=["POST"])
-@login_required
-def save_mod_config():
-    cfg = {
-        "default_reason": request.form.get("default_reason"),
-        "dm_template": request.form.get("dm_template"),
-        "public_template": request.form.get("public_template"),
-        "public_delete_delay_minutes": int(request.form.get("public_delete_delay_minutes", 120))
-    }
-    save_json(MODERATION_CONFIG_FILE, cfg)
-    flash("Einstellungen gespeichert.", "success")
-    return redirect(url_for("live_moderation"))
-
 @app.route("/id-finder/moderate", methods=["POST"])
 @login_required
 def moderate_message():
     user_id = request.form.get("user_id")
     chat_id = request.form.get("chat_id")
     message_id = request.form.get("message_id")
-    topic_id = request.form.get("topic_id") # Telegram message_thread_id
+    topic_id = request.form.get("topic_id")
     action = request.form.get("action")
     reason = request.form.get("reason", "Kein Grund angegeben")
     user_name = request.form.get("user_name", user_id)
     chat_name = request.form.get("chat_name", "der Gruppe")
-    
     mod_cfg = load_json(MODERATION_CONFIG_FILE)
-    
-    # 1. Ursprungsnachricht löschen
     tg_api_call("deleteMessage", {"chat_id": chat_id, "message_id": message_id})
-    
     if action == "warn":
-        # 2. Private Nachricht (DM)
         dm_text = mod_cfg.get("dm_template", "").replace("{user}", user_name).replace("{reason}", reason).replace("{group}", chat_name)
         tg_api_call("sendMessage", {"chat_id": user_id, "text": dm_text})
-        
-        # 3. Öffentliche Nachricht (Im gleichen Topic!)
         time_str = f"{mod_cfg.get('public_delete_delay_minutes')} Minuten"
         pub_text = mod_cfg.get("public_template", "").replace("{user}", user_name).replace("{reason}", reason).replace("{time}", time_str)
-        
         params = {"chat_id": chat_id, "text": pub_text}
-        if topic_id and topic_id != "None" and str(topic_id).isdigit():
-            params["message_thread_id"] = topic_id
-            
+        if topic_id and topic_id != "None" and str(topic_id).isdigit(): params["message_thread_id"] = topic_id
         res = tg_api_call("sendMessage", params)
-        
-        # 4. Automatisches Löschen planen
         if res and res.get("ok"):
             new_msg_id = res["result"]["message_id"]
             deletions = load_json(PENDING_DELETIONS_FILE, [])
-            delay = int(mod_cfg.get("public_delete_delay_minutes", 120)) * 60
-            deletions.append({
-                "chat_id": chat_id,
-                "message_id": new_msg_id,
-                "delete_at": datetime.now().timestamp() + delay
-            })
+            deletions.append({"chat_id": chat_id, "message_id": new_msg_id, "delete_at": datetime.now().timestamp() + int(mod_cfg.get("public_delete_delay_minutes", 120)) * 60})
             save_json(PENDING_DELETIONS_FILE, deletions)
-        
-        flash("Nachricht gelöscht und verwarnt (Auto-Löschung aktiv).", "success")
-    else:
-        flash("Nachricht gelöscht.", "info")
-
-    _remove_message_from_logs(user_id, message_id)
+        flash("Nachricht gelöscht und verwarnt.", "success")
+    else: flash("Nachricht gelöscht.", "info")
     return redirect(request.referrer or url_for("live_moderation"))
 
-def _remove_message_from_logs(user_id, message_id):
-    paths = [os.path.join(USER_MESSAGE_DIR, f"{user_id}.jsonl"), ACTIVITY_LOG_FILE]
-    for p in paths:
-        if not os.path.exists(p): continue
-        lines = []
-        with open(p, "r", encoding="utf-8") as f:
-            for line in f:
-                try:
-                    d = json.loads(line)
-                    if str(d.get("message_id") or d.get("msg_id")) != str(message_id): lines.append(line)
-                except: lines.append(line)
-        with open(p, "w", encoding="utf-8") as f: f.writelines(lines)
+@app.route("/id-finder/save-mod-config", methods=["POST"])
+@login_required
+def save_mod_config():
+    cfg = {"default_reason": request.form.get("default_reason"), "dm_template": request.form.get("dm_template"), "public_template": request.form.get("public_template"), "public_delete_delay_minutes": int(request.form.get("public_delete_delay_minutes", 120))}
+    save_json(MODERATION_CONFIG_FILE, cfg)
+    flash("Einstellungen gespeichert.", "success")
+    return redirect(url_for("live_moderation"))
 
-# --- Standard-Routen ---
 @app.route("/bot-action/<bot_name>/<action>", methods=["POST"])
 @login_required
 def bot_action_route(bot_name, action):
@@ -288,31 +248,51 @@ def tg_media_proxy(file_id):
             return send_file(io.BytesIO(r.read()), mimetype=r.info().get_content_type())
     except: return abort(500)
 
+@app.route("/id-finder")
+@login_required
+def id_finder_dashboard(): return render_template("id_finder_dashboard.html", config=load_json(ID_FINDER_CONFIG_FILE), is_running=False, bot_status={})
+
+@app.route("/broadcast")
+@login_required
+def broadcast_manager(): return render_template("broadcast_manager.html", broadcasts=[], bot_status={}, known_topics={})
+
+@app.route("/bot-settings")
+@login_required
+def bot_settings(): return render_template("bot_settings.html", config={}, bot_status={})
+
+@app.route("/quiz-settings")
+@login_required
+def quiz_settings(): return render_template("quiz_settings.html", config={}, bot_status={})
+
+@app.route("/umfrage-settings")
+@login_required
+def umfrage_settings(): return render_template("umfrage_settings.html", config={}, bot_status={})
+
+@app.route("/admin/users")
+@login_required
+def manage_users(): return render_template("manage_users.html", users={})
+
+@app.route("/minecraft")
+@login_required
+def minecraft_status_page(): return render_template("minecraft.html", cfg={}, status={}, bot_status={})
+
+@app.route("/outfit-bot/dashboard")
+@login_required
+def outfit_bot_dashboard(): return render_template("outfit_bot_dashboard.html", config={}, bot_status={})
+
+@app.route("/critical-errors")
+@login_required
+def critical_errors(): return render_template("critical_errors.html", critical_logs=[], bot_status={})
+
+@app.route("/id-finder/admin-panel")
+@login_required
+def id_finder_admin_panel(): return render_template("id_finder_admin_panel.html", admins={}, bot_status={})
+
+@app.route("/id-finder/commands")
+@login_required
+def id_finder_commands(): return render_template("id_finder_commands.html", bot_status={})
+
 @app.route("/logout")
 def logout(): session.clear(); return redirect(url_for("index"))
-
-# (Weitere Standard-Routen)
-@app.route("/id-finder") @login_required
-def id_finder_dashboard(): return render_template("id_finder_dashboard.html", config=load_json(ID_FINDER_CONFIG_FILE), is_running=False, bot_status={})
-@app.route("/broadcast") @login_required
-def broadcast_manager(): return render_template("broadcast_manager.html", broadcasts=[], bot_status={}, known_topics={})
-@app.route("/bot-settings") @login_required
-def bot_settings(): return render_template("bot_settings.html", config={}, bot_status={})
-@app.route("/quiz-settings") @login_required
-def quiz_settings(): return render_template("quiz_settings.html", config={}, bot_status={})
-@app.route("/umfrage-settings") @login_required
-def umfrage_settings(): return render_template("umfrage_settings.html", config={}, bot_status={})
-@app.route("/admin/users") @login_required
-def manage_users(): return render_template("manage_users.html", users={})
-@app.route("/minecraft") @login_required
-def minecraft_status_page(): return render_template("minecraft.html", cfg={}, status={}, bot_status={})
-@app.route("/outfit-bot/dashboard") @login_required
-def outfit_bot_dashboard(): return render_template("outfit_bot_dashboard.html", config={}, bot_status={})
-@app.route("/critical-errors") @login_required
-def critical_errors(): return render_template("critical_errors.html", critical_logs=[], bot_status={})
-@app.route("/id-finder/admin-panel") @login_required
-def id_finder_admin_panel(): return render_template("id_finder_admin_panel.html", admins={}, bot_status={})
-@app.route("/id-finder/commands") @login_required
-def id_finder_commands(): return render_template("id_finder_commands.html", bot_status={})
 
 if __name__ == "__main__": app.run(host="0.0.0.0", port=9002, debug=True)
