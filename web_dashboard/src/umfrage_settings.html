@@ -23,7 +23,7 @@
         <div>
             <a href="/" class="btn-back mb-4"><i class="bi bi-chevron-left"></i> ZURÜCK ZUR ÜBERSICHT</a>
             <h1 class="fw-bold mb-1 h3 text-white">Umfrage <span class="text-blue">Einstellungen</span></h1>
-            <p class="text-secondary small">Konfiguration, Statistiken und Umfragen für den Bot.</p>
+            <p class="text-secondary small">Konfiguration, Statistiken und Umfragen für den Umfrage Bot.</p>
         </div>
         <div class="status-badge-container mt-2">
             {% if umfrage_running %}
@@ -73,7 +73,7 @@
                                 {% endfor %}
                             </div>
                         </div>
-                        <button type="submit" class="btn-blue-action w-100 mt-2">ZEITPLAN SPEICHERN</button>
+                        <button type="submit" class="btn btn-primary w-100 mt-2">ZEITPLAN SPEICHERN</button>
                     </form>
                 </div>
             </div>
@@ -94,12 +94,12 @@
                     </div>
                 </div>
             </div>
-
+            
             <div class="card">
                 <div class="card-header"><h6>Sofort-Aktionen</h6></div>
                 <div class="card-body">
                     <form action="/umfrage/send-random" method="POST">
-                        <button type="submit" class="btn btn-blue-action w-100" {% if not umfrage_running %}disabled{% endif %}>JETZT UMFRAGE SENDEN</button>
+                        <button type="submit" class="btn btn-primary w-100" {% if not umfrage_running %}disabled{% endif %}>JETZT UMFRAGE SENDEN</button>
                     </form>
                     {% if not umfrage_running %}
                         <p class="text-danger small mt-2 mb-0">Bot muss laufen, um Aktionen zu senden.</p>
@@ -116,29 +116,29 @@
                         <input type="hidden" name="action" value="save_settings">
                         <div class="mb-3">
                             <label class="small text-secondary fw-bold mb-1">TELEGRAM BOT TOKEN</label>
-                            <input type="password" class="form-control" name="token" value="{{ config.umfrage.bot_token or '' }}">
+                            <input type="password" class="form-control" name="token" value="{{ config.bot_token or '' }}">
                         </div>
                         <div class="mb-3">
                             <label class="small text-secondary fw-bold mb-1">CHANNEL ID</label>
-                            <input type="text" class="form-control" name="channel_id" value="{{ config.umfrage.channel_id or '' }}">
+                            <input type="text" class="form-control" name="channel_id" value="{{ config.channel_id or '' }}">
                         </div>
                         <div class="mb-3">
                             <label class="small text-secondary fw-bold mb-1">TOPIC ID (OPTIONAL)</label>
-                            <input type="text" class="form-control" name="topic_id" value="{{ config.umfrage.topic_id or '' }}">
+                            <input type="text" class="form-control" name="topic_id" value="{{ config.topic_id or '' }}">
                         </div>
-                        <button type="submit" class="btn-blue-action w-100 mt-2">KONFIGURATION SPEICHERN</button>
+                        <button type="submit" class="btn btn-primary w-100 mt-2">KONFIGURATION SPEICHERN</button>
                     </form>
                 </div>
             </div>
-
+            
             <div class="row mt-4">
                 <div class="col-md-6">
                     <div class="card">
                         <div class="card-header"><h6>Alle Umfragen (Verfügbar)</h6></div>
                         <div class="card-body">
                             <form action="/umfrage-settings" method="POST">
-                                <input type="hidden" name="action" value="save_questions">
-                                <textarea class="form-control json-editor" name="questions_json" rows="15">{{ questions_json }}</textarea>
+                                <input type="hidden" name="action" value="save_umfragen">
+                                <textarea class="form-control json-editor" name="umfragen_json" rows="15">{{ umfragen_json }}</textarea>
                                 <button type="submit" class="btn btn-primary w-100 mt-3">Verfügbare Umfragen speichern</button>
                             </form>
                         </div>
@@ -149,8 +149,8 @@
                         <div class="card-header"><h6>Gestellte Umfragen (Protokoll)</h6></div>
                         <div class="card-body">
                             <form action="/umfrage-settings" method="POST">
-                                <input type="hidden" name="action" value="save_asked_questions">
-                                <textarea class="form-control json-editor" name="asked_questions_json" rows="15">{{ asked_questions_json }}</textarea>
+                                <input type="hidden" name="action" value="save_asked_umfragen">
+                                <textarea class="form-control json-editor" name="asked_umfragen_json" rows="15">{{ asked_umfragen_json }}</textarea>
                                 <div class="form-text mt-2">Entfernen Sie Umfragen hier, um sie wieder in den Pool der verfügbaren Umfragen zu verschieben.</div>
                                 <button type="submit" class="btn btn-warning w-100 mt-3">Protokoll der gestellten Umfragen speichern</button>
                             </form>
@@ -158,7 +158,7 @@
                     </div>
                 </div>
             </div>
-
+            
             <div class="card bg-black border-0 mt-4">
                 <div class="card-header border-0 pb-0"><h6 class="text-secondary small font-monospace">System Console</h6></div>
                 <div class="card-body p-0">

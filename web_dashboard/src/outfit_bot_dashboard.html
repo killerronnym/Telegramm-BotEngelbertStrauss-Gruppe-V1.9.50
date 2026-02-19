@@ -46,10 +46,10 @@
             <div class="card">
                 <div class="card-header"><h6>Manuelle Aktionen</h6></div>
                 <div class="card-body">
-                    <form action="{{ url_for('outfit_bot_start_contest') }}" method="post" class="mb-2">
+                    <form action="{{ url_for('outfit_bot_actions', action='start_contest') }}" method="post" class="mb-2">
                         <button type="submit" class="btn btn-info w-100 fw-bold" {{ 'disabled' if not is_running }}>📸 WETTBEWERB STARTEN</button>
                     </form>
-                    <form action="{{ url_for('outfit_bot_announce_winner') }}" method="post" class="mb-2">
+                    <form action="{{ url_for('outfit_bot_actions', action='announce_winner') }}" method="post" class="mb-2">
                         <button type="submit" class="btn btn-warning w-100 fw-bold" {{ 'disabled' if not is_running }}>🏆 GEWINNER AUSLOSEN</button>
                     </form>
 
@@ -57,7 +57,7 @@
                         <div class="border border-warning p-2 rounded text-center mt-3" style="background: rgba(255, 193, 7, 0.05);">
                             <p class="mb-1 text-warning small fw-bold">⚔️ Duell aktiv!</p>
                             <p class="small mb-2 text-secondary">{{ duel_status.contestants }}</p>
-                            <form action="{{ url_for('outfit_bot_end_duel') }}" method="post">
+                            <form action="{{ url_for('outfit_bot_actions', action='end_duel') }}" method="post">
                                 <button type="submit" class="btn btn-danger btn-sm w-100">DUELL BEENDEN</button>
                             </form>
                         </div>
@@ -71,7 +71,7 @@
             <div class="card">
                 <div class="card-header"><h6>⚙️ Konfiguration</h6></div>
                 <div class="card-body">
-                    <form action="{{ url_for('outfit_bot_save_config') }}" method="post">
+                    <form action="{{ url_for('outfit_bot_actions', action='save_config') }}" method="post">
                         <div class="mb-3">
                             <label class="small text-secondary fw-bold mb-1">BOT TOKEN</label>
                             <input type="password" class="form-control" name="BOT_TOKEN" value="{{ config.BOT_TOKEN or '' }}">
@@ -110,7 +110,7 @@
 
                         <div class="mb-3"><label class="small text-secondary fw-bold mb-1">ADMIN USER IDS (KOMMAGETRENNT)</label><textarea class="form-control font-monospace" name="ADMIN_USER_IDS" rows="2">{{ (config.ADMIN_USER_IDS or [])|join(', ') }}</textarea></div>
                         
-                        <button type="submit" class="btn-blue-action w-100 mt-3">KONFIGURATION SPEICHERN & NEUSTARTEN</button>
+                        <button type="submit" class="btn btn-primary w-100 mt-3">KONFIGURATION SPEICHERN & NEUSTARTEN</button>
                     </form>
                 </div>
             </div>
@@ -118,7 +118,7 @@
             <div class="card bg-black border-0 mt-4">
                 <div class="card-header border-0 pb-0 d-flex justify-content-between align-items-center">
                     <h6 class="text-secondary small font-monospace">System Console</h6>
-                    <form action="{{ url_for('outfit_bot_clear_logs') }}" method="post" class="m-0">
+                    <form action="{{ url_for('outfit_bot_actions', action='clear_logs') }}" method="post" class="m-0">
                         <button type="submit" class="btn btn-link text-danger text-decoration-none p-0 fw-bold small">CLEAR</button>
                     </form>
                 </div>
