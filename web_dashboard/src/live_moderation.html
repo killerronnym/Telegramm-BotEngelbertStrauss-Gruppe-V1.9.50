@@ -50,7 +50,7 @@
                 <ul class="list-group topic-list">
                     {% if chat_data.topics and chat_data.topics is mapping %}
                         {% for topic_id, topic_name in chat_data.topics.items() %}
-                            <a href="{{ url_for('live_moderation', chat_id=chat_id, topic_id=topic_id) }}" 
+                            <a href="{{ url_for('live_moderation', chat_id=chat_id, topic_id=topic_id) }}"
                                class="list-group-item {% if selected_chat_id == chat_id|string and selected_topic_id == topic_id|string %}active{% endif %}">
                                 #{{ topic_name }}
                             </a>
@@ -64,9 +64,17 @@
     <main class="chat-container">
         <header class="chat-header">
             <h4>Live Moderation</h4>
-            <button class="btn btn-outline-info btn-sm" data-bs-toggle="modal" data-bs-target="#configModal">
-                <i class="bi bi-gear-fill"></i> Texte einstellen
-            </button>
+            <div>
+                <a href="{{ url_for('live_moderation', chat_id=selected_chat_id, topic_id=selected_topic_id) }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-arrow-clockwise"></i> Aktualisieren
+                </a>
+                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-arrow-left"></i> Zurück zum Dashboard
+                </a>
+                <button class="btn btn-outline-info btn-sm" data-bs-toggle="modal" data-bs-target="#configModal">
+                    <i class="bi bi-gear-fill"></i> Texte einstellen
+                </button>
+            </div>
         </header>
 
         <div class="message-feed">
@@ -79,7 +87,7 @@
                         <span class="timestamp">{{ msg.ts | datetimeformat("%H:%M:%S | %d.%m.%Y") }}</span>
                     </div>
                     {% if msg.text %}<div class="message-text">{{ msg.text }}</div>{% endif %}
-                    
+
                     {% set file_id = msg.get('file_id') or (msg.get('media') and msg.get('media').get('file_id')) %}
                     {% if (msg.get('media_kind') == 'photo' or (msg.get('media') and msg.get('media').get('kind') == 'photo')) and file_id %}
                     <div class="message-media">
@@ -88,7 +96,7 @@
                     {% endif %}
                 </div>
                 <div class="message-actions">
-                    <button class="btn btn-sm btn-danger" 
+                    <button class="btn btn-sm btn-danger"
                             onclick="openDeleteModal('{{ msg.user_id }}', '{{ msg.chat_id }}', '{{ msg.msg_id or msg.message_id }}', '{{ (msg.full_name or msg.username)|escape }}', '{{ (topics.get(msg.chat_id|string, {}).get('name', 'Unbekannte Gruppe'))|escape }}', '{{ msg.topic_id or '' }}')">
                         <i class="bi bi-trash-fill"></i>
                     </button>
@@ -99,9 +107,82 @@
     </main>
 </div>
 
-<!-- Config & Delete Modals (shortened for brevity) -->
-<div class="modal fade" id="configModal" tabindex="-1">...</div>
-<div class="modal fade" id="deleteModal" tabindex="-1">...</div>
+<!-- Config Modal -->
+<div class="modal fade" id="configModal" tabindex="-1" aria-labelledby="configModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="configModalLabel">Vordefinierte Texte</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form action="{{ url_for('live_moderation_config') }}" method="post">
+                    <div class="mb-3">
+                        <label for="warning_text" class="form-label">Verwarnungstext</label>
+                        <textarea class="form-control" id="warning_text" name="warning_text" rows="4">{{ mod_config.warning_text }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="ban_text" class="form-label">Banntext</label>
+                        <textarea class="form-control" id="ban_text" name="ban_text" rows="4">{{ mod_config.ban_text }}</textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Speichern</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteModalLabel">Nachricht von <span id="modal_user_name"></span> löschen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('live_moderation_delete') }}" method="post">
+                <div class="modal-body">
+                    <input type="hidden" name="user_id" id="modal_user_id">
+                    <input type="hidden" name="chat_id" id="modal_chat_id">
+                    <input type="hidden" name="message_id" id="modal_message_id">
+                    <input type="hidden" name="topic_id" id="modal_topic_id">
+                    <input type="hidden" name="user_name" id="modal_user_name_hidden">
+                    <input type="hidden" name="chat_name" id="modal_chat_name_hidden">
+                    
+                    <p>Wähle eine Aktion aus:</p>
+                    
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="action" id="action_delete" value="delete" checked onchange="toggleReason('delete')">
+                        <label class="form-check-label" for="action_delete">Nur Nachricht löschen</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="action" id="action_warn" value="warn" onchange="toggleReason('warn')">
+                        <label class="form-check-label" for="action_warn">Nachricht löschen und Nutzer verwarnen</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="action" id="action_ban" value="ban" onchange="toggleReason('ban')">
+                        <label class="form-check-label" for="action_ban">Nachricht löschen und Nutzer bannen</label>
+                    </div>
+
+                    <div id="reason_container" style="display: none; margin-top: 1rem;">
+                        <label for="reason_preset" class="form-label">Grund für die Verwarnung</label>
+                        <select class="form-select" name="reason_preset">
+                            <option value="spam">Spam</option>
+                            <option value="off_topic">Off-Topic</option>
+                            <option value="unauthorized_advertising">Unerlaubte Werbung</option>
+                            <option value="insult">Beleidigung</option>
+                            <option value="other">Sonstiges</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="submit" class="btn btn-danger">Aktion ausführen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 <script>
     function openDeleteModal(uid, cid, mid, name, chat_name, tid) {
@@ -112,7 +193,8 @@
         document.getElementById('modal_user_name').innerText = name;
         document.getElementById('modal_user_name_hidden').value = name;
         document.getElementById('modal_chat_name_hidden').value = chat_name;
-        new bootstrap.Modal(document.getElementById('deleteModal')).show();
+        var deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+        deleteModal.show();
     }
     function toggleReason(val) {
         document.getElementById('reason_container').style.display = (val === 'warn' ? 'block' : 'none');

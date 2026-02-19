@@ -160,7 +160,7 @@ def index():
 @login_required
 def live_moderation():
     topics_data = load_json(TOPIC_REGISTRY_FILE)
-    mod_cfg = load_json(MODERATION_CONFIG_FILE)
+    mod_config = load_json(MODERATION_CONFIG_FILE, {'warning_text': '', 'ban_text': ''})
     selected_chat_id = request.args.get("chat_id")
     selected_topic_id = request.args.get("topic_id")
     messages = []
@@ -176,8 +176,52 @@ def live_moderation():
                     messages.append(m)
                 except: continue
     messages.reverse()
-    return render_template('live_moderation.html', topics=topics_data, messages=messages, 
-                           selected_chat_id=selected_chat_id, selected_topic_id=selected_topic_id, mod_cfg=mod_cfg)
+    return render_template('live_moderation.html', 
+                           topics=topics_data, 
+                           messages=messages, 
+                           selected_chat_id=selected_chat_id, 
+                           selected_topic_id=selected_topic_id, 
+                           mod_config=mod_config)
+
+@app.route('/live_moderation/config', methods=['POST'])
+@login_required
+def live_moderation_config():
+    mod_config = {
+        'warning_text': request.form.get('warning_text', ''),
+        'ban_text': request.form.get('ban_text', '')
+    }
+    save_json(MODERATION_CONFIG_FILE, mod_config)
+    flash('Die Konfiguration wurde gespeichert.', 'success')
+    return redirect(url_for('live_moderation'))
+
+@app.route('/live_moderation/delete', methods=['POST'])
+@login_required
+def live_moderation_delete():
+    user_id = request.form.get("user_id")
+    chat_id = request.form.get("chat_id")
+    message_id = request.form.get("message_id")
+    action = request.form.get("action")
+
+    # Nachricht löschen
+    tg_api_call("deleteMessage", {"chat_id": chat_id, "message_id": message_id})
+
+    if action == "warn":
+        # Nutzer verwarnen
+        mod_cfg = load_json(MODERATION_CONFIG_FILE)
+        warning_text = mod_cfg.get("warning_text", "Sie wurden verwarnt.")
+        tg_api_call("sendMessage", {"chat_id": user_id, "text": warning_text})
+        flash("Nachricht gelöscht und Nutzer verwarnt.", "success")
+    elif action == "ban":
+        # Nutzer bannen
+        mod_cfg = load_json(MODERATION_CONFIG_FILE)
+        ban_text = mod_cfg.get("ban_text", "Sie wurden gebannt.")
+        tg_api_call("sendMessage", {"chat_id": user_id, "text": ban_text})
+        tg_api_call("kickChatMember", {"chat_id": chat_id, "user_id": user_id})
+        flash("Nachricht gelöscht und Nutzer gebannt.", "danger")
+    else:
+        flash("Nachricht gelöscht.", "info")
+
+    return redirect(request.referrer or url_for("live_moderation"))
 
 @app.route("/id-finder/moderate", methods=["POST"])
 @login_required
