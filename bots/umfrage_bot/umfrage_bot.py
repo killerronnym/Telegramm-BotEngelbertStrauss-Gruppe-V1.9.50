@@ -40,7 +40,7 @@ def load_json(path, default):
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        log.error(f"Error loading JSON from {path}: {e}")
+        log.error(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Error loading JSON from {path}: {e}")
         return default
 
 def save_json(path, data):
@@ -49,7 +49,7 @@ def save_json(path, data):
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
     except Exception as e:
-        log.error(f"Error saving JSON to {path}: {e}")
+        log.error(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Error saving JSON to {path}: {e}")
 
 def get_last_sent_date():
     state = load_json(STATE_FILE, {})
@@ -76,25 +76,26 @@ def poll_fingerprint(p: dict) -> str:
 
 # ----------------- Core Logic -----------------
 async def send_poll():
+    log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Attempting to send poll...")
     cfg = load_json(CONFIG_FILE, {})
     token = cfg.get("bot_token", "").strip()
     chat_id = cfg.get("channel_id", "").strip()
     topic_id = cfg.get("topic_id", "")
 
     if not token or not chat_id:
-        log.warning("Bot token or channel_id is not configured.")
+        log.warning(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Bot token or channel_id is not configured.")
         return False
 
     all_polls = load_json(POLL_FILE, [])
     if not all_polls:
-        log.error("No polls found in umfragen.json")
+        log.error(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] No polls found in umfragen.json")
         return False
 
     used_hashes = set(load_json(USED_FILE, []))
     available_polls = [p for p in all_polls if poll_fingerprint(p) not in used_hashes]
 
     if not available_polls:
-        log.info("All polls have been sent. Resetting history.")
+        log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] All polls have been sent. Resetting history.")
         # Optional: Reset used questions
         # used_hashes = set()
         # save_json(USED_FILE, [])
@@ -109,16 +110,16 @@ async def send_poll():
 
     # --- Validation ---
     if len(frage) > 300:
-        log.warning(f"Poll question too long ({len(frage)} chars). Skipping.")
+        log.warning(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Poll question too long ({len(frage)} chars). Skipping.")
         return False
         
     if len(optionen) < 2 or len(optionen) > 10:
-        log.warning(f"Invalid number of options ({len(optionen)}). Skipping.")
+        log.warning(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Invalid number of options ({len(optionen)}). Skipping.")
         return False
 
     for opt in optionen:
         if len(str(opt)) > 100:
-            log.warning(f"Option too long ({len(str(opt))} chars). Skipping.")
+            log.warning(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Option too long ({len(str(opt))} chars). Skipping.")
             return False
 
     try:
@@ -130,7 +131,7 @@ async def send_poll():
              if str(topic_id).isdigit():
                  message_thread_id = int(topic_id)
         
-        log.info(f"Sending poll to {chat_id} (Topic: {message_thread_id}): {frage}")
+        log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Sending poll to {chat_id} (Topic: {message_thread_id}): {frage}")
 
         await bot.send_poll(
             chat_id=chat_id,
@@ -144,25 +145,25 @@ async def send_poll():
         used_hashes.add(poll_fingerprint(poll_data))
         save_json(USED_FILE, list(used_hashes))
         
-        log.info("Poll sent successfully.")
+        log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Poll sent successfully.")
         return True
         
     except TelegramError as e:
-        log.error(f"Telegram API Error: {e}")
+        log.error(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Telegram API Error: {e}")
         return False
     except Exception as e:
-        log.error(f"Unexpected error sending poll: {e}")
+        log.error(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Unexpected error sending poll: {e}")
         return False
 
 # ----------------- Scheduler and Trigger -----------------
 def process_trigger():
     if os.path.exists(TRIGGER_FILE):
-        log.info("Manual trigger detected.")
+        log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Manual trigger detected.")
         try:
             os.remove(TRIGGER_FILE)
             asyncio.run(send_poll())
         except Exception as e:
-            log.error(f"Error processing trigger: {e}")
+            log.error(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Error processing trigger: {e}")
 
 def check_schedule():
     cfg = load_json(CONFIG_FILE, {})
@@ -177,7 +178,7 @@ def check_schedule():
     try:
         scheduled_time = datetime.strptime(time_str, "%H:%M").time()
     except ValueError:
-        log.error(f"Invalid schedule time format: {time_str}")
+        log.error(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Invalid schedule time format: {time_str}")
         return
 
     now = datetime.now()
@@ -195,22 +196,22 @@ def check_schedule():
 
     # Check time
     if now.time() >= scheduled_time:
-        log.info("Scheduled time reached. Sending poll...")
+        log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Scheduled time reached. Sending poll...")
         success = asyncio.run(send_poll())
         if success:
             set_last_sent_date(today_date)
-            log.info(f"Schedule marked as done for {today_date}")
+            log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Schedule marked as done for {today_date}")
 
 # ----------------- Main Loop -----------------
 def main():
-    log.info("Umfrage Bot started.")
+    log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Umfrage Bot started.")
     
     while True:
         try:
             process_trigger()
             check_schedule()
         except Exception as e:
-            log.error(f"Error in main loop: {e}")
+            log.error(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Error in main loop: {e}")
         
         time.sleep(10)
 

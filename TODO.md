@@ -7,17 +7,6 @@
 ### Allgemein
 *   [ ] **Datenbank statt JSON:** Langfristig die Datenhaltung von JSON-Dateien auf eine robustere Lösung wie SQLite oder eine kleine Datenbank umstellen, um die Leistung und Zuverlässigkeit zu erhöhen.
 
-
-### Web-Dashboard (`web_dashboard/app.py`)
-
-
-### ID Finder Bot (`bots/id_finder_bot/id_finder_bot.py`)
-
-
-### Quiz & Umfrage Bots
-*   [ ] **Datum und Uhrzeit:** ❔ Quiz Bot & 📊 Umfrage Bot Datum und Uhrzeit Funktionalitäten (z.B. flexiblere Zeitsteuerung, Zeitstempel in Nachrichten).
-
-
 ---
 
 ## ✅ Fertiggestellte Aufgaben
@@ -43,3 +32,4 @@
 *   [x] **Effizienteres Log-Handling:** Das Einlesen von Log-Dateien optimieren, um den Speicherverbrauch bei großen Dateien zu reduzieren (z.B. durch zeilenweises Lesen oder Buffering).
 *   [x] **Code-Duplizierung reduzieren:** Wiederholte Code-Blöcke in den Flask-Routen (z.B. für die Bot-Verwaltung) identifizieren und in wiederverwendbare Funktionen auslagern.
 *   [x] **Caching für Konfigurationsdateien:** Eine Caching-Strategie für häufig gelesene JSON-Dateien implementieren, um die Anzahl der Festplattenzugriffe zu minimieren und die Performance zu verbessern.
+*   [x] **Datum und Uhrzeit:** ❔ Quiz Bot & 📊 Umfrage Bot Datum und Uhrzeit Funktionalitäten (z.B. flexiblere Zeitsteuerung, Zeitstempel in Nachrichten).

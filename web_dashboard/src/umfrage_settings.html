@@ -48,7 +48,35 @@
                     </form>
                 </div>
             </div>
-
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6>Zeitplan</h6>
+                </div>
+                <div class="card-body">
+                    <form action="/umfrage-settings" method="POST">
+                        <input type="hidden" name="action" value="save_schedule">
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" role="switch" id="schedule_enabled" name="schedule_enabled" {% if schedule.enabled %}checked{% endif %}>
+                            <label class="form-check-label" for="schedule_enabled">Zeitplan aktiv</label>
+                        </div>
+                        <div class="mb-3">
+                            <label class="small text-secondary fw-bold mb-1">Uhrzeit</label>
+                            <input type="time" class="form-control" name="schedule_time" value="{{ schedule.time or '12:00' }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="small text-secondary fw-bold mb-1">Tage</label>
+                            <div class="btn-group w-100" role="group">
+                                {% set week_days = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'] %}
+                                {% for i in range(7) %}
+                                    <input type="checkbox" class="btn-check" id="day_{{ i }}" name="schedule_days" value="{{ i }}" {% if i in schedule.days %}checked{% endif %}>
+                                    <label class="btn btn-outline-primary" for="day_{{ i }}">{{ week_days[i] }}</label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-blue-action w-100 mt-2">ZEITPLAN SPEICHERN</button>
+                    </form>
+                </div>
+            </div>
             <div class="card mb-4">
                 <div class="card-header"><h6>Statistiken</h6></div>
                 <div class="card-body">

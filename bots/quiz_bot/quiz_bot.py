@@ -77,25 +77,26 @@ def question_fingerprint(q: dict) -> str:
 
 # ----------------- Core Logic -----------------
 async def send_quiz():
+    log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Attempting to send quiz...")
     cfg = load_json(CONFIG_FILE, {})
     token = cfg.get("bot_token", "").strip()
     chat_id = cfg.get("channel_id", "").strip() # Can be channel or group ID
     topic_id = cfg.get("topic_id", "")
 
     if not token or not chat_id:
-        log.warning("Bot token or channel_id is not configured.")
+        log.warning(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Bot token or channel_id is not configured.")
         return False
 
     all_questions = load_json(QUIZ_FILE, [])
     if not all_questions:
-        log.error("No questions found in quizfragen.json")
+        log.error(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] No questions found in quizfragen.json")
         return False
 
     used_hashes = set(load_json(USED_FILE, []))
     available_questions = [q for q in all_questions if question_fingerprint(q) not in used_hashes]
 
     if not available_questions:
-        log.info("All questions have been asked. Resetting history.")
+        log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] All questions have been asked. Resetting history.")
         used_hashes = set()
         save_json(USED_FILE, [])
         available_questions = all_questions
@@ -109,20 +110,20 @@ async def send_quiz():
 
     # --- Validation for Telegram API Limits ---
     if len(frage) > 300:
-        log.warning(f"Question too long ({len(frage)} chars). Skipping.")
+        log.warning(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Question too long ({len(frage)} chars). Skipping.")
         return False
     
     if len(optionen) < 2 or len(optionen) > 10:
-        log.warning(f"Invalid number of options ({len(optionen)}). Skipping.")
+        log.warning(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Invalid number of options ({len(optionen)}). Skipping.")
         return False
         
     for opt in optionen:
         if len(str(opt)) > 100:
-             log.warning(f"Option too long ({len(str(opt))} chars). Skipping.")
+             log.warning(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Option too long ({len(str(opt))} chars). Skipping.")
              return False
 
     if antwort_idx < 0 or antwort_idx >= len(optionen):
-        log.warning(f"Invalid correct option index {antwort_idx}. Skipping.")
+        log.warning(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Invalid correct option index {antwort_idx}. Skipping.")
         return False
 
     try:
@@ -134,7 +135,7 @@ async def send_quiz():
              if str(topic_id).isdigit():
                  message_thread_id = int(topic_id)
         
-        log.info(f"Sending quiz to {chat_id} (Topic: {message_thread_id}): {frage}")
+        log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Sending quiz to {chat_id} (Topic: {message_thread_id}): {frage}")
         
         await bot.send_poll(
             chat_id=chat_id,
@@ -150,25 +151,25 @@ async def send_quiz():
         used_hashes.add(question_fingerprint(question_data))
         save_json(USED_FILE, list(used_hashes))
         
-        log.info("Quiz sent successfully.")
+        log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Quiz sent successfully.")
         return True
 
     except TelegramError as e:
-        log.error(f"Telegram API Error: {e}")
+        log.error(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Telegram API Error: {e}")
         return False
     except Exception as e:
-        log.error(f"Unexpected error sending quiz: {e}")
+        log.error(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Unexpected error sending quiz: {e}")
         return False
 
 # ----------------- Scheduler and Trigger -----------------
 def process_trigger():
     if os.path.exists(TRIGGER_FILE):
-        log.info("Manual trigger detected.")
+        log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Manual trigger detected.")
         try:
             os.remove(TRIGGER_FILE)
             asyncio.run(send_quiz())
         except Exception as e:
-            log.error(f"Error processing trigger: {e}")
+            log.error(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Error processing trigger: {e}")
 
 def check_schedule():
     cfg = load_json(CONFIG_FILE, {})
@@ -183,7 +184,7 @@ def check_schedule():
     try:
         scheduled_time = datetime.strptime(time_str, "%H:%M").time()
     except ValueError:
-        log.error(f"Invalid schedule time format: {time_str}")
+        log.error(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Invalid schedule time format: {time_str}")
         return
 
     now = datetime.now()
@@ -202,15 +203,15 @@ def check_schedule():
     # Check if time is reached (with 1 minute tolerance to avoid double send in same minute if loop is fast)
     # Actually, since we check last_sent_date, we just need to know if current time >= scheduled time
     if now.time() >= scheduled_time:
-        log.info("Scheduled time reached. Sending quiz...")
+        log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Scheduled time reached. Sending quiz...")
         success = asyncio.run(send_quiz())
         if success:
             set_last_sent_date(today_date)
-            log.info(f"Schedule marked as done for {today_date}")
+            log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Schedule marked as done for {today_date}")
 
 # ----------------- Main Loop -----------------
 def main():
-    log.info("Quiz Bot started.")
+    log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Quiz Bot started.")
     
     # Startup check: write PID or similar? Not needed, handled by dashboard.
     
@@ -219,7 +220,7 @@ def main():
             process_trigger()
             check_schedule()
         except Exception as e:
-            log.error(f"Error in main loop: {e}")
+            log.error(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Error in main loop: {e}")
         
         time.sleep(10)
 
