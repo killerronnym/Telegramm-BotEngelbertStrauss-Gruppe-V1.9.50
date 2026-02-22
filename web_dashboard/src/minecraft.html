@@ -41,7 +41,7 @@
                         <form method="post" action="{{ url_for('minecraft_status_start') }}" class="flex-grow-1"><button class="btn btn-success w-100 fw-bold" type="submit" {% if is_running %}disabled{% endif %}>▶ START</button></form>
                         <form method="post" action="{{ url_for('minecraft_status_stop') }}" class="flex-grow-1"><button class="btn btn-danger w-100 fw-bold" type="submit" {% if not is_running %}disabled{% endif %}>■ STOP</button></form>
                     </div>
-                    <form method="get" action="{{ url_for('minecraft_status_page') }}" class="m-0"><button class="btn btn-outline-light w-100" type="submit">🔄 REFRESH</button></form>
+                    <form method="get" action="{{ url_for('dashboard.minecraft_status_page') }}" class="m-0"><button class="btn btn-outline-light w-100" type="submit">🔄 REFRESH</button></form>
                 </div>
             </div>
 

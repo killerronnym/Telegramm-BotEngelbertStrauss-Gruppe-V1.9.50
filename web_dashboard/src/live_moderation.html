@@ -49,7 +49,7 @@
     <aside class="sidebar">
         <h5 class="fw-bold"><i class="bi bi-chat-left-text-fill me-2"></i>Kanäle</h5>
         <ul class="list-group topic-list mb-4">
-             <a href="{{ url_for('live_moderation', topic_id='all') }}"
+             <a href="{{ url_for('dashboard.live_moderation', topic_id='all') }}"
                 class="list-group-item {% if selected_topic_id == 'all' or not selected_topic_id %}active{% endif %}">
                 🌐 Alle Nachrichten
              </a>
@@ -60,7 +60,7 @@
                 <ul class="list-group topic-list">
                     {% if chat_data.topics and chat_data.topics is mapping %}
                         {% for topic_id, topic_name in chat_data.topics.items() %}
-                            <a href="{{ url_for('live_moderation', chat_id=chat_id, topic_id=topic_id) }}" 
+                            <a href="{{ url_for('dashboard.live_moderation', chat_id=chat_id, topic_id=topic_id) }}" 
                                class="list-group-item {% if selected_chat_id == chat_id|string and selected_topic_id == topic_id|string %}active{% endif %}">
                                 {{ topic_name }}
                             </a>
@@ -75,10 +75,10 @@
         <header class="chat-header">
             <h4>Live Moderation</h4>
             <div>
-                <a href="{{ url_for('live_moderation', chat_id=selected_chat_id, topic_id=selected_topic_id) }}" class="btn btn-outline-secondary btn-sm">
+                <a href="{{ url_for('dashboard.live_moderation', chat_id=selected_chat_id, topic_id=selected_topic_id) }}" class="btn btn-outline-secondary btn-sm">
                     <i class="bi bi-arrow-clockwise"></i> Aktualisieren
                 </a>
-                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
+                <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm">
                     <i class="bi bi-arrow-left"></i> Zurück zum Dashboard
                 </a>
                 <button class="btn btn-outline-info btn-sm" data-bs-toggle="modal" data-bs-target="#configModal">
@@ -134,7 +134,7 @@
                 <h5 class="modal-title" id="configModalLabel">Moderations-Einstellungen</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form action="{{ url_for('live_moderation_config') }}" method="post">
+            <form action="{{ url_for('dashboard.live_moderation_config') }}" method="post">
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="max_warnings" class="form-label">Anzahl Verwarnungen bis zum Bann</label>
@@ -182,7 +182,7 @@
                 <h5 class="modal-title" id="deleteModalLabel">Nachricht von <span id="modal_user_name"></span> löschen</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form action="{{ url_for('live_moderation_delete') }}" method="post">
+            <form action="{{ url_for('dashboard.live_moderation_delete') }}" method="post">
                 <div class="modal-body">
                     <input type="hidden" name="user_id" id="modal_user_id">
                     <input type="hidden" name="chat_id" id="modal_chat_id">

@@ -24,61 +24,28 @@
             background: #1a1d20;
             border: 1px solid #343a40;
         }
-        .form-control {
-            background-color: #2b3035;
-            border-color: #495057;
-            color: #fff;
-        }
-        .form-control:focus {
-            background-color: #32383e;
-            border-color: #0d6efd;
-            color: #fff;
-            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
-        }
-        .btn-primary {
-            font-weight: bold;
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
         }
     </style>
+    <script>
+        window.onload = function() {
+            setTimeout(function() {
+                window.location.href = "{{ url_for('dashboard.index') }}";
+            }, 1500);
+        };
+    </script>
 </head>
 <body>
-    <div class="login-card">
-        <div class="text-center mb-4">
-            <i class="bi bi-robot" style="font-size: 3rem; color: #0d6efd;"></i>
-            <h2 class="mt-2">Bot Login</h2>
-            <p class="text-muted small">Bitte Zugangsdaten eingeben</p>
-        </div>
-        
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            {% for category, message in messages %}
-              <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }} mb-4" role="alert">
-                <small>{{ message }}</small>
-              </div>
-            {% endfor %}
-          {% endif %}
-        {% endwith %}
-
-        <form method="POST">
-            <div class="mb-3">
-                <label for="username" class="form-label">Benutzername</label>
-                <div class="input-group">
-                    <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-person"></i></span>
-                    <input type="text" class="form-control" id="username" name="username" required autofocus placeholder="Admin">
-                </div>
+    <div class="login-card text-center">
+        <div class="mb-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
             </div>
-            <div class="mb-4">
-                <label for="password" class="form-label">Passwort</label>
-                <div class="input-group">
-                    <span class="input-group-text bg-dark border-secondary text-secondary"><i class="bi bi-lock"></i></span>
-                    <input type="password" class="form-control" id="password" name="password" required placeholder="••••••••">
-                </div>
-            </div>
-            <button type="submit" class="btn btn-primary w-100 py-2 mb-3">Anmelden</button>
-        </form>
-        
-        <div class="text-center">
-            <small class="text-muted">Zugriff nur für autorisiertes Personal</small>
         </div>
+        <h2>Anmeldung erfolgt</h2>
+        <p class="text-muted">Du wirst automatisch weitergeleitet...</p>
     </div>
 </body>
 </html>
