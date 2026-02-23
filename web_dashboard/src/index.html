@@ -19,6 +19,8 @@
     /* Edit Mode Styles */
     .edit-mode .card { cursor: move; }
     .edit-mode .card:hover { border-color: #f59e0b !important; }
+    .edit-mode .dashboard-title-edit { display: block !important; }
+    .edit-mode .dashboard-title-static { display: none !important; }
     
     .wiggle { animation: wiggle 0.3s infinite; }
     @keyframes wiggle {
@@ -72,7 +74,12 @@
 <div class="dashboard-container">
     <div class="d-flex justify-content-between align-items-center mb-5">
         <div>
-            <h1 class="fw-bold mb-1 h3 text-white">Bot <span class="text-blue">Steuerung</span></h1>
+            <h1 class="fw-bold mb-1 h3 text-white">
+                <span class="dashboard-title-static">{{ layout.title if layout and layout.title else 'Bot' }}</span>
+                <input type="text" id="inputDashboardTitle" class="dashboard-title-edit bg-transparent border-0 border-bottom border-warning text-white fw-bold h3 mb-0" 
+                       value="{{ layout.title if layout and layout.title else 'Bot' }}" style="display:none; outline: none; width: auto;">
+                <span class="text-blue">Steuerung</span>
+            </h1>
             <p class="text-secondary small">Zentrale Verwaltung aller Bot-Systeme (Modus: Gast-Admin)</p>
         </div>
         <div>
@@ -128,11 +135,9 @@
                     {% if item.type == 'update' %}
                         <div id="updateBox">
                             <div id="updateNotify" class="update-notify"></div>
-                            
                             <button id="btnManualUpdateCheck" class="btn-settings-big btn-primary">
                                 <i class="bi bi-arrow-repeat me-1"></i> NACH UPDATES SCANNEN
                             </button>
-
                             <div id="updateInfoBox" class="update-info-box">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <span class="badge bg-primary">v<span id="newVersionTag"></span> verfügbar</span>
@@ -141,7 +146,6 @@
                                 <div class="changelog-text" id="updateChangelog"></div>
                                 <button id="btnInstallNow" class="btn btn-success w-100 mt-3 fw-bold btn-action-sm">JETZT INSTALLIEREN</button>
                             </div>
-
                             <div class="progress mt-3" id="updateProgress" style="display:none; height: 8px;">
                                 <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width: 0%"></div>
                             </div>
@@ -158,7 +162,6 @@
                                 {% endif %}
                             </div>
                         {% endif %}
-
                         {% if item.type != 'update' %}
                             <a href="{{ item.link }}" class="btn-settings-big {% if item.type == 'logs' %}btn-danger{% endif %}">
                                 {{ 'LOGS ANSEHEN' if item.type == 'logs' else ('ÖFFNEN' if item.type == 'open' else 'EINSTELLUNGEN') }}
@@ -182,6 +185,7 @@
     const grid = document.getElementById('sortableGrid');
     const editBtn = document.getElementById('btnEditLayout');
     const saveBtn = document.getElementById('btnSaveLayout');
+    const titleInput = document.getElementById('inputDashboardTitle');
     let sortable = null;
 
     // Load saved layout
@@ -212,10 +216,12 @@
     saveBtn.onclick = async () => {
         const order = Array.from(grid.children).map(child => child.dataset.id);
         const hidden = Array.from(document.querySelectorAll('.hidden-card')).map(el => el.dataset.id);
+        const title = titleInput.value;
+        
         const res = await fetch('/api/dashboard/save-layout', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ order, hidden })
+            body: JSON.stringify({ order, hidden, title })
         });
         if (res.ok) location.reload();
     };
@@ -233,65 +239,66 @@
     const infoBox = document.getElementById('updateInfoBox');
     let updateData = null;
 
-    scanBtn.onclick = async () => {
-        scanBtn.disabled = true;
-        scanBtn.innerHTML = '<i class="bi bi-arrow-repeat spin"></i> PRÜFE...';
-        notify.style.display = 'block';
-        notify.style.background = 'rgba(255,255,255,0.05)';
-        notify.style.color = '#fff';
-        notify.innerText = 'Suche nach neuen Versionen...';
+    if (scanBtn) {
+        scanBtn.onclick = async () => {
+            scanBtn.disabled = true;
+            scanBtn.innerHTML = '<i class="bi bi-arrow-repeat spin"></i> SCANNE...';
+            notify.style.display = 'block';
+            notify.style.background = 'rgba(255,255,255,0.05)';
+            notify.style.color = '#fff';
+            notify.innerText = 'Suche nach neuen Versionen...';
 
-        try {
-            const res = await fetch('/api/update/check');
-            const data = await res.json();
-            if (data.update_available) {
-                updateData = data;
-                notify.style.background = 'rgba(59, 130, 246, 0.2)';
-                notify.style.color = '#60a5fa';
-                notify.innerText = 'Neue Version gefunden!';
-                
-                document.getElementById('newVersionTag').innerText = data.latest_version;
-                document.getElementById('newVersionDate').innerText = new Date(data.published_at).toLocaleDateString();
-                document.getElementById('updateChangelog').innerText = data.changelog || 'Keine Details verfügbar.';
-                
-                scanBtn.style.display = 'none';
-                infoBox.style.display = 'block';
-            } else {
-                notify.style.background = 'rgba(16, 185, 129, 0.2)';
-                notify.style.color = '#10b981';
-                notify.innerText = 'Software ist aktuell.';
-                scanBtn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> NACH UPDATES SCANNEN';
+            try {
+                const res = await fetch('/api/update/check');
+                const data = await res.json();
+                if (data.update_available) {
+                    updateData = data;
+                    notify.style.background = 'rgba(59, 130, 246, 0.2)';
+                    notify.style.color = '#60a5fa';
+                    notify.innerText = 'Neue Version gefunden!';
+                    document.getElementById('newVersionTag').innerText = data.latest_version;
+                    document.getElementById('newVersionDate').innerText = new Date(data.published_at).toLocaleDateString();
+                    document.getElementById('updateChangelog').innerText = data.changelog || 'Keine Details verfügbar.';
+                    scanBtn.style.display = 'none';
+                    infoBox.style.display = 'block';
+                } else {
+                    notify.style.background = 'rgba(16, 185, 129, 0.2)';
+                    notify.style.color = '#10b981';
+                    notify.innerText = 'Software ist aktuell.';
+                    scanBtn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> NACH UPDATES SCANNEN';
+                    scanBtn.disabled = false;
+                    setTimeout(() => notify.style.display = 'none', 5000);
+                }
+            } catch (e) {
+                notify.style.background = 'rgba(239, 68, 68, 0.2)';
+                notify.style.color = '#ef4444';
+                notify.innerText = 'Server nicht erreichbar.';
                 scanBtn.disabled = false;
-                setTimeout(() => notify.style.display = 'none', 5000);
             }
-        } catch (e) {
-            notify.style.background = 'rgba(239, 68, 68, 0.2)';
-            notify.style.color = '#ef4444';
-            notify.innerText = 'Server nicht erreichbar.';
-            scanBtn.disabled = false;
-        }
-    };
+        };
+    }
 
-    document.getElementById('btnInstallNow').onclick = async () => {
-        if(!confirm("Update jetzt installieren?")) return;
-        document.getElementById('updateProgress').style.display = 'block';
-        infoBox.style.display = 'none';
-        notify.innerText = 'Installation läuft...';
-
-        const res = await fetch('/api/update/install', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(updateData)
-        });
-
-        if(res.ok) {
-            setInterval(async () => {
-                const sRes = await fetch('/api/update/status');
-                const s = await sRes.json();
-                document.querySelector('#updateProgress .progress-bar').style.width = s.progress + '%';
-                if(s.status === 'finished') location.reload();
-            }, 1000);
-        }
-    };
+    const installBtn = document.getElementById('btnInstallNow');
+    if (installBtn) {
+        installBtn.onclick = async () => {
+            if(!confirm("Update jetzt installieren?")) return;
+            document.getElementById('updateProgress').style.display = 'block';
+            infoBox.style.display = 'none';
+            notify.innerText = 'Installation läuft...';
+            const res = await fetch('/api/update/install', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(updateData)
+            });
+            if(res.ok) {
+                setInterval(async () => {
+                    const sRes = await fetch('/api/update/status');
+                    const s = await sRes.json();
+                    document.querySelector('#updateProgress .progress-bar').style.width = s.progress + '%';
+                    if(s.status === 'finished') location.reload();
+                }, 1000);
+            }
+        };
+    }
 </script>
 {% endblock %}
