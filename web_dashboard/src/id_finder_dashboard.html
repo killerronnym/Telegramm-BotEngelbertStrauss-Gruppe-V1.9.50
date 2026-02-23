@@ -28,6 +28,8 @@
     .btn-amber:hover { background-color: #d97706; color: #000; }
     .btn-rose { background-color: #e11d48; }
     .btn-rose:hover { background-color: #be123c; }
+    .btn-indigo { background-color: #6366f1; }
+    .btn-indigo:hover { background-color: #4f46e5; }
 
     .form-check-input { width: 3em; height: 1.5em; background-color: var(--input-field-bg); border-color: var(--border-muted); }
     .form-check-input:checked { background-color: var(--blue-accent); border-color: var(--blue-accent); }
@@ -91,7 +93,6 @@
                 <div class="col-md-12">
                     <label class="form-label-small">Log-Topic-ID (Optional)</label>
                     <input type="text" class="form-control" name="admin_log_topic_id" value="{{ config.admin_log_topic_id or '' }}" placeholder="z.B. 123">
-                    <div class="form-text small opacity-50">Wird vom Bot als <code class="text-rose-400">admin_log_topic_id</code> gelesen. (Fallback: <code class="text-rose-400">log_topic_id</code>)</div>
                 </div>
             </div>
 
@@ -107,14 +108,12 @@
                         <input class="form-check-input" type="checkbox" name="delete_commands" {% if config.delete_commands %}checked{% endif %}>
                         <div>
                             <label class="fw-bold text-white mb-0">Admin-Befehle automatisch löschen</label>
-                            <div class="small text-secondary">Löscht Nachrichten wie <code class="text-info">/warn 123456 Grund</code> sofort nach Ausführung.</div>
                         </div>
                     </div>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label-small">Bot-Antworten löschen nach (Sekunden)</label>
                     <input type="number" class="form-control" name="bot_message_cleanup_seconds" value="{{ config.bot_message_cleanup_seconds or 0 }}">
-                    <div class="form-text small opacity-50">0 = Nie löschen (Antworten bleiben stehen).</div>
                 </div>
             </div>
 
@@ -124,8 +123,6 @@
             <h6 class="mb-3 text-white d-flex align-items-center gap-2">
                 <i class="bi bi-file-earmark-text text-info"></i> Message-Logging
             </h6>
-            <p class="small text-secondary mb-4">Hier kannst du einstellen, ob der Bot Chatverläufe in der Datenbank mitschreibt.</p>
-            
             <div class="row g-4 mb-4">
                 <div class="col-md-6">
                     <div class="form-check form-switch d-flex align-items-center gap-3 mb-3">
@@ -161,42 +158,82 @@
             </div>
         </div>
     </div>
+
+    <!-- ⚡ Schnellzugriff-Leiste -->
+    <div class="d-flex flex-wrap gap-2 mb-5">
+        <a href="{{ url_for('dashboard.id_finder_commands') }}" class="btn-quick-action btn-cyan">
+            <i class="bi bi-terminal"></i> Befehls-Dokumentation
+        </a>
+        <a href="{{ url_for('dashboard.id_finder_admin_panel') }}" class="btn-quick-action btn-amber">
+            <i class="bi bi-shield-lock-fill"></i> Admin Panel
+        </a>
+        <a href="{{ url_for('dashboard.id_finder_analytics') }}" class="btn-quick-action btn-rose">
+            <i class="bi bi-bar-chart-line-fill"></i> Analytics
+        </a>
+        <!-- NEUER BUTTON: Moderation-System Modal -->
+        <button type="button" class="btn-quick-action btn-indigo" data-bs-toggle="modal" data-bs-target="#moderationSettingsModal">
+            <i class="bi bi-shield-shaded"></i> Moderation Einstellungen
+        </a>
+    </div>
+
+    <!-- Moderation Settings Modal -->
+    <div class="modal fade" id="moderationSettingsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content bg-dark text-white border-secondary">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title">⚙️ Moderations-System Konfiguration</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label-small">Max. Verwarnungen bis Aktion</label>
+                        <input type="number" class="form-control bg-dark text-white border-secondary" name="max_warnings" value="{{ config.max_warnings or 3 }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label-small">Aktion bei Limit-Erreichung</label>
+                        <select name="punishment_type" class="form-select bg-dark text-white border-secondary">
+                            <option value="none" {% if config.punishment_type == 'none' %}selected{% endif %}>Nichts tun</option>
+                            <option value="mute" {% if config.punishment_type == 'mute' %}selected{% endif %}>Stummschalten (Mute)</option>
+                            <option value="kick" {% if config.punishment_type == 'kick' %}selected{% endif %}>Kicken (Rauswerfen)</option>
+                            <option value="ban" {% if config.punishment_type == 'ban' %}selected{% endif %}>Bannen (Permanent)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label-small">Mute Dauer (Stunden)</label>
+                        <input type="number" class="form-control bg-dark text-white border-secondary" name="mute_duration" value="{{ config.mute_duration or 24 }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label-small">Lösch-Timer Meldungen (Sek.)</label>
+                        <input type="number" class="form-control bg-dark text-white border-secondary" name="cleanup_notification_seconds" value="{{ config.cleanup_notification_seconds or 60 }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label-small">Bot für Privatnachrichten</label>
+                        <select name="warning_bot_name" class="form-select bg-dark text-white border-secondary">
+                            <option value="invite" {% if config.warning_bot_name == 'invite' %}selected{% endif %}>Invite Bot</option>
+                            <option value="id_finder" {% if config.warning_bot_name == 'id_finder' %}selected{% endif %}>ID-Finder Bot</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="submit" class="btn btn-primary">Speichern</button>
+                </div>
+            </div>
+        </div>
+    </div>
     </form>
 
     <!-- Hidden Action Forms -->
     <form id="botActionFormStart" action="/bot-action/id_finder/start" method="POST" style="display:none;"></form>
     <form id="botActionFormStop" action="/bot-action/id_finder/stop" method="POST" style="display:none;"></form>
 
-    <!-- ⚡ Schnellzugriff-Leiste -->
-    <div class="d-flex flex-wrap gap-2 mb-5">
-        <a href="{{ url_for('dashboard.id_finder_commands') }}" class="btn-quick-action btn-cyan">
-            <i class="bi bi-terminal"></i> Zur Befehls-Dokumentation
-        </a>
-        <a href="{{ url_for('dashboard.id_finder_admin_panel') }}" class="btn-quick-action btn-amber">
-            <i class="bi bi-shield-lock-fill"></i> Admin Panel öffnen
-        </a>
-        <a href="{{ url_for('dashboard.id_finder_analytics') }}" class="btn-quick-action btn-rose">
-            <i class="bi bi-bar-chart-line-fill"></i> Analytics
-        </a>
-    </div>
-
-    <!-- Rechts: Registry -->
+    <!-- Registry -->
     <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h6><i class="bi bi-people-fill text-primary"></i> User Registry</h6>
             <span class="badge bg-dark border border-white border-opacity-10 px-3">{{ user_registry|length }} Users</span>
         </div>
         <div class="card-body p-0">
-            <div class="px-3 py-3">
-                <label class="form-label-small">Suche (ID / Username / Name)</label>
-                <div class="d-flex gap-2">
-                    <input type="text" id="registrySearch" class="form-control" placeholder="z.B. 123456, username, Max Mustermann">
-                    <button class="btn btn-outline-secondary px-4"><i class="bi bi-search"></i> Suchen</button>
-                    <button class="btn btn-outline-secondary px-4"><i class="bi bi-brush"></i> Reset</button>
-                </div>
-                <div class="form-text small opacity-50 mt-1">Tipp: Enter = Server-Suche. Während du tippst, filtert es zusätzlich live in der Tabelle.</div>
-            </div>
-            
             <div class="table-responsive">
                 <table class="table align-middle mb-0" id="registryTable">
                     <thead>
@@ -229,10 +266,9 @@
                                 </td>
                                 <td class="text-end pe-4">
                                     <div class="d-flex justify-content-end gap-1">
-                                        <button class="btn btn-outline-info btn-sm px-2" onclick="copyToClipboard('{{ uid }}')">Copy ID</button>
-                                        <a href="{{ url_for('dashboard.id_finder_user_detail', user_id=uid) }}" class="btn btn-success btn-sm px-2"><i class="bi bi-file-earmark-text"></i> Verlauf</a>
+                                        <a href="{{ url_for('dashboard.id_finder_user_detail', user_id=uid) }}" class="btn btn-success btn-sm px-2"><i class="bi bi-file-earmark-text"></i> Verlauf & Moderation</a>
                                         <form action="{{ url_for('dashboard.id_finder_delete_user', user_id=uid) }}" method="POST" class="m-0" onsubmit="return confirm('User wirklich aus der Registry löschen?')">
-                                            <button type="submit" class="btn btn-outline-danger btn-sm px-2"><i class="bi bi-trash"></i> Registry</button>
+                                            <button type="submit" class="btn btn-outline-danger btn-sm px-2"><i class="bi bi-trash"></i></button>
                                         </form>
                                     </div>
                                 </td>
@@ -247,23 +283,4 @@
         </div>
     </div>
 </div>
-
-<script>
-    document.getElementById("registrySearch").addEventListener("input", function() {
-        let q = this.value.toLowerCase();
-        let rows = document.querySelectorAll("#registryTable tbody tr");
-        rows.forEach(row => {
-            row.style.display = row.innerText.toLowerCase().includes(q) ? "" : "none";
-        });
-    });
-
-    function copyToClipboard(text) {
-        navigator.clipboard.writeText(text).then(() => {
-            const btn = event.target;
-            const originalText = btn.innerText;
-            btn.innerText = 'Kopiert!';
-            setTimeout(() => { btn.innerText = originalText; }, 2000);
-        });
-    }
-</script>
 {% endblock %}

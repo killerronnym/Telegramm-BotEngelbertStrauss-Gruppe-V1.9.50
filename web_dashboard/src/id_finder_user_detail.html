@@ -19,6 +19,14 @@
         object-fit: cover;
         background: #2d3748;
     }
+    .warning-card {
+        background-color: rgba(245, 158, 11, 0.05);
+        border: 1px solid rgba(245, 158, 11, 0.2);
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+        position: relative;
+    }
     .message-card {
         background-color: var(--card-base);
         border: 1px solid var(--border-muted);
@@ -37,13 +45,13 @@
 
 <div class="container py-5">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="text-white">Nutzer-Aktivität</h2>
+        <h2 class="text-white">Nutzer-Aktivität & Moderation</h2>
         <div class="d-flex gap-2">
+            <button class="btn btn-outline-warning" onclick="clearWarnings({{ user.telegram_id }})">
+                <i class="bi bi-shield-x"></i> Alle Warnungen löschen
+            </button>
             <a href="{{ url_for('dashboard.id_finder_dashboard') }}" class="btn btn-outline-secondary">
                 <i class="bi bi-person-lines-fill"></i> Zur Registry
-            </a>
-            <a href="{{ url_for('dashboard.live_moderation') }}" class="btn btn-outline-secondary">
-                <i class="bi bi-chat-dots"></i> Zur Moderation
             </a>
         </div>
     </div>
@@ -53,32 +61,77 @@
         <div>
             <h3 class="mb-1">{{ user.first_name }} {{ user.last_name or '' }}</h3>
             <p class="text-muted mb-1">ID: <code>{{ user.telegram_id }}</code> | Username: {% if user.username %}<span class="text-info">@{{ user.username }}</span>{% else %}<span class="text-muted">keiner</span>{% endif %}</p>
-            <p class="mb-0 small text-dim">
-                Erster Kontakt: {{ user.first_contact.strftime('%d.%m.%Y %H:%M') if user.first_contact else '—' }}
-            </p>
+            <div class="d-flex align-items-center gap-3">
+                <span class="badge {% if user.warnings|length > 0 %}bg-warning text-dark{% else %}bg-success{% endif %}">
+                    {{ user.warnings|length }} Verwarnungen
+                </span>
+                <span class="small text-dim">Erster Kontakt: {{ user.first_contact.strftime('%d.%m.%Y %H:%M') if user.first_contact else '—' }}</span>
+            </div>
         </div>
     </div>
 
-    <h4 class="text-white mb-4">Nachrichtenverlauf (Letzte 100)</h4>
-
-    {% if messages %}
-        {% for msg in messages %}
-        <div class="message-card">
-            <p class="text-white mb-1">{{ msg.text }}</p>
-            <div class="message-meta">
-                <span><i class="bi bi-clock"></i> {{ msg.timestamp.strftime('%d.%m.%Y %H:%M') }}</span>
-                <span><i class="bi bi-hash"></i> {{ msg.chat_type }}</span>
-                {% if msg.message_thread_id %}
-                    <span><i class="bi bi-tag"></i> Topic ID: {{ msg.message_thread_id }}</span>
-                {% endif %}
-            </div>
+    <div class="row">
+        <div class="col-lg-4">
+            <h4 class="text-white mb-3">⚠️ Verwarnungen</h4>
+            {% if user.warnings %}
+                {% for warning in user.warnings | reverse %}
+                <div class="warning-card">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <p class="text-warning fw-bold mb-1">Grund: {{ warning.reason }}</p>
+                        <button class="btn btn-sm text-danger p-0" onclick="deleteSingleWarning({{ warning.id }})">
+                            <i class="bi bi-x-circle"></i>
+                        </button>
+                    </div>
+                    <p class="small text-muted mb-0">{{ warning.timestamp.strftime('%d.%m.%Y %H:%M') }}</p>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="alert alert-success bg-opacity-10 border-success text-success small">
+                    Keine aktiven Verwarnungen.
+                </div>
+            {% endif %}
         </div>
-        {% endfor %}
-    {% else %}
-        <div class="alert alert-info bg-dark border-secondary text-white">
-            <i class="bi bi-info-circle"></i> Bisher keine Nachrichten von diesem Nutzer geloggt.
+        
+        <div class="col-lg-8">
+            <h4 class="text-white mb-3">💬 Letzte Nachrichten</h4>
+            {% if messages %}
+                {% for msg in messages %}
+                <div class="message-card {% if msg.is_deleted %}border-danger bg-danger bg-opacity-10{% endif %}">
+                    <p class="text-white mb-1">{{ msg.text }}</p>
+                    {% if msg.is_deleted %}
+                        <p class="small text-danger fw-bold mb-1">🗑️ GELÖSCHT: {{ msg.deletion_reason }}</p>
+                    {% endif %}
+                    <div class="message-meta">
+                        <span><i class="bi bi-clock"></i> {{ msg.timestamp.strftime('%d.%m.%Y %H:%M') }}</span>
+                        <span><i class="bi bi-hash"></i> {{ msg.chat_type }}</span>
+                        {% if msg.message_thread_id %}
+                            <span><i class="bi bi-tag"></i> Topic ID: {{ msg.message_thread_id }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="alert alert-info bg-dark border-secondary text-white small">
+                    Keine Nachrichten geloggt.
+                </div>
+            {% endif %}
         </div>
-    {% endif %}
-
+    </div>
 </div>
+
+<script>
+    async function deleteSingleWarning(id) {
+        if(confirm("Diese Verwarnung löschen?")) {
+            const res = await fetch(`/api/moderation/warnings/delete/${id}`, {method: 'POST'});
+            if(res.ok) location.reload();
+        }
+    }
+
+    async function clearWarnings(uid) {
+        if(confirm("WIRKLICH ALLE Verwarnungen für diesen Nutzer löschen?")) {
+            const res = await fetch(`/api/moderation/warnings/clear/${uid}`, {method: 'POST'});
+            if(res.ok) location.reload();
+        }
+    }
+</script>
 {% endblock %}

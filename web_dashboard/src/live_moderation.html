@@ -36,7 +36,7 @@
     .message-header .user-name { font-weight: 700; }
     .message-header .timestamp { font-size: 0.75rem; color: var(--accent-color); }
     .message-header .topic-badge { font-size: 0.65rem; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; color: var(--text-muted); }
-    .message-header .warning-badge { font-size: 0.65rem; background: rgba(245, 158, 11, 0.1); border: 1px solid #f59e0b; color: #f59e0b; padding: 2px 6px; border-radius: 4px; }
+    .message-header .warning-badge { font-size: 0.65rem; background: rgba(245, 158, 11, 0.1); border: 1px solid #f59e0b; color: #f59e0b; padding: 2px 6px; border-radius: 4px; cursor: pointer; }
     .message-text { color: var(--text-muted); white-space: pre-wrap; word-break: break-word; }
     .deletion-info { font-size: 0.7rem; color: #ef4444; font-weight: bold; margin-top: 0.2rem; text-transform: uppercase; }
     .message-actions { opacity: 0; margin-left: auto; transition: opacity 0.2s; display: flex; gap: 0.5rem; }
@@ -87,13 +87,25 @@
             </div>
             <div class="modal-body">
                 <div class="mb-3">
-                    <label class="form-label small text-muted">MAX. VERWARNUNGEN BIS BAN-HINWEIS</label>
+                    <label class="form-label small text-muted">MAX. VERWARNUNGEN BIS AKTION</label>
                     <input type="number" id="setMaxWarnings" class="form-control bg-dark text-white border-secondary" value="3">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small text-muted">AKTION BEI LIMIT-ERREICHUNG</label>
+                    <select id="setPunishmentType" class="form-select bg-dark text-white border-secondary">
+                        <option value="none">Nichts tun (Nur zählen)</option>
+                        <option value="mute">Stummschalten (Mute)</option>
+                        <option value="kick">Kicken (Rauswerfen)</option>
+                        <option value="ban">Bannen (Permanent)</option>
+                    </select>
+                </div>
+                <div class="mb-3" id="muteDurationContainer">
+                    <label class="form-label small text-muted">MUTE DAUER (STUNDEN)</label>
+                    <input type="number" id="setMuteDuration" class="form-control bg-dark text-white border-secondary" value="24">
                 </div>
                 <div class="mb-3">
                     <label class="form-label small text-muted">LÖSCH-TIMER FÜR MELDUNGEN (SEKUNDEN)</label>
                     <input type="number" id="setCleanupSeconds" class="form-control bg-dark text-white border-secondary" value="60">
-                    <div class="form-text small">Wie lange die "Nachricht gelöscht"-Meldung im Chat bleiben soll. 0 = Deaktiviert.</div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label small text-muted">BOT FÜR PRIVATNACHRICHTEN</label>
@@ -152,6 +164,20 @@
 </div>
 
 <script>
+    // Utility functions defined at the top scope
+    function escapeHTML(str) { 
+        if (!str) return '';
+        return str.toString().replace(/[&<>"']/g, m => ({
+            '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+        }[m])); 
+    }
+
+    function formatTimestamp(ts_str) { 
+        if (!ts_str) return '—';
+        const d = new Date(ts_str); 
+        return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); 
+    }
+
     document.addEventListener("DOMContentLoaded", function() {
         const messageFeed = document.getElementById('message-feed');
         const topicList = document.getElementById('topic-list');
@@ -164,34 +190,44 @@
             document.getElementById('modReasonCustom').style.display = (this.value === 'Sonstiges') ? 'block' : 'none';
         });
 
+        document.getElementById('setPunishmentType').addEventListener('change', function() {
+            document.getElementById('muteDurationContainer').style.display = (this.value === 'mute') ? 'block' : 'none';
+        });
+
         async function fetchTopics() {
-            const response = await fetch('/api/topics');
-            const topics = await response.json();
-            let html = `<button class="list-group-item ${currentTopic === 'all' ? 'active' : ''}" data-topic-id="all"><i class="bi bi-chat-dots-fill me-2"></i>Alle Nachrichten</button>`;
-            topics.forEach(t => {
-                html += `<button class="list-group-item ${currentTopic == t.id ? 'active' : ''}" data-topic-id="${t.id}"><i class="bi bi-hash me-2"></i>${escapeHTML(t.name)}</button>`;
-            });
-            topicList.innerHTML = html;
-            document.querySelectorAll('.topic-list .list-group-item').forEach(btn => {
-                btn.onclick = () => {
-                    currentTopic = btn.dataset.topicId;
-                    document.querySelectorAll('.topic-list .list-group-item').forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                    fetchMessages();
-                };
-            });
+            try {
+                const response = await fetch('/api/topics');
+                const topics = await response.json();
+                let html = `<button class="list-group-item ${currentTopic === 'all' ? 'active' : ''}" data-topic-id="all"><i class="bi bi-chat-dots-fill me-2"></i>Alle Nachrichten</button>`;
+                topics.forEach(t => {
+                    html += `<button class="list-group-item ${currentTopic == t.id ? 'active' : ''}" data-topic-id="${t.id}"><i class="bi bi-hash me-2"></i>${escapeHTML(t.name)}</button>`;
+                });
+                topicList.innerHTML = html;
+                document.querySelectorAll('.topic-list .list-group-item').forEach(btn => {
+                    btn.onclick = () => {
+                        currentTopic = btn.dataset.topicId;
+                        document.querySelectorAll('.topic-list .list-group-item').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                        fetchMessages();
+                    };
+                });
+            } catch (e) { console.error("Error fetching topics:", e); }
         }
 
         async function fetchMessages() {
             try {
                 const response = await fetch(`/api/live-messages?topic_id=${currentTopic}`);
+                if (!response.ok) throw new Error("Network response was not ok");
                 const messages = await response.json();
                 renderMessages(messages);
-            } catch (error) { console.error("Error:", error); }
+            } catch (error) { 
+                console.error("Error fetching messages:", error);
+                messageFeed.innerHTML = '<p class="text-danger text-center">Fehler beim Laden der Nachrichten.</p>';
+            }
         }
 
         function renderMessages(messages) {
-            if (messages.length === 0) {
+            if (!messages || messages.length === 0) {
                 messageFeed.innerHTML = '<p class="text-muted text-center">Keine Nachrichten gefunden.</p>';
                 return;
             }
@@ -203,7 +239,7 @@
                         <div class="message-content flex-grow-1">
                             <div class="message-header">
                                 <span class="user-name text-white">${escapeHTML(msg.full_name || msg.username)}</span>
-                                <span class="warning-badge"><i class="bi bi-exclamation-triangle"></i> ${msg.warning_count}</span>
+                                <span class="warning-badge" onclick="clearWarnings(${msg.user_id})"><i class="bi bi-exclamation-triangle"></i> ${msg.warning_count}</span>
                                 <span class="timestamp">${formatTimestamp(msg.ts_str)}</span>
                                 <span class="topic-badge">${escapeHTML(msg.topic_name)}</span>
                                 ${!msg.is_deleted ? `
@@ -225,6 +261,13 @@
             moderationModal.show();
         };
 
+        window.clearWarnings = async (uid) => {
+            if(confirm("Alle Verwarnungen für diesen Nutzer löschen?")) {
+                const res = await fetch(`/api/moderation/warnings/clear/${uid}`, {method: 'POST'});
+                if(res.ok) fetchMessages();
+            }
+        };
+
         document.getElementById('confirmModBtn').onclick = async () => {
             const id = document.getElementById('modMsgId').value;
             const selectReason = document.getElementById('modReasonSelect').value;
@@ -244,17 +287,38 @@
                 body: JSON.stringify({
                     max_warnings: document.getElementById('setMaxWarnings').value,
                     cleanup_notification_seconds: document.getElementById('setCleanupSeconds').value,
-                    warning_bot_name: document.getElementById('setWarningBot').value
+                    warning_bot_name: document.getElementById('setWarningBot').value,
+                    punishment_type: document.getElementById('setPunishmentType').value,
+                    mute_duration: document.getElementById('setMuteDuration').value
                 })
             });
-            if (res.ok) { settingsModal.hide(); alert("Einstellungen gespeichert!"); }
+            if (res.ok) { 
+                settingsModal.hide(); 
+                alert("Einstellungen gespeichert!"); 
+            }
         };
 
-        function formatTimestamp(ts_str) { const d = new Date(ts_str); return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); }
-        function escapeHTML(str) { return str ? str.toString().replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])) : ''; }
-
+        // Initial Load
         fetchTopics();
         fetchMessages();
+        
+        // Settings Load
+        async function loadSettings() {
+            try {
+                const res = await fetch('/api/moderation/get-settings');
+                const s = await res.json();
+                if (s.max_warnings) {
+                    document.getElementById('setMaxWarnings').value = s.max_warnings;
+                    document.getElementById('setCleanupSeconds').value = s.cleanup_notification_seconds;
+                    document.getElementById('setWarningBot').value = s.warning_bot_name;
+                    document.getElementById('setPunishmentType').value = s.punishment_type;
+                    document.getElementById('setMuteDuration').value = s.mute_duration;
+                    document.getElementById('muteDurationContainer').style.display = (s.punishment_type === 'mute') ? 'block' : 'none';
+                }
+            } catch(e) {}
+        }
+        loadSettings();
+
         intervalId = setInterval(() => { fetchMessages(); fetchTopics(); }, 5000);
         window.addEventListener('beforeunload', () => clearInterval(intervalId));
     });
