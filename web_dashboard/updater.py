@@ -68,34 +68,55 @@ class Updater:
         def _run():
             try:
                 self.update_status = {"status": "downloading", "progress": 10, "error": None}
+                log.info(f"Starting update to version {new_version}. Downloading from {zipball_url}")
                 tmp_dir = os.path.join(self.project_root, "data", "tmp_update")
-                if os.path.exists(tmp_dir): shutil.rmtree(tmp_dir)
+                
+                if os.path.exists(tmp_dir):
+                    shutil.rmtree(tmp_dir)
+                    log.info(f"Cleaned up existing temporary directory: {tmp_dir}")
                 os.makedirs(tmp_dir, exist_ok=True)
 
                 # Download
                 zip_path = os.path.join(tmp_dir, "update.zip")
-                r = requests.get(zipball_url, headers=self._get_headers(), stream=True)
-                with open(zip_path, "wb") as f:
-                    for chunk in r.iter_content(chunk_size=8192):
-                        if chunk: f.write(chunk)
+                try:
+                    r = requests.get(zipball_url, headers=self._get_headers(), stream=True, timeout=30)
+                    r.raise_for_status() # Raise an exception for HTTP errors
+                    with open(zip_path, "wb") as f:
+                        for chunk in r.iter_content(chunk_size=8192):
+                            if chunk: f.write(chunk)
+                    log.info(f"Downloaded update to {zip_path}")
+                except requests.exceptions.RequestException as e:
+                    raise Exception(f"Download failed: {e}")
+                except IOError as e:
+                    raise Exception(f"Failed to write downloaded file: {e}")
                 
                 self.update_status["status"] = "extracting"
                 self.update_status["progress"] = 40
-                with zipfile.ZipFile(zip_path, "r") as zip_ref:
-                    zip_ref.extractall(tmp_dir)
+                log.info(f"Extracting update to {tmp_dir}")
+                try:
+                    with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                        zip_ref.extractall(tmp_dir)
+                    log.info("Update extracted successfully.")
+                except zipfile.BadZipFile as e:
+                    raise Exception(f"Corrupted zip file: {e}")
+                except Exception as e:
+                    raise Exception(f"Extraction failed: {e}")
                 
                 extracted_folders = [f for f in os.listdir(tmp_dir) if os.path.isdir(os.path.join(tmp_dir, f))]
+                if not extracted_folders:
+                    raise Exception("No folders found inside the zip file after extraction.")
                 source_dir = os.path.join(tmp_dir, extracted_folders[0])
                 
                 self.update_status["status"] = "applying"
                 self.update_status["progress"] = 70
+                log.info(f"Applying update from {source_dir} to {self.project_root}")
 
                 # --- SCHUTZLOGIK FÜR DEINE DATEN ---
                 def should_ignore(rel_path):
                     # 1. Kompletter Daten-Ordner (Dort liegen deine Quizfragen, Logs, Avatare!)
                     if rel_path.startswith("data/") or rel_path == "data": return True
                     # 2. Python Environment & Logs
-                    if rel_path.startswith(".venv/") or rel_path == ".venv": return True
+                    if rel_path.startswith("venv/") or rel_path == "venv": return True
                     if rel_path.endswith(".log") or rel_path.endswith(".jsonl"): return True
                     # 3. ALLE Konfigurationsdateien (.json) schützen, damit User-Settings bleiben
                     if rel_path.endswith(".json"): return True
@@ -103,35 +124,48 @@ class Updater:
                     if rel_path.startswith(".git/"): return True
                     return False
 
-                for root, dirs, files in os.walk(source_dir):
-                    rel_root = os.path.relpath(root, source_dir)
-                    target_root = self.project_root if rel_root == "." else os.path.join(self.project_root, rel_root)
-                    
-                    if not os.path.exists(target_root):
-                        os.makedirs(target_root, exist_ok=True)
-
-                    for file in files:
-                        source_file = os.path.join(root, file)
-                        rel_file = os.path.relpath(source_file, source_dir)
-                        target_file = os.path.join(self.project_root, rel_file)
+                try:
+                    for root, dirs, files in os.walk(source_dir):
+                        rel_root = os.path.relpath(root, source_dir)
+                        target_root = self.project_root if rel_root == "." else os.path.join(self.project_root, rel_root)
                         
-                        if not should_ignore(rel_file):
-                            shutil.copy2(source_file, target_file)
+                        if not os.path.exists(target_root):
+                            os.makedirs(target_root, exist_ok=True)
+
+                        for file in files:
+                            source_file = os.path.join(root, file)
+                            rel_file = os.path.relpath(source_file, source_dir)
+                            target_file = os.path.join(self.project_root, rel_file)
+                            
+                            if not should_ignore(rel_file):
+                                shutil.copy2(source_file, target_file)
+                    log.info("Update files applied successfully.")
+                except Exception as e:
+                    raise Exception(f"Failed to apply update files: {e}")
 
                 # Version lokal aktualisieren
-                with open(self.current_version_file, "w") as f:
-                    json.dump({"version": new_version, "release_date": published_at}, f, indent=4)
+                log.info(f"Updating local version file to {new_version}")
+                try:
+                    with open(self.current_version_file, "w") as f:
+                        json.dump({"version": new_version, "release_date": published_at}, f, indent=4)
+                    log.info("Local version file updated.")
+                except IOError as e:
+                    raise Exception(f"Failed to write new version to file: {e}")
 
                 self.update_status["status"] = "finished"
                 self.update_status["progress"] = 100
+                log.info(f"Update to version {new_version} finished successfully. Restarting application...")
                 time.sleep(2)
                 
-                # Neustart
+                # Neustart - Consider a more graceful shutdown mechanism for production environments.
+                # For example, signaling the main application to restart itself or using a process manager.
                 os.kill(os.getpid(), signal.SIGTERM)
 
             except Exception as e:
                 log.error(f"Update failed: {e}")
                 self.update_status = {"status": "error", "progress": 0, "error": str(e)}
+                # Optional: Implement a rollback mechanism here if the update fails
+                # e.g., restore from a backup.
 
         threading.Thread(target=_run, daemon=True).start()
 

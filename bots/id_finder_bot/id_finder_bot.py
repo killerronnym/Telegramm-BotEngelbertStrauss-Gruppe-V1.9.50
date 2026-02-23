@@ -4,7 +4,7 @@ import json
 import sys
 import asyncio
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 # --- Paths ---
 BOT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -14,6 +14,9 @@ sys.path.append(PROJECT_ROOT)
 
 from web_dashboard.app.models import db, BotSettings, IDFinderAdmin, IDFinderUser, IDFinderMessage, TopicMapping, Broadcast, AutoCleanupTask
 from flask import Flask
+
+# Import the tiktok monitor function
+from bots.tiktok_bot.tiktok_bot import start_tiktok_monitor
 
 # --- Database Helper ---
 def get_db_session():
@@ -229,8 +232,24 @@ async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode=ParseMode.MARKDOWN
     )
 
+# --- Bot Lifecycle Callbacks ---
+async def post_init(app: Application) -> None:
+    logger.info("ID-Finder Bot: Post-init-Phase, starte TikTok Monitor...")
+    app.tiktok_monitor_task = asyncio.create_task(start_tiktok_monitor(app))
+
+async def pre_shutdown(app: Application) -> None:
+    logger.info("ID-Finder Bot: Pre-shutdown-Phase, beende TikTok Monitor...")
+    if hasattr(app, 'tiktok_monitor_task') and app.tiktok_monitor_task is not None:
+        app.tiktok_monitor_task.cancel()
+        try:
+            await app.tiktok_monitor_task
+        except asyncio.CancelledError:
+            logger.info("TikTok Monitor Task wurde abgebrochen.")
+        except Exception as e:
+            logger.error(f"Fehler beim Beenden des TikTok Monitor Tasks: {e}")
+
 async def shutdown(app: Application):
-    logger.info("Bot wird heruntergefahren...")
+    logger.info("ID-Finder Bot wird heruntergefahren...")
 
 def main():
     config = get_config_from_db()
@@ -238,7 +257,8 @@ def main():
         logger.critical("Bot Token nicht in Datenbank gefunden!")
         sys.exit(1)
         
-    app = ApplicationBuilder().token(config["bot_token"]).post_shutdown(shutdown).build()
+    app = ApplicationBuilder().token(config["bot_token"])
+    app = app.post_init(post_init).pre_shutdown(pre_shutdown).post_shutdown(shutdown).build()
     
     # Handlers
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, track_activity))
@@ -248,7 +268,7 @@ def main():
     app.job_queue.run_repeating(check_and_send_broadcasts, interval=30)
     app.job_queue.run_repeating(process_cleanup_tasks, interval=10) # Alle 10 Sek nach abgelaufenen Meldungen suchen
 
-    logger.info("ID-Finder Bot startet (mit Broadcast & Auto-Cleanup)...")
+    logger.info("ID-Finder Bot startet (mit Broadcast, Auto-Cleanup & TikTok Monitor)...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
