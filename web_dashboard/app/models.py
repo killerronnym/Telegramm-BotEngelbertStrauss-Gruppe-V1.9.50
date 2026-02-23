@@ -96,4 +96,6 @@ class IDFinderMessage(db.Model):
     content_type = db.Column(db.String(50), default='text') # text, photo, video, etc.
     file_id = db.Column(db.String(255)) # Added for media support
     is_command = db.Column(db.Boolean, default=False)
+    is_deleted = db.Column(db.Boolean, default=False) # Sync with DB
+    deletion_reason = db.Column(db.Text) # Sync with DB
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)

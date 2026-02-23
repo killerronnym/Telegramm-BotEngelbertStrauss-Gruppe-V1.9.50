@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Nutzerdetails: {{ user.full_name or user.username or user.user_id }}{% endblock %}
+{% block title %}Nutzerdetails: {{ user.first_name or user.username or user.telegram_id }}{% endblock %}
 
 {% block content %}
 <style>
@@ -10,61 +10,73 @@
         gap: 1.5rem;
         margin-bottom: 2rem;
         padding-bottom: 1.5rem;
-        border-bottom: 1px solid var(--border-color);
+        border-bottom: 1px solid var(--border-muted);
     }
     .user-avatar {
         width: 80px;
         height: 80px;
         border-radius: 50%;
         object-fit: cover;
+        background: #2d3748;
     }
-    .warning-card {
-        background-color: var(--sidebar-bg);
-        border: 1px solid var(--border-color);
+    .message-card {
+        background-color: var(--card-base);
+        border: 1px solid var(--border-muted);
         border-radius: 8px;
-        padding: 1.5rem;
-        margin-bottom: 1rem;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
     }
-    .warning-meta {
-        font-size: 0.9rem;
-        color: var(--text-muted);
+    .message-meta {
+        font-size: 0.8rem;
+        color: var(--text-dim);
+        display: flex;
+        gap: 1rem;
+        margin-top: 0.5rem;
     }
 </style>
 
 <div class="container py-5">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="text-white">Nutzer-Aktivität</h2>
-        <a href="{{ url_for('dashboard.live_moderation') }}" class="btn btn-outline-secondary">
-            <i class="bi bi-arrow-left"></i> Zurück zur Moderation
-        </a>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('dashboard.id_finder_dashboard') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-person-lines-fill"></i> Zur Registry
+            </a>
+            <a href="{{ url_for('dashboard.live_moderation') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-chat-dots"></i> Zur Moderation
+            </a>
+        </div>
     </div>
 
     <div class="user-detail-header text-white">
-        <img src="{{ url_for('tg_avatar_proxy', user_id=user.user_id) }}" class="user-avatar" alt="Avatar">
+        <img src="/api/avatar/{{ user.telegram_id }}" class="user-avatar" alt="Avatar" onerror="this.src='https://ui-avatars.com/api/?name={{ user.first_name }}&background=random&color=fff'">
         <div>
-            <h3 class="mb-1">{{ user.full_name or user.username }}</h3>
-            <p class="text-muted mb-1">ID: <code>{{ user.user_id }}</code></p>
-            <p class="mb-0">
-                <span class="badge bg-danger">{{ warnings | length }} Verwarnungen</span>
+            <h3 class="mb-1">{{ user.first_name }} {{ user.last_name or '' }}</h3>
+            <p class="text-muted mb-1">ID: <code>{{ user.telegram_id }}</code> | Username: {% if user.username %}<span class="text-info">@{{ user.username }}</span>{% else %}<span class="text-muted">keiner</span>{% endif %}</p>
+            <p class="mb-0 small text-dim">
+                Erster Kontakt: {{ user.first_contact.strftime('%d.%m.%Y %H:%M') if user.first_contact else '—' }}
             </p>
         </div>
     </div>
 
-    <h4 class="text-white mb-3">Verlauf der Verwarnungen</h4>
+    <h4 class="text-white mb-4">Nachrichtenverlauf (Letzte 100)</h4>
 
-    {% if warnings %}
-        {% for warning in warnings | reverse %}
-        <div class="warning-card">
-            <p class="fs-5 text-white mb-2"><strong>Grund:</strong> {{ warning.reason }}</p>
-            <p class="warning-meta">
-                Verwarnt am {{ warning.timestamp | datetimeformat }}
-                in der Gruppe <strong>{{ warning.chat_name }}</strong>
-            </p>
+    {% if messages %}
+        {% for msg in messages %}
+        <div class="message-card">
+            <p class="text-white mb-1">{{ msg.text }}</p>
+            <div class="message-meta">
+                <span><i class="bi bi-clock"></i> {{ msg.timestamp.strftime('%d.%m.%Y %H:%M') }}</span>
+                <span><i class="bi bi-hash"></i> {{ msg.chat_type }}</span>
+                {% if msg.message_thread_id %}
+                    <span><i class="bi bi-tag"></i> Topic ID: {{ msg.message_thread_id }}</span>
+                {% endif %}
+            </div>
         </div>
         {% endfor %}
     {% else %}
-        <div class="alert alert-success">
-            <i class="bi bi-check-circle-fill"></i> Bisher keine Verwarnungen für diesen Nutzer.
+        <div class="alert alert-info bg-dark border-secondary text-white">
+            <i class="bi bi-info-circle"></i> Bisher keine Nachrichten von diesem Nutzer geloggt.
         </div>
     {% endif %}
 

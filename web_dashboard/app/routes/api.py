@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, jsonify, request, send_file, redirect
 from ..models import db, BotSettings, IDFinderMessage, IDFinderUser, TopicMapping
 import os
 import re
@@ -50,50 +50,41 @@ def get_live_messages():
             'text': m.text,
             'chat_type': m.chat_type,
             'is_private_interaction': False,
-            'avatar_url': f"/api/avatar/{m.telegram_user_id}"
+            'avatar_url': f"/api/avatar/{m.telegram_user_id}",
+            'is_deleted': m.is_deleted,
+            'deletion_reason': m.deletion_reason
         })
     
     return jsonify(messages)
 
 @bp.route('/avatar/<int:user_id>')
 def get_avatar(user_id):
-    """
-    Holt das Profilbild des Nutzers von Telegram oder aus dem Cache.
-    """
     avatar_path = os.path.join(AVATAR_CACHE_DIR, f"{user_id}.jpg")
-    
-    # 1. Wenn Bild im Cache ist, gib es zurück
     if os.path.exists(avatar_path):
         return send_file(avatar_path, mimetype='image/jpeg')
     
-    # 2. Wenn nicht, frage Bot-Token ab
     settings = BotSettings.query.filter_by(bot_name='id_finder').first()
     if not settings: return jsonify({'error': 'No settings'}), 404
     config = json.loads(settings.config_json)
     bot_token = config.get('bot_token')
     
+    if not bot_token:
+        return redirect(f"https://ui-avatars.com/api/?name={user_id}&background=random")
+
     try:
-        # User Profilbilder abfragen
         res = requests.get(f"https://api.telegram.org/bot{bot_token}/getUserProfilePhotos", params={'user_id': user_id, 'limit': 1})
         data = res.json()
-        
         if data.get('ok') and data['result']['total_count'] > 0:
             file_id = data['result']['photos'][0][-1]['file_id']
-            
-            # File Path holen
             file_info = requests.get(f"https://api.telegram.org/bot{bot_token}/getFile", params={'file_id': file_id}).json()
             if file_info.get('ok'):
                 file_path = file_info['result']['file_path']
-                # Bild herunterladen
                 img_res = requests.get(f"https://api.telegram.org/file/bot{bot_token}/{file_path}")
                 if img_res.status_code == 200:
                     with open(avatar_path, 'wb') as f:
                         f.write(img_res.content)
                     return send_file(io.BytesIO(img_res.content), mimetype='image/jpeg')
-    except Exception as e:
-        print(f"Error fetching avatar: {e}")
-
-    # Fallback: Platzhalter Bild (z.B. UI Avatars)
+    except: pass
     return redirect(f"https://ui-avatars.com/api/?name={user_id}&background=random")
 
 @bp.route('/topics')
@@ -148,8 +139,9 @@ def delete_message():
                     'text': private_text
                 })
 
-    # 4. Aus DB löschen
-    db.session.delete(msg)
+    # 4. In DB als gelöscht markieren (statt entfernen)
+    msg.is_deleted = True
+    msg.deletion_reason = reason
     db.session.commit()
     
     return jsonify({'success': True})
