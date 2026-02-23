@@ -3,36 +3,55 @@
 {% block title %}Bot Steuerung | Dashboard{% endblock %}
 
 {% block content %}
+<!-- Include Sortable.js for drag and drop -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+
 <style>
     .dashboard-container { padding: 2.5rem; }
-    .card { height: 100%; transition: all 0.2s ease; border: 1px solid var(--border-muted); }
+    .card { height: 100%; transition: all 0.2s ease; border: 1px solid var(--border-muted); position: relative; display: flex; flex-direction: column; }
     .card:hover { transform: translateY(-3px); background-color: var(--card-hover); border-color: rgba(59, 130, 246, 0.2); }
     .status-badge { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
     .btn-action-sm { padding: 0.6rem 1rem; font-size: 0.8rem; font-weight: 700; border-radius: 8px; border: none; text-transform: uppercase; }
-    .btn-settings-big { background-color: var(--blue-deep); color: white; border: none; font-weight: 600; border-radius: 8px; padding: 0.75rem 1rem; transition: all 0.2s; text-align: center; text-decoration: none; display: block; width: 100%; font-size: 0.9rem; }
+    .btn-settings-big { background-color: var(--blue-deep); color: white; border: none; font-weight: 600; border-radius: 8px; padding: 0.75rem 1rem; transition: all 0.2s; text-align: center; text-decoration: none; display: block; width: 100%; font-size: 0.9rem; cursor: pointer; }
     .btn-settings-big:hover { background-color: #2563eb; color: white; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2); }
-    .btn-settings-outline { background: transparent; color: var(--text-secondary); border: 1px solid var(--border-muted); font-weight: 600; border-radius: 8px; padding: 0.75rem 1rem; transition: all 0.2s; text-align: center; text-decoration: none; display: block; width: 100%; font-size: 0.9rem; }
-    .btn-settings-outline:hover { background: rgba(255, 255, 255, 0.05); color: #fff; border-color: var(--blue-accent); }
     .action-header { border-bottom: 1px solid var(--border-muted); margin-bottom: 2rem; padding-bottom: 1.5rem; }
-    .btn-logout { background: rgba(239, 68, 68, 0.1); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.2); font-weight: 600; }
-    .btn-logout:hover { background: #ef4444; color: white; }
     
-    /* Update Card Styles */
-    .update-card { background: linear-gradient(145deg, #1e293b, #0f172a); border: 1px solid #3b82f644; margin-top: 3rem; }
-    .version-tag { background: #3b82f622; color: #60a5fa; padding: 2px 8px; border-radius: 6px; font-family: monospace; font-size: 0.85rem; border: 1px solid #3b82f633; }
-    #updateChangelog { background: #00000044; padding: 15px; border-radius: 8px; font-size: 0.9rem; color: #94a3b8; line-height: 1.6; white-space: pre-wrap; }
-
-    /* Spin Animation */
-    .spin { animation: spin 1s linear infinite; display: inline-block; }
-    @keyframes spin { 100% { transform: rotate(360deg); } }
-
-    /* Status Pulse Animation */
-    .pulse-status { animation: pulse 2s infinite; }
-    @keyframes pulse {
-        0% { opacity: 1; }
-        50% { opacity: 0.6; }
-        100% { opacity: 1; }
+    /* Edit Mode Styles */
+    .edit-mode .card { cursor: move; }
+    .edit-mode .card:hover { border-color: #f59e0b !important; }
+    
+    .wiggle { animation: wiggle 0.3s infinite; }
+    @keyframes wiggle {
+        0% { transform: rotate(0deg); }
+        25% { transform: rotate(0.5deg); }
+        50% { transform: rotate(0deg); }
+        75% { transform: rotate(-0.5deg); }
+        100% { transform: rotate(0deg); }
     }
+
+    .visibility-toggle {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 10;
+        background: rgba(0,0,0,0.5);
+        border: none;
+        color: #fff;
+        padding: 4px 8px;
+        border-radius: 6px;
+        display: none;
+        cursor: pointer;
+    }
+    .edit-mode .visibility-toggle { display: block; }
+    
+    .hidden-card { opacity: 0.4; filter: grayscale(1); }
+    .hidden-card:not(.edit-mode *) { display: none !important; }
+
+    /* Update Specifics */
+    .card-update { border-color: #3b82f644; background: rgba(59, 130, 246, 0.05); }
+    .update-notify { padding: 10px; border-radius: 8px; font-size: 0.8rem; margin-bottom: 1rem; display: none; text-align: center; font-weight: 600; }
+    .update-info-box { background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; margin-top: 10px; display: none; border: 1px solid rgba(59, 130, 246, 0.2); }
+    .changelog-text { font-size: 0.75rem; color: #94a3b8; max-height: 80px; overflow-y: auto; margin-top: 8px; white-space: pre-wrap; }
 
     /* Version Footer */
     .version-footer {
@@ -45,6 +64,9 @@
         justify-content: space-between;
         align-items: center;
     }
+
+    .spin { animation: spin 1s linear infinite; display: inline-block; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
 </style>
 
 <div class="dashboard-container">
@@ -53,456 +75,223 @@
             <h1 class="fw-bold mb-1 h3 text-white">Bot <span class="text-blue">Steuerung</span></h1>
             <p class="text-secondary small">Zentrale Verwaltung aller Bot-Systeme (Modus: Gast-Admin)</p>
         </div>
+        <div>
+            <button id="btnEditLayout" class="btn btn-outline-warning fw-bold px-4">
+                <i class="bi bi-pencil-square me-2"></i> LAYOUT ANPASSEN
+            </button>
+            <button id="btnSaveLayout" class="btn btn-success fw-bold px-4" style="display:none;">
+                <i class="bi bi-check-lg me-2"></i> SPEICHERN
+            </button>
+        </div>
     </div>
 
-    <!-- ⚡ SOFORT-AKTIONEN MITTIG -->
+    <!-- ⚡ SOFORT-AKTIONEN -->
     <div class="action-header text-center">
         <h5 class="text-white fw-bold mb-4" style="letter-spacing: 0.05em;"><i class="bi bi-lightning-charge-fill text-warning me-2"></i> SOFORT-AKTIONEN</h5>
         <div class="d-flex gap-3 justify-content-center flex-wrap">
-            <form action="/quiz/send-random" method="POST" class="m-0">
-                <button type="submit" class="btn btn-primary fw-bold px-5 py-2" style="border-radius: 12px; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2); font-size: 0.85rem;">
-                    ❔ QUIZFRAGE SENDEN
-                </button>
-            </form>
-            <form action="/umfrage/send-random" method="POST" class="m-0">
-                <button type="submit" class="btn btn-secondary fw-bold px-5 py-2" style="border-radius: 12px; background-color: #475569; border: none; font-size: 0.85rem;">
-                    📊 UMFRAGE SENDEN
-                </button>
-            </form>
+            <form action="/quiz/send-random" method="POST" class="m-0"><button type="submit" class="btn btn-primary fw-bold px-5 py-2" style="border-radius: 12px; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2);">❔ QUIZFRAGE SENDEN</button></form>
+            <form action="/umfrage/send-random" method="POST" class="m-0"><button type="submit" class="btn btn-secondary fw-bold px-5 py-2" style="border-radius: 12px; background-color: #475569; border: none;">📊 UMFRAGE SENDEN</button></form>
         </div>
     </div>
 
-    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-        <!-- Live Moderation -->
-        <div class="col">
-            <div class="card">
-                <div class="card-header"><h6><i class="bi bi-shield-check me-2"></i>Live Moderation</h6></div>
-                <div class="card-body d-flex flex-column">
-                    <p class="card-text small text-secondary mb-4">Überwachen und moderieren Sie Telegram-Gruppen in Echtzeit.</p>
-                    <div class="mt-auto">
-                        <a href="{{ url_for('dashboard.live_moderation') }}" class="btn-settings-big">ÖFFNEN</a>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4" id="sortableGrid">
+        {% set items = [
+            {'id': 'live_mod', 'title': 'Live Moderation', 'icon': 'bi-shield-check', 'desc': 'Überwachen und moderieren Sie Telegram-Gruppen in Echtzeit.', 'link': url_for('dashboard.live_moderation'), 'type': 'open'},
+            {'id': 'planer', 'title': 'Nachricht Planer', 'icon': 'bi-megaphone', 'desc': 'Nachrichten & Medien planen oder sofort über den ID-Finder senden.', 'link': url_for('dashboard.broadcast_manager'), 'type': 'settings', 'bot': 'id_finder'},
+            {'id': 'invite', 'title': 'Einladungs-Bot', 'icon': 'bi-apple', 'desc': 'Begrüßungstexte & automatische Beitrittskontrolle.', 'link': url_for('dashboard.bot_settings'), 'type': 'bot', 'bot': 'invite'},
+            {'id': 'quiz', 'title': 'Quiz Bot', 'icon': 'bi-question-circle', 'desc': 'Verwaltung der Quizfragen und automatischer Zeitplaner.', 'link': url_for('dashboard.quiz_settings'), 'type': 'bot', 'bot': 'quiz'},
+            {'id': 'umfrage', 'title': 'Umfrage Bot', 'icon': 'bi-bar-chart', 'desc': 'Verwaltung der Umfragen und automatischer Zeitplaner.', 'link': url_for('dashboard.umfrage_settings'), 'type': 'bot', 'bot': 'umfrage'},
+            {'id': 'outfit', 'title': 'Outfit-Wettbewerb', 'icon': 'bi-person-badge', 'desc': 'Steuerung für den täglichen Outfit-Contest.', 'link': url_for('dashboard.outfit_bot_dashboard'), 'type': 'bot', 'bot': 'outfit'},
+            {'id': 'id_finder', 'title': 'ID-Finder Bot', 'icon': 'bi-search', 'desc': 'Werkzeuge zum Ermitteln von Chat-IDs & Topic-IDs.', 'link': url_for('dashboard.id_finder_dashboard'), 'type': 'bot', 'bot': 'id_finder'},
+            {'id': 'minecraft', 'title': 'Minecraft Server Status', 'icon': 'bi-hammer', 'desc': 'Statusüberwachung und Benachrichtigungen.', 'link': url_for('dashboard.minecraft_status_page'), 'type': 'settings'},
+            {'id': 'users', 'title': 'Benutzerverwaltung', 'icon': 'bi-people', 'desc': 'Benutzerkonten & Zugriffsrechte verwalten.', 'link': url_for('dashboard.manage_users'), 'type': 'settings'},
+            {'id': 'logs', 'title': 'Kritische Logs', 'icon': 'bi-exclamation-triangle', 'desc': 'Zeigt alle Error- und Critical-Logs der Anwendung an.', 'link': url_for('dashboard.critical_errors'), 'type': 'logs'},
+            {'id': 'update', 'title': 'Software Update', 'icon': 'bi-cloud-arrow-down-fill', 'desc': 'Prüfen Sie manuell, ob eine neue Version der Bot-Software verfügbar ist.', 'type': 'update'}
+        ] %}
 
-        <!-- 📢 Nachricht Planer -->
-        <div class="col">
-            <div class="card">
+        {% for item in items %}
+        <div class="col" data-id="{{ item.id }}" id="card-{{ item.id }}">
+            <div class="card h-100 {% if item.type == 'update' %}card-update{% endif %}">
+                <button class="visibility-toggle" onclick="toggleVisibility('{{ item.id }}')"><i class="bi bi-eye"></i></button>
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h6>📢 Nachricht Planer</h6>
-                    <span class="small fw-bold {{ 'text-success' if bot_status.id_finder.running else 'text-danger' }}">
-                        <span class="status-badge {{ 'bg-success' if bot_status.id_finder.running else 'bg-danger' }}"></span>
-                        {{ 'AKTIV' if bot_status.id_finder.running else 'OFFLINE' }}
-                    </span>
+                    <h6><i class="bi {{ item.icon }} me-2"></i>{{ item.title }}</h6>
+                    {% if item.bot %}
+                        <span class="small fw-bold {{ 'text-success' if bot_status[item.bot].running else 'text-danger' }}">
+                            <span class="status-badge {{ 'bg-success' if bot_status[item.bot].running else 'bg-danger' }}"></span>
+                            {{ 'AKTIV' if bot_status[item.bot].running else 'OFFLINE' }}
+                        </span>
+                    {% endif %}
                 </div>
                 <div class="card-body d-flex flex-column">
-                    <p class="card-text small text-secondary mb-4">Nachrichten & Medien planen oder sofort über den ID-Finder senden.</p>
-                    <div class="mt-auto">
-                        <a href="{{ url_for('dashboard.broadcast_manager') }}" class="btn-settings-big">EINSTELLUNGEN</a>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 👋 Einladungs-Bot -->
-        <div class="col">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h6>👋 Einladungs-Bot</h6>
-                    <span class="small fw-bold {{ 'text-success' if bot_status.invite.running else 'text-danger' }}">
-                        <span class="status-badge {{ 'bg-success' if bot_status.invite.running else 'bg-danger' }}"></span>
-                        {{ 'AKTIV' if bot_status.invite.running else 'OFFLINE' }}
-                    </span>
-                </div>
-                <div class="card-body d-flex flex-column">
-                    <p class="card-text small text-secondary mb-4">Begrüßungstexte & automatische Beitrittskontrolle.</p>
-                    <div class="mt-auto">
-                        <div class="d-flex gap-2 mb-2">
-                            {% if bot_status.invite.running %}
-                                <form action="/bot-action/invite/stop" method="POST" class="flex-grow-1 m-0"><button type="submit" class="btn btn-danger btn-action-sm w-100">STOP</button></form>
-                            {% else %}
-                                <form action="/bot-action/invite/start" method="POST" class="flex-grow-1 m-0"><button type="submit" class="btn btn-success btn-action-sm w-100">START</button></form>
-                            {% endif %}
-                        </div>
-                        <a href="{{ url_for('dashboard.bot_settings') }}" class="btn-settings-big">EINSTELLUNGEN</a>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ❔ Quiz Bot -->
-        <div class="col">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h6>❔ Quiz Bot</h6>
-                    <span class="small fw-bold {{ 'text-success' if bot_status.quiz.running else 'text-danger' }}">
-                        <span class="status-badge {{ 'bg-success' if bot_status.quiz.running else 'bg-danger' }}"></span>
-                        {{ 'AKTIV' if bot_status.quiz.running else 'OFFLINE' }}
-                    </span>
-                </div>
-                <div class="card-body d-flex flex-column">
-                    <p class="card-text small text-secondary mb-4">Verwaltung der Quizfragen und automatischer Zeitplaner.</p>
-                    <div class="mt-auto">
-                        <div class="d-flex gap-2 mb-2">
-                            {% if bot_status.quiz.running %}
-                                <form action="/bot-action/quiz/stop" method="POST" class="flex-grow-1 m-0"><button type="submit" class="btn btn-danger btn-action-sm w-100">STOP</button></form>
-                            {% else %}
-                                <form action="/bot-action/quiz/start" method="POST" class="flex-grow-1 m-0"><button type="submit" class="btn btn-success btn-action-sm w-100">START</button></form>
-                            {% endif %}
-                        </div>
-                        <a href="{{ url_for('dashboard.quiz_settings') }}" class="btn-settings-big">EINSTELLUNGEN</a>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 📊 Umfrage Bot -->
-        <div class="col">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h6>📊 Umfrage Bot</h6>
-                    <span class="small fw-bold {{ 'text-success' if bot_status.umfrage.running else 'text-danger' }}">
-                        <span class="status-badge {{ 'bg-success' if bot_status.umfrage.running else 'bg-danger' }}"></span>
-                        {{ 'AKTIV' if bot_status.umfrage.running else 'OFFLINE' }}
-                    </span>
-                </div>
-                <div class="card-body d-flex flex-column">
-                    <p class="card-text small text-secondary mb-4">Verwaltung der Umfragen und automatischer Zeitplaner.</p>
-                    <div class="mt-auto">
-                        <div class="d-flex gap-2 mb-2">
-                            {% if bot_status.umfrage.running %}
-                                <form action="/bot-action/umfrage/stop" method="POST" class="flex-grow-1 m-0"><button type="submit" class="btn btn-danger btn-action-sm w-100">STOP</button></form>
-                            {% else %}
-                                <form action="/bot-action/umfrage/start" method="POST" class="flex-grow-1 m-0"><button type="submit" class="btn btn-success btn-action-sm w-100">START</button></form>
-                            {% endif %}
-                        </div>
-                        <a href="{{ url_for('dashboard.umfrage_settings') }}" class="btn-settings-big">EINSTELLUNGEN</a>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 👗 Outfit-Wettbewerb -->
-        <div class="col">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h6>👗 Outfit-Wettbewerb</h6>
-                    <span class="small fw-bold {{ 'text-success' if bot_status.outfit.running else 'text-danger' }}">
-                        <span class="status-badge {{ 'bg-success' if bot_status.outfit.running else 'bg-danger' }}"></span>
-                        {{ 'AKTIV' if bot_status.outfit.running else 'OFFLINE' }}
-                    </span>
-                </div>
-                <div class="card-body d-flex flex-column">
-                    <p class="card-text small text-secondary mb-4">Steuerung für den täglichen Outfit-Contest.</p>
-                    <div class="mt-auto">
-                        <div class="d-flex gap-2 mb-2">
-                            {% if bot_status.outfit.running %}
-                                <form action="/bot-action/outfit/stop" method="POST" class="flex-grow-1 m-0"><button type="submit" class="btn btn-danger btn-action-sm w-100">STOP</button></form>
-                            {% else %}
-                                <form action="/bot-action/outfit/start" method="POST" class="flex-grow-1 m-0"><button type="submit" class="btn btn-success btn-action-sm w-100">START</button></form>
-                            {% endif %}
-                        </div>
-                        <a href="{{ url_for('dashboard.outfit_bot_dashboard') }}" class="btn-settings-big">EINSTELLUNGEN</a>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 🔍 ID-Finder Bot -->
-        <div class="col">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h6>🔍 ID-Finder Bot</h6>
-                    <span class="small fw-bold {{ 'text-success' if bot_status.id_finder.running else 'text-danger' }}">
-                        <span class="status-badge {{ 'bg-success' if bot_status.id_finder.running else 'bg-danger' }}"></span>
-                        {{ 'AKTIV' if bot_status.id_finder.running else 'OFFLINE' }}
-                    </span>
-                </div>
-                <div class="card-body d-flex flex-column">
-                    <p class="card-text small text-secondary mb-4">Werkzeuge zum Ermitteln von Chat-IDs & Topic-IDs.</p>
-                    <div class="mt-auto">
-                        <div class="d-flex gap-2 mb-2">
-                            {% if bot_status.id_finder.running %}
-                                <form action="/bot-action/id_finder/stop" method="POST" class="flex-grow-1 m-0"><button type="submit" class="btn btn-danger btn-action-sm w-100">STOP</button></form>
-                            {% else %}
-                                <form action="/bot-action/id_finder/start" method="POST" class="flex-grow-1 m-0"><button type="submit" class="btn btn-success btn-action-sm w-100">START</button></form>
-                            {% endif %}
-                        </div>
-                        <a href="{{ url_for('dashboard.id_finder_dashboard') }}" class="btn-settings-big">EINSTELLUNGEN</a>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ⛏️ Minecraft -->
-        <div class="col">
-            <div class="card">
-                <div class="card-header"><h6>⛏️ Minecraft Server Status</h6></div>
-                <div class="card-body d-flex flex-column">
-                    <p class="card-text small text-secondary mb-4">Statusüberwachung und Benachrichtigungen.</p>
-                    <div class="mt-auto">
-                     <a href="{{ url_for('dashboard.minecraft_status_page') }}" class="btn-settings-big">EINSTELLUNGEN</a>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 👥 Benutzerverwaltung -->
-        <div class="col">
-            <div class="card">
-                <div class="card-header"><h6 class="text-info">👥 Benutzerverwaltung</h6></div>
-                <div class="card-body d-flex flex-column">
-                    <p class="card-text small text-secondary mb-4">Benutzerkonten & Zugriffsrechte verwalten.</p>
-                    <div class="mt-auto">
-                        <a href="{{ url_for('dashboard.manage_users') }}" class="btn-settings-big">EINSTELLUNGEN</a>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ⚠️ Kritische Logs -->
-        <div class="col">
-            <div class="card">
-                <div class="card-header"><h6 class="text-danger">⚠️ Kritische Logs</h6></div>
-                <div class="card-body d-flex flex-column">
-                    <p class="card-text small text-secondary mb-4">Zeigt alle Error- und Critical-Logs der Anwendung an.</p>
-                    <div class="mt-auto">
-                        <a href="{{ url_for('dashboard.critical_errors') }}" class="btn-settings-big btn-danger">LOGS ANSEHEN</a>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 🚀 Software Update Kachel -->
-        <div class="col">
-            <div class="card border-primary border-opacity-25">
-                <div class="card-header"><h6><i class="bi bi-cloud-arrow-down-fill text-primary me-2"></i>Software Update</h6></div>
-                <div class="card-body d-flex flex-column">
-                    <p class="card-text small text-secondary mb-4">Prüfen Sie manuell, ob eine neue Version der Bot-Software verfügbar ist.</p>
+                    <p class="card-text small text-secondary mb-3">{{ item.desc }}</p>
                     
-                    <!-- Professional Status Display -->
-                    <div id="updateTileStatus" class="mb-3 p-2 rounded text-center small" style="display: none; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05);">
-                        <span id="updateTileStatusText"></span>
-                    </div>
+                    {% if item.type == 'update' %}
+                        <div id="updateBox">
+                            <div id="updateNotify" class="update-notify"></div>
+                            
+                            <button id="btnManualUpdateCheck" class="btn-settings-big btn-primary">
+                                <i class="bi bi-arrow-repeat me-1"></i> NACH UPDATES SCANNEN
+                            </button>
+
+                            <div id="updateInfoBox" class="update-info-box">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="badge bg-primary">v<span id="newVersionTag"></span> verfügbar</span>
+                                    <small class="text-dim" id="newVersionDate"></small>
+                                </div>
+                                <div class="changelog-text" id="updateChangelog"></div>
+                                <button id="btnInstallNow" class="btn btn-success w-100 mt-3 fw-bold btn-action-sm">JETZT INSTALLIEREN</button>
+                            </div>
+
+                            <div class="progress mt-3" id="updateProgress" style="display:none; height: 8px;">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    {% endif %}
 
                     <div class="mt-auto">
-                        <button id="btnManualUpdateCheck" class="btn-settings-big btn-primary w-100">
-                            <i class="bi bi-arrow-repeat me-1"></i> NACH UPDATES SCANNEN
-                        </button>
+                        {% if item.type == 'bot' %}
+                            <div class="d-flex gap-2 mb-2">
+                                {% if bot_status[item.bot].running %}
+                                    <form action="/bot-action/{{ item.bot }}/stop" method="POST" class="flex-grow-1 m-0"><button type="submit" class="btn btn-danger btn-action-sm w-100">STOP</button></form>
+                                {% else %}
+                                    <form action="/bot-action/{{ item.bot }}/start" method="POST" class="flex-grow-1 m-0"><button type="submit" class="btn btn-success btn-action-sm w-100">START</button></form>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+
+                        {% if item.type != 'update' %}
+                            <a href="{{ item.link }}" class="btn-settings-big {% if item.type == 'logs' %}btn-danger{% endif %}">
+                                {{ 'LOGS ANSEHEN' if item.type == 'logs' else ('ÖFFNEN' if item.type == 'open' else 'EINSTELLUNGEN') }}
+                            </a>
+                        {% endif %}
                     </div>
                 </div>
             </div>
         </div>
+        {% endfor %}
     </div>
 
-    <!-- 🚀 UPDATE DETAILS -->
-    <div id="updateSection" style="display: none;" class="mt-5 mb-5">
-        <div class="card update-card shadow-lg">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start mb-3">
-                    <div>
-                        <h5 class="text-white fw-bold mb-1"><i class="bi bi-arrow-up-circle-fill text-primary me-2"></i> Update Verfügbar!</h5>
-                        <p class="small text-secondary mb-0">Eine neue Version deiner Bot-Software wurde veröffentlicht.</p>
-                    </div>
-                    <span class="badge bg-primary px-3 py-2" id="updateStatusBadge">UPDATE VERFÜGBAR</span>
-                </div>
-
-                <div class="row g-4 mb-3">
-                    <div class="col-md-3">
-                        <div class="p-3 bg-dark rounded-3 border border-secondary border-opacity-25">
-                            <div class="text-secondary small mb-1">Deine Version</div>
-                            <div class="fw-bold text-white"><span class="version-tag">{{ version.version if version else '1.0.0' }}</span></div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="p-3 bg-dark rounded-3 border border-primary border-opacity-25">
-                            <div class="text-secondary small mb-1">Neueste Version</div>
-                            <div class="fw-bold text-white"><span class="version-tag" id="latestVersionText">-</span></div>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="p-3 bg-dark rounded-3 border border-secondary border-opacity-25">
-                            <div class="text-secondary small mb-1">Veröffentlicht am</div>
-                            <div class="fw-bold text-white" id="releaseDateText">-</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="mb-4">
-                    <h6 class="text-white small fw-bold mb-2">WAS IST NEU?</h6>
-                    <div id="updateChangelog">Lädt...</div>
-                </div>
-
-                <div id="updateActionArea">
-                    <button id="btnStartUpdate" class="btn btn-primary fw-bold w-100 py-3" style="border-radius: 12px; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);">
-                        JETZT AKTUALISIEREN
-                    </button>
-                </div>
-
-                <div id="updateProgressArea" style="display: none;">
-                    <div class="d-flex justify-content-between mb-2 small text-white">
-                        <span id="progressText">Installation wird vorbereitet...</span>
-                        <span id="progressPercent">0%</span>
-                    </div>
-                    <div class="progress" style="height: 10px; background-color: #334155; border-radius: 5px;">
-                        <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width: 0%"></div>
-                    </div>
-                    <p id="updateWarningText" class="text-warning small mt-3 text-center mb-0">
-                        <i class="bi bi-exclamation-triangle-fill me-1"></i> 
-                        Bitte die Seite nicht schließen. Die App startet nach dem Update automatisch neu.
-                    </p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Footer inside container, no fixed position -->
     <div class="version-footer">
-        <div>
-            <i class="bi bi-cpu-fill me-1"></i> System Online
-        </div>
-        <div>
-            Build Revision: <span class="text-white fw-bold" id="footerVersion">{{ version.version if version else '1.0.0' }}</span>
-        </div>
-        <div>
-            <i class="bi bi-shield-check-fill text-success me-1"></i> Verschlüsselt
-        </div>
+        <div><i class="bi bi-cpu-fill me-1"></i> System Online</div>
+        <div>Build Revision: <span class="text-white fw-bold">{{ version.version }}</span></div>
+        <div><i class="bi bi-shield-check-fill text-success me-1"></i> Verschlüsselt</div>
     </div>
 </div>
 
 <script>
-    let updateInfo = null;
+    const grid = document.getElementById('sortableGrid');
+    const editBtn = document.getElementById('btnEditLayout');
+    const saveBtn = document.getElementById('btnSaveLayout');
+    let sortable = null;
 
-    async function checkUpdate(manual = false) {
-        const btn = document.getElementById('btnManualUpdateCheck');
-        const statusDiv = document.getElementById('updateTileStatus');
-        const statusText = document.getElementById('updateTileStatusText');
-
-        if (manual) {
-            btn.disabled = true;
-            btn.innerHTML = '<i class="bi bi-arrow-repeat spin"></i> SCANNE...';
-            statusDiv.style.display = 'block';
-            statusDiv.className = 'mb-3 p-2 rounded text-center small pulse-status';
-            statusDiv.style.color = 'var(--text-secondary)';
-            statusText.innerHTML = '<i class="bi bi-search me-1"></i> Suche nach neuer Version...';
+    // Load saved layout
+    const savedLayout = {{ layout|tojson if layout else 'null' }};
+    if (savedLayout) {
+        if (savedLayout.order) {
+            savedLayout.order.forEach(id => {
+                const el = document.getElementById('card-' + id);
+                if (el) grid.appendChild(el);
+            });
         }
-
-        try {
-            const resp = await fetch('/api/update/check');
-            const data = await resp.json();
-            
-            if (data.update_available) {
-                updateInfo = data;
-                document.getElementById('updateSection').style.display = 'block';
-                document.getElementById('latestVersionText').innerText = 'v' + data.latest_version;
-                document.getElementById('releaseDateText').innerText = new Date(data.published_at).toLocaleString('de-DE');
-                document.getElementById('updateChangelog').innerText = data.changelog || 'Keine Beschreibung verfügbar.';
-                
-                if (manual) {
-                    statusDiv.className = 'mb-3 p-2 rounded text-center small bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25';
-                    statusText.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Neues Update verfügbar (v' + data.latest_version + ')';
-                    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-                }
-            } else {
-                if (manual) {
-                    statusDiv.className = 'mb-3 p-2 rounded text-center small bg-success bg-opacity-10 text-success border border-success border-opacity-25';
-                    statusText.innerHTML = '<i class="bi bi-shield-check me-1"></i> Software ist auf dem neuesten Stand.';
-                }
-            }
-        } catch (e) {
-            console.error("Update-Check fehlgeschlagen", e);
-            if (manual) {
-                statusDiv.className = 'mb-3 p-2 rounded text-center small bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25';
-                statusText.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> Verbindung zum Update-Server fehlgeschlagen.';
-            }
-        } finally {
-            if (manual) {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> NACH UPDATES SCANNEN';
-            }
+        if (savedLayout.hidden) {
+            savedLayout.hidden.forEach(id => {
+                const el = document.getElementById('card-' + id);
+                if (el) el.classList.add('hidden-card');
+            });
         }
     }
 
-    document.getElementById('btnManualUpdateCheck').onclick = () => checkUpdate(true);
+    editBtn.onclick = () => {
+        document.body.classList.add('edit-mode');
+        document.querySelectorAll('.card').forEach(c => c.classList.add('wiggle'));
+        editBtn.style.display = 'none';
+        saveBtn.style.display = 'inline-block';
+        sortable = new Sortable(grid, { animation: 150, ghostClass: 'bg-primary-subtle' });
+    };
 
-    document.getElementById('btnStartUpdate').onclick = async () => {
-        if (!updateInfo) return;
-        if (!confirm("Bist du sicher, dass du das Update jetzt installieren möchtest?")) return;
+    saveBtn.onclick = async () => {
+        const order = Array.from(grid.children).map(child => child.dataset.id);
+        const hidden = Array.from(document.querySelectorAll('.hidden-card')).map(el => el.dataset.id);
+        const res = await fetch('/api/dashboard/save-layout', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ order, hidden })
+        });
+        if (res.ok) location.reload();
+    };
 
-        document.getElementById('updateActionArea').style.display = 'none';
-        document.getElementById('updateProgressArea').style.display = 'block';
+    function toggleVisibility(id) {
+        const el = document.getElementById('card-' + id);
+        el.classList.toggle('hidden-card');
+        const icon = el.querySelector('.visibility-toggle i');
+        icon.className = el.classList.contains('hidden-card') ? 'bi bi-eye-slash' : 'bi bi-eye';
+    }
+
+    // --- UPDATE LOGIC ---
+    const scanBtn = document.getElementById('btnManualUpdateCheck');
+    const notify = document.getElementById('updateNotify');
+    const infoBox = document.getElementById('updateInfoBox');
+    let updateData = null;
+
+    scanBtn.onclick = async () => {
+        scanBtn.disabled = true;
+        scanBtn.innerHTML = '<i class="bi bi-arrow-repeat spin"></i> PRÜFE...';
+        notify.style.display = 'block';
+        notify.style.background = 'rgba(255,255,255,0.05)';
+        notify.style.color = '#fff';
+        notify.innerText = 'Suche nach neuen Versionen...';
 
         try {
-            const resp = await fetch('/api/update/install', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(updateInfo)
-            });
-
-            if (resp.ok) { 
-                pollUpdateStatus(); 
-            } else { 
-                alert("Fehler beim Starten des Updates."); 
-                location.reload(); 
+            const res = await fetch('/api/update/check');
+            const data = await res.json();
+            if (data.update_available) {
+                updateData = data;
+                notify.style.background = 'rgba(59, 130, 246, 0.2)';
+                notify.style.color = '#60a5fa';
+                notify.innerText = 'Neue Version gefunden!';
+                
+                document.getElementById('newVersionTag').innerText = data.latest_version;
+                document.getElementById('newVersionDate').innerText = new Date(data.published_at).toLocaleDateString();
+                document.getElementById('updateChangelog').innerText = data.changelog || 'Keine Details verfügbar.';
+                
+                scanBtn.style.display = 'none';
+                infoBox.style.display = 'block';
+            } else {
+                notify.style.background = 'rgba(16, 185, 129, 0.2)';
+                notify.style.color = '#10b981';
+                notify.innerText = 'Software ist aktuell.';
+                scanBtn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> NACH UPDATES SCANNEN';
+                scanBtn.disabled = false;
+                setTimeout(() => notify.style.display = 'none', 5000);
             }
         } catch (e) {
-            alert("Verbindung zum Server unterbrochen.");
-            location.reload();
+            notify.style.background = 'rgba(239, 68, 68, 0.2)';
+            notify.style.color = '#ef4444';
+            notify.innerText = 'Server nicht erreichbar.';
+            scanBtn.disabled = false;
         }
     };
 
-    async function pollUpdateStatus() {
-        const progressBar = document.getElementById('progressBar');
-        const progressPercent = document.getElementById('progressPercent');
-        const progressText = document.getElementById('progressText');
-        const warningText = document.getElementById('updateWarningText');
+    document.getElementById('btnInstallNow').onclick = async () => {
+        if(!confirm("Update jetzt installieren?")) return;
+        document.getElementById('updateProgress').style.display = 'block';
+        infoBox.style.display = 'none';
+        notify.innerText = 'Installation läuft...';
 
-        const interval = setInterval(async () => {
-            try {
-                const resp = await fetch('/api/update/status');
-                if (!resp.ok) return; 
-                
-                const data = await resp.json();
-                progressBar.style.width = data.progress + '%';
-                progressPercent.innerText = data.progress + '%';
+        const res = await fetch('/api/update/install', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(updateData)
+        });
 
-                if (data.status === 'downloading') progressText.innerText = "Update wird heruntergeladen...";
-                else if (data.status === 'extracting') progressText.innerText = "Dateien werden entpackt...";
-                else if (data.status === 'applying') progressText.innerText = "Dateien werden kopiert...";
-                else if (data.status === 'finished') { 
-                    progressText.innerText = "Installation abgeschlossen! App wird neu gestartet...";
-                    progressBar.classList.remove('bg-primary');
-                    progressBar.classList.add('bg-success');
-                    warningText.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Update erfolgreich. Seite lädt gleich neu...';
-                    clearInterval(interval); 
-                    checkAppBackOnline(); 
-                }
-                else if (data.status === 'error') { 
-                    clearInterval(interval); 
-                    progressText.innerText = "Fehler!";
-                    progressBar.classList.add('bg-danger');
-                    alert("Fehler beim Update: " + data.error); 
-                    location.reload();
-                }
-            } catch (e) {}
-        }, 1000);
-    }
-
-    function checkAppBackOnline() {
-        let attempts = 0;
-        const checkInterval = setInterval(async () => {
-            try { 
-                const resp = await fetch('/'); 
-                if (resp.ok) {
-                    clearInterval(checkInterval);
-                    location.reload(); 
-                }
-            } catch (e) {}
-        }, 2000);
-    }
-
-    // Initial check
-    checkUpdate();
+        if(res.ok) {
+            setInterval(async () => {
+                const sRes = await fetch('/api/update/status');
+                const s = await sRes.json();
+                document.querySelector('#updateProgress .progress-bar').style.width = s.progress + '%';
+                if(s.status === 'finished') location.reload();
+            }, 1000);
+        }
+    };
 </script>
 {% endblock %}

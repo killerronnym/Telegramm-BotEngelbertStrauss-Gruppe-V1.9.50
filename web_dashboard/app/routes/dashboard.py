@@ -78,7 +78,36 @@ def inject_globals():
 @bp.route('/')
 @bp.route('/dashboard')
 def index():
-    return render_template('index.html', version={"version": "3.0.0"})
+    # Load version info
+    version_path = os.path.join(PROJECT_ROOT, 'version.json')
+    version = {"version": "1.0.0"}
+    if os.path.exists(version_path):
+        try:
+            with open(version_path, 'r') as f:
+                version = json.load(f)
+        except: pass
+    
+    # Load layout settings
+    layout_settings = BotSettings.query.filter_by(bot_name='dashboard_layout').first()
+    layout = None
+    if layout_settings:
+        try:
+            layout = json.loads(layout_settings.config_json)
+        except: pass
+    
+    return render_template('index.html', version=version, layout=layout)
+
+@bp.route('/api/dashboard/save-layout', methods=['POST'])
+def save_dashboard_layout():
+    data = request.json
+    layout_settings = BotSettings.query.filter_by(bot_name='dashboard_layout').first()
+    if not layout_settings:
+        layout_settings = BotSettings(bot_name='dashboard_layout', config_json=json.dumps(data))
+        db.session.add(layout_settings)
+    else:
+        layout_settings.config_json = json.dumps(data)
+    db.session.commit()
+    return jsonify({"success": True})
 
 def get_invite_bot_settings():
     settings = BotSettings.query.filter_by(bot_name='invite').first()
