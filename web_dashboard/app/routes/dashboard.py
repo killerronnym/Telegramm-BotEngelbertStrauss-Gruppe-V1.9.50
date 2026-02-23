@@ -18,12 +18,14 @@ BASE_DIR = os.path.join(PROJECT_ROOT, 'web_dashboard')
 # Bot PID Files
 INVITE_BOT_PID_FILE = os.path.join(BASE_DIR, "invite_bot.pid")
 ID_FINDER_BOT_PID_FILE = os.path.join(BASE_DIR, "id_finder_bot.pid")
+TIKTOK_BOT_PID_FILE = os.path.join(BASE_DIR, "tiktok_bot.pid")
 
 # Log Files
 INVITE_BOT_ERROR_LOG = os.path.join(BASE_DIR, "invite_bot_error.log")
 USER_INTERACTION_LOG_FILE = os.path.join(PROJECT_ROOT, "user_interactions.log")
 INVITE_BOT_LOG_FILE = os.path.join(BASE_DIR, "invite_bot.log")
 ID_FINDER_BOT_LOG_FILE = os.path.join(PROJECT_ROOT, "bots", "id_finder_bot", "id_finder_bot.log")
+TIKTOK_BOT_LOG_FILE = os.path.join(PROJECT_ROOT, "bots", "tiktok_bot", "tiktok_bot.log")
 START_DEBUG_LOG_FILE = os.path.join(BASE_DIR, "start_debug.log")
 DIRECT_START_OUTPUT_LOG = os.path.join(BASE_DIR, "direct_start_output.log") # New debug log
 
@@ -40,34 +42,27 @@ def get_bot_status_simple():
         "quiz": {"running": False},
         "umfrage": {"running": False},
         "outfit": {"running": False},
-        "id_finder": {"running": False}
+        "id_finder": {"running": False},
+        "tiktok": {"running": False}
     }
     
-    # Invite Bot
-    if os.path.exists(INVITE_BOT_PID_FILE):
-        try:
-            with open(INVITE_BOT_PID_FILE, 'r') as f:
-                pid = int(f.read().strip())
-            if is_process_running(pid):
-                status["invite"]["running"] = True
-            else:
-                os.remove(INVITE_BOT_PID_FILE)
-        except (IOError, ValueError):
-            if os.path.exists(INVITE_BOT_PID_FILE):
-                os.remove(INVITE_BOT_PID_FILE)
+    # PID Check Logic Helper
+    def check_bot_pid(bot_key, pid_file):
+        if os.path.exists(pid_file):
+            try:
+                with open(pid_file, 'r') as f:
+                    pid = int(f.read().strip())
+                if is_process_running(pid):
+                    status[bot_key]["running"] = True
+                else:
+                    os.remove(pid_file)
+            except (IOError, ValueError):
+                if os.path.exists(pid_file):
+                    os.remove(pid_file)
 
-    # ID Finder Bot
-    if os.path.exists(ID_FINDER_BOT_PID_FILE):
-        try:
-            with open(ID_FINDER_BOT_PID_FILE, 'r') as f:
-                pid = int(f.read().strip())
-            if is_process_running(pid):
-                status["id_finder"]["running"] = True
-            else:
-                os.remove(ID_FINDER_BOT_PID_FILE)
-        except (IOError, ValueError):
-            if os.path.exists(ID_FINDER_BOT_PID_FILE):
-                os.remove(ID_FINDER_BOT_PID_FILE)
+    check_bot_pid("invite", INVITE_BOT_PID_FILE)
+    check_bot_pid("id_finder", ID_FINDER_BOT_PID_FILE)
+    check_bot_pid("tiktok", TIKTOK_BOT_PID_FILE)
 
     return status
 
@@ -552,30 +547,134 @@ def id_finder_delete_user(user_id):
 
 @bp.route('/bot-action/<bot_name>/<action>', methods=['POST'])
 def bot_action_route(bot_name, action):
+    pid_file = None
+    bot_script = None
+    log_file_path = None
+    flash_name = bot_name
+
     if bot_name == 'id_finder':
+        pid_file = ID_FINDER_BOT_PID_FILE
+        bot_script = os.path.join(PROJECT_ROOT, "bots", "id_finder_bot", "id_finder_bot.py")
+        log_file_path = ID_FINDER_BOT_LOG_FILE
+        flash_name = "ID-Finder"
+    elif bot_name == 'tiktok':
+        pid_file = TIKTOK_BOT_PID_FILE
+        bot_script = os.path.join(PROJECT_ROOT, "bots", "tiktok_bot", "tiktok_bot.py")
+        log_file_path = TIKTOK_BOT_LOG_FILE
+        flash_name = "TikTok"
+    
+    if pid_file and bot_script:
         if action == 'start':
-            if os.path.exists(ID_FINDER_BOT_PID_FILE):
+            if os.path.exists(pid_file):
                  try:
-                    pid_val = int(open(ID_FINDER_BOT_PID_FILE).read().strip())
-                    if is_process_running(pid_val): flash('ID-Finder läuft bereits.', 'warning'); return redirect(url_for('dashboard.id_finder_dashboard'))
-                    else: os.remove(ID_FINDER_BOT_PID_FILE)
-                 except: os.remove(ID_FINDER_BOT_PID_FILE)
+                    pid_val = int(open(pid_file).read().strip())
+                    if is_process_running(pid_val): flash(f'{flash_name} läuft bereits.', 'warning'); return redirect(request.referrer or url_for('dashboard.index'))
+                    else: os.remove(pid_file)
+                 except: os.remove(pid_file)
             try:
-                python_exe = sys.executable; bot_script = os.path.join(PROJECT_ROOT, "bots", "id_finder_bot", "id_finder_bot.py")
-                os.makedirs(os.path.dirname(ID_FINDER_BOT_LOG_FILE), exist_ok=True)
-                with open(ID_FINDER_BOT_LOG_FILE, 'a') as log_file: process = subprocess.Popen([python_exe, bot_script], start_new_session=True, stdout=log_file, stderr=log_file)
-                with open(ID_FINDER_BOT_PID_FILE, 'w') as f: f.write(str(process.pid))
-                flash('ID-Finder Bot gestartet.', 'success')
+                python_exe = sys.executable
+                os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+                # In der Entwicklungsumgebung nutzen wir oft venv
+                venv_python = os.path.join(PROJECT_ROOT, "venv", "bin", "python")
+                exe_to_use = venv_python if os.path.exists(venv_python) else python_exe
+                
+                with open(log_file_path, 'a') as log_f: 
+                    process = subprocess.Popen([exe_to_use, bot_script], start_new_session=True, stdout=log_f, stderr=log_f)
+                with open(pid_file, 'w') as f: f.write(str(process.pid))
+                
+                # Update is_active in DB
+                settings = BotSettings.query.filter_by(bot_name=f"{bot_name}_bot").first()
+                if settings:
+                    config = json.loads(settings.config_json)
+                    config['is_active'] = True
+                    settings.config_json = json.dumps(config)
+                    db.session.commit()
+
+                flash(f'{flash_name} Bot gestartet.', 'success')
             except Exception as e: flash(f'Fehler beim Starten: {e}', 'danger')
         elif action == 'stop':
-            if os.path.exists(ID_FINDER_BOT_PID_FILE):
+            if os.path.exists(pid_file):
                 try:
-                    with open(ID_FINDER_BOT_PID_FILE, 'r') as f: pid = int(f.read().strip())
-                    os.kill(pid, signal.SIGTERM); os.remove(ID_FINDER_BOT_PID_FILE); flash('ID-Finder Bot gestoppt.', 'success')
-                except Exception as e: flash(f'Fehler beim Stoppen: {e}', 'danger')
-    return redirect(url_for('dashboard.id_finder_dashboard'))
+                    with open(pid_file, 'r') as f: pid = int(f.read().strip())
+                    os.kill(pid, signal.SIGTERM); os.remove(pid_file)
+                    
+                    # Update is_active in DB
+                    settings = BotSettings.query.filter_by(bot_name=f"{bot_name}_bot").first()
+                    if settings:
+                        config = json.loads(settings.config_json)
+                        config['is_active'] = False
+                        settings.config_json = json.dumps(config)
+                        db.session.commit()
 
-# --- End ID Finder Bot Logic ---
+                    flash(f'{flash_name} Bot gestoppt.', 'success')
+                except Exception as e: flash(f'Fehler beim Stoppen: {e}', 'danger')
+    
+    return redirect(request.referrer or url_for('dashboard.index'))
+
+# --- TikTok Bot Logic ---
+
+def get_tiktok_bot_settings():
+    settings = BotSettings.query.filter_by(bot_name='tiktok_bot').first()
+    if not settings:
+        initial_config = {
+            'telegram_chat_id': '',
+            'telegram_topic_id': '',
+            'target_unique_id': '',
+            'watch_hosts': [],
+            'retry_offline_seconds': 60,
+            'alert_cooldown_seconds': 600,
+            'max_concurrent_lives': 3,
+            'is_active': False,
+            'message_template_self': "🔴 {target} ist jetzt LIVE!\n\n🔗 {url}",
+            'message_template_presence': "👀 {target} wurde in einem TikTok-Live gesehen!\n\n🎥 Host: @{host}\n📌 Event: {event}\n🔗 {url}"
+        }
+        settings = BotSettings(bot_name='tiktok_bot', config_json=json.dumps(initial_config))
+        db.session.add(settings)
+        db.session.commit()
+    return settings
+
+@bp.route('/tiktok-settings', methods=['GET', 'POST'])
+def tiktok_settings():
+    settings = get_tiktok_bot_settings()
+    config = json.loads(settings.config_json)
+    
+    # Get ID Finder token for display
+    id_finder_settings = get_id_finder_settings()
+    id_finder_config = json.loads(id_finder_settings.config_json)
+    config['api_token_display'] = id_finder_config.get('bot_token', 'Nicht gesetzt')
+
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'save_settings':
+            config['telegram_chat_id'] = request.form.get('telegram_chat_id')
+            config['telegram_topic_id'] = request.form.get('telegram_topic_id')
+            config['target_unique_id'] = request.form.get('target_unique_id')
+            hosts_raw = request.form.get('watch_hosts', '')
+            config['watch_hosts'] = [h.strip() for h in hosts_raw.split(',') if h.strip()]
+            config['message_template_self'] = request.form.get('message_template_self')
+            config['message_template_presence'] = request.form.get('message_template_presence')
+            try: config['alert_cooldown_seconds'] = int(request.form.get('alert_cooldown_seconds', 600))
+            except: pass
+            try: config['max_concurrent_lives'] = int(request.form.get('max_concurrent_lives', 3))
+            except: pass
+            
+            # Remove helper key before saving
+            config.pop('api_token_display', None)
+            settings.config_json = json.dumps(config)
+            db.session.commit()
+            flash('TikTok-Einstellungen gespeichert.', 'success')
+            return redirect(url_for('dashboard.tiktok_settings'))
+
+    logs = []
+    if os.path.exists(TIKTOK_BOT_LOG_FILE):
+        try:
+            with open(TIKTOK_BOT_LOG_FILE, 'r', encoding='utf-8') as f:
+                logs = f.readlines()[-50:]
+        except: pass
+
+    return render_template('tiktok_settings.html', config=config, logs=logs)
+
+# --- End TikTok Bot Logic ---
 
 @bp.route('/minecraft', methods=['GET', 'POST'])
 def minecraft_status_page():

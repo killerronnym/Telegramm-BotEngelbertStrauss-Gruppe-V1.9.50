@@ -105,6 +105,7 @@
         {% set items = [
             {'id': 'live_mod', 'title': 'Live Moderation', 'icon': 'bi-shield-check', 'desc': 'Überwachen und moderieren Sie Telegram-Gruppen in Echtzeit.', 'link': url_for('dashboard.live_moderation'), 'type': 'open'},
             {'id': 'planer', 'title': 'Nachricht Planer', 'icon': 'bi-megaphone', 'desc': 'Nachrichten & Medien planen oder sofort über den ID-Finder senden.', 'link': url_for('dashboard.broadcast_manager'), 'type': 'settings', 'bot': 'id_finder'},
+            {'id': 'tiktok', 'title': 'TikTok Live Benachrichtigung', 'icon': 'bi-tiktok', 'desc': 'Überwacht TikTok Livestreams auf Zielpersonen.', 'link': url_for('dashboard.tiktok_settings'), 'type': 'bot', 'bot': 'tiktok'},
             {'id': 'invite', 'title': 'Einladungs-Bot', 'icon': 'bi-apple', 'desc': 'Begrüßungstexte & automatische Beitrittskontrolle.', 'link': url_for('dashboard.bot_settings'), 'type': 'bot', 'bot': 'invite'},
             {'id': 'quiz', 'title': 'Quiz Bot', 'icon': 'bi-question-circle', 'desc': 'Verwaltung der Quizfragen und automatischer Zeitplaner.', 'link': url_for('dashboard.quiz_settings'), 'type': 'bot', 'bot': 'quiz'},
             {'id': 'umfrage', 'title': 'Umfrage Bot', 'icon': 'bi-bar-chart', 'desc': 'Verwaltung der Umfragen und automatischer Zeitplaner.', 'link': url_for('dashboard.umfrage_settings'), 'type': 'bot', 'bot': 'umfrage'},

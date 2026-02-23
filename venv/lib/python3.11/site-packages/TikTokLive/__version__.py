@@ -1,0 +1,1 @@
+PACKAGE_VERSION: str = "6.6.5"
