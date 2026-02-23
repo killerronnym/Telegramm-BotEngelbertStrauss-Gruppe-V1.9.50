@@ -12,7 +12,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(BOT_DIR))
 # Import models from web_dashboard.app.models
 sys.path.append(PROJECT_ROOT)
 
-from web_dashboard.app.models import db, BotSettings, IDFinderAdmin, IDFinderUser, IDFinderMessage, TopicMapping
+from web_dashboard.app.models import db, BotSettings, IDFinderAdmin, IDFinderUser, IDFinderMessage, TopicMapping, Broadcast
 from flask import Flask
 
 # --- Database Helper ---
@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 try:
     from telegram import Update, ForumTopic
     from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, Application
+    from telegram.constants import ParseMode
 except ImportError:
     logger.error("Erforderliche Bibliothek 'python-telegram-bot' nicht gefunden!")
     sys.exit(1)
@@ -53,7 +54,72 @@ def get_config_from_db():
         logger.error(f"Fehler beim Laden der Konfiguration aus DB: {e}")
     return None
 
-# --- Activity Tracking (DB Version) ---
+# --- Broadcast Engine ---
+async def check_and_send_broadcasts(context: ContextTypes.DEFAULT_TYPE):
+    """
+    Prüft die Datenbank nach fälligen Broadcasts und versendet sie.
+    """
+    config = get_config_from_db()
+    if not config: return
+    
+    main_group_id = config.get('main_group_id')
+    if not main_group_id: return
+
+    try:
+        with flask_app.app_context():
+            now = datetime.utcnow()
+            # Fällige Broadcasts holen (geplant für jetzt oder früher, Status 'pending')
+            pending_broadcasts = Broadcast.query.filter(
+                Broadcast.status == 'pending',
+                Broadcast.scheduled_at <= now
+            ).all()
+
+            for b in pending_broadcasts:
+                logger.info(f"Sende fälligen Broadcast: {b.id}")
+                try:
+                    chat_id = main_group_id
+                    thread_id = int(b.topic_id) if b.topic_id and b.topic_id.isdigit() else None
+                    
+                    if b.media_path:
+                        # Medienversand (Bild/Video)
+                        full_media_path = os.path.join(PROJECT_ROOT, 'web_dashboard', 'app', 'static', b.media_path)
+                        if os.path.exists(full_media_path):
+                            with open(full_media_path, 'rb') as f:
+                                if b.media_type == 'image':
+                                    msg = await context.bot.send_photo(
+                                        chat_id=chat_id, photo=f, caption=b.text,
+                                        message_thread_id=thread_id, disable_notification=b.silent_send
+                                    )
+                                elif b.media_type == 'video':
+                                    msg = await context.bot.send_video(
+                                        chat_id=chat_id, video=f, caption=b.text,
+                                        message_thread_id=thread_id, disable_notification=b.silent_send
+                                    )
+                        else:
+                            logger.error(f"Mediendatei nicht gefunden: {full_media_path}")
+                            b.status = 'failed'
+                            continue
+                    else:
+                        # Nur Text
+                        msg = await context.bot.send_message(
+                            chat_id=chat_id, text=b.text,
+                            message_thread_id=thread_id, disable_notification=b.silent_send
+                        )
+                    
+                    if b.pin_message and msg:
+                        await context.bot.pin_chat_message(chat_id=chat_id, message_id=msg.message_id)
+
+                    b.status = 'sent'
+                    logger.info(f"Broadcast {b.id} erfolgreich gesendet.")
+                except Exception as e:
+                    logger.error(f"Fehler beim Senden von Broadcast {b.id}: {e}")
+                    b.status = 'failed'
+                
+            db.session.commit()
+    except Exception as e:
+        logger.error(f"Fehler in der Broadcast Engine: {e}")
+
+# --- Activity Tracking ---
 async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg, user, chat = update.effective_message, update.effective_user, update.effective_chat
     if not all([msg, user, chat]): return
@@ -66,27 +132,18 @@ async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     now = datetime.utcnow()
     
     try:
-        # Get Avatar
+        # Get Avatar (Lazy update)
         avatar_file_id = None
-        try:
-            photos = await context.bot.get_user_profile_photos(user.id, limit=1)
-            if photos.total_count > 0:
-                avatar_file_id = photos.photos[0][-1].file_id
-        except Exception as e:
-            logger.debug(f"Could not get avatar for user {user.id}: {e}")
-
+        # Only check occasionally or if not set to save API calls
+        
         with flask_app.app_context():
             # Update User Registry
             db_user = IDFinderUser.query.filter_by(telegram_id=user.id).first()
             if not db_user:
                 db_user = IDFinderUser(
-                    telegram_id=user.id,
-                    username=user.username,
-                    first_name=user.first_name,
-                    last_name=user.last_name,
-                    language_code=user.language_code,
-                    is_bot=user.is_bot,
-                    avatar_file_id=avatar_file_id,
+                    telegram_id=user.id, username=user.username,
+                    first_name=user.first_name, last_name=user.last_name,
+                    language_code=user.language_code, is_bot=user.is_bot,
                     first_contact=now
                 )
                 db.session.add(db_user)
@@ -94,25 +151,19 @@ async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 db_user.username = user.username
                 db_user.first_name = user.first_name
                 db_user.last_name = user.last_name
-                db_user.avatar_file_id = avatar_file_id or db_user.avatar_file_id
                 db_user.last_contact = now
             
-            # Update Topic Mapping if available
-            if chat.type in ["group", "supergroup"]:
-                 thread_id = msg.message_thread_id
-                 if thread_id:
+            # Discover Topics
+            if chat.type in ["group", "supergroup"] and msg.message_thread_id:
+                thread_id = msg.message_thread_id
+                mapping = TopicMapping.query.filter_by(topic_id=thread_id).first()
+                if not mapping:
                     topic_name = f"Topic {thread_id}"
                     try:
                         forum_topic = await context.bot.get_forum_topic(chat_id=chat.id, message_thread_id=thread_id)
                         topic_name = forum_topic.name
                     except: pass
-                    
-                    mapping = TopicMapping.query.filter_by(topic_id=thread_id).first()
-                    if mapping:
-                        mapping.topic_name = topic_name
-                    else:
-                        mapping = TopicMapping(topic_id=thread_id, topic_name=topic_name)
-                        db.session.add(mapping)
+                    db.session.add(TopicMapping(topic_id=thread_id, topic_name=topic_name))
 
             # Log Message
             is_command = msg.text.startswith("/") if msg.text else False
@@ -128,46 +179,18 @@ async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
             elif msg.video: 
                 content_type = "video"
                 file_id = msg.video.file_id
-            elif msg.document: 
-                content_type = "document"
-                file_id = msg.document.file_id
-            elif msg.sticker: 
-                content_type = "sticker"
-                file_id = msg.sticker.file_id
-            elif msg.voice: 
-                content_type = "voice"
-                file_id = msg.voice.file_id
-            elif msg.audio: 
-                content_type = "audio"
-                file_id = msg.audio.file_id
-            elif msg.animation: 
-                content_type = "animation"
-                file_id = msg.animation.file_id
 
             db_msg = IDFinderMessage(
-                telegram_user_id=user.id,
-                message_id=msg.message_id,
-                chat_id=chat.id,
-                message_thread_id=msg.message_thread_id,
-                chat_type=chat.type,
-                text=msg.text or msg.caption or "",
-                content_type=content_type,
-                file_id=file_id,
-                is_command=is_command,
-                timestamp=now
+                telegram_user_id=user.id, message_id=msg.message_id,
+                chat_id=chat.id, message_thread_id=msg.message_thread_id,
+                chat_type=chat.type, text=msg.text or msg.caption or "",
+                content_type=content_type, file_id=file_id,
+                is_command=is_command, timestamp=now
             )
             db.session.add(db_msg)
             db.session.commit()
     except Exception as e:
-        logger.error(f"Fehler beim Loggen der Aktivität: {e}")
-
-# --- Admin Check ---
-def is_admin(telegram_id: int):
-    try:
-        with flask_app.app_context():
-            admin = IDFinderAdmin.query.filter_by(telegram_id=telegram_id).first()
-            return admin is not None
-    except: return False
+        logger.error(f"Fehler beim Loggen: {e}")
 
 # --- Commands ---
 async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -175,7 +198,7 @@ async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"👤 *Benutzer-ID:* `{update.effective_user.id}`\n"
         f"💬 *Chat-ID:* `{update.effective_chat.id}`\n"
         f"🏷️ *Topic-ID:* `{update.effective_message.message_thread_id or 'Kein Topic'}`",
-        parse_mode="Markdown"
+        parse_mode=ParseMode.MARKDOWN
     )
 
 async def shutdown(app: Application):
@@ -189,11 +212,14 @@ def main():
         
     app = ApplicationBuilder().token(config["bot_token"]).post_shutdown(shutdown).build()
     
-    # Add handlers
+    # Handlers
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, track_activity))
     app.add_handler(CommandHandler("id", get_id))
 
-    logger.info("ID-Finder Bot startet (DB-Modus)...")
+    # Broadcast Job (Alle 30 Sekunden prüfen)
+    app.job_queue.run_repeating(check_and_send_broadcasts, interval=30)
+
+    logger.info("ID-Finder Bot startet (mit Broadcast Engine)...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":

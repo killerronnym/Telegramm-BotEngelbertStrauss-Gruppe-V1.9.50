@@ -312,7 +312,7 @@ def clear_system_logs():
 @bp.route('/broadcast_manager')
 def broadcast_manager():
     topics = TopicMapping.query.all()
-    known_topics = {t.topic_id: t.topic_name for t in topics}
+    known_topics = {str(t.topic_id): t.topic_name for t in topics}
     broadcasts = Broadcast.query.order_by(Broadcast.created_at.desc()).all()
     return render_template('broadcast_manager.html', known_topics=known_topics, broadcasts=broadcasts)
 
@@ -324,6 +324,7 @@ def save_broadcast():
     scheduled_at_str = request.form.get('scheduled_at')
     pin_message = 'pin_message' in request.form
     silent_send = 'silent_send' in request.form
+    action = request.form.get('action')
     
     media = request.files.get('media')
     media_path = None
@@ -343,8 +344,8 @@ def save_broadcast():
         else:
             media_type = 'document'
 
-    scheduled_at = None
-    if scheduled_at_str:
+    scheduled_at = datetime.utcnow() # Default for send_now
+    if action == 'schedule' and scheduled_at_str:
         try:
             scheduled_at = datetime.strptime(scheduled_at_str, '%Y-%m-%dT%H:%M')
         except ValueError:
@@ -357,12 +358,13 @@ def save_broadcast():
         media_path=media_path,
         media_type=media_type,
         scheduled_at=scheduled_at,
+        status='pending',
         pin_message=pin_message,
         silent_send=silent_send
     )
     db.session.add(broadcast)
     db.session.commit()
-    flash('Broadcast gespeichert.', 'success')
+    flash('Nachricht wurde geplant/eingestellt.', 'success')
     return redirect(url_for('dashboard.broadcast_manager'))
 
 @bp.route('/broadcast_manager/topic/save', methods=['POST'])
@@ -370,25 +372,32 @@ def save_topic_mapping():
     topic_id = request.form.get('topic_id')
     topic_name = request.form.get('topic_name')
     if topic_id and topic_name:
-        mapping = TopicMapping.query.filter_by(topic_id=topic_id).first()
-        if mapping:
-            mapping.topic_name = topic_name
-        else:
-            mapping = TopicMapping(topic_id=topic_id, topic_name=topic_name)
-            db.session.add(mapping)
-        db.session.commit()
-        flash('Topic gespeichert.', 'success')
+        try:
+            tid_int = int(topic_id)
+            mapping = TopicMapping.query.filter_by(topic_id=tid_int).first()
+            if mapping:
+                mapping.topic_name = topic_name
+            else:
+                mapping = TopicMapping(topic_id=tid_int, topic_name=topic_name)
+                db.session.add(mapping)
+            db.session.commit()
+            flash('Topic gespeichert.', 'success')
+        except ValueError:
+            flash('Fehler: Topic ID muss eine Zahl sein.', 'danger')
     else:
         flash('Fehler: Topic ID und Name erforderlich.', 'danger')
     return redirect(url_for('dashboard.broadcast_manager'))
 
 @bp.route('/broadcast_manager/topic/delete/<topic_id>', methods=['POST'])
 def delete_topic_mapping(topic_id):
-    mapping = TopicMapping.query.filter_by(topic_id=topic_id).first()
-    if mapping:
-        db.session.delete(mapping)
-        db.session.commit()
-        flash('Topic gelöscht.', 'success')
+    try:
+        tid_int = int(topic_id)
+        mapping = TopicMapping.query.filter_by(topic_id=tid_int).first()
+        if mapping:
+            db.session.delete(mapping)
+            db.session.commit()
+            flash('Topic gelöscht.', 'success')
+    except: pass
     return redirect(url_for('dashboard.broadcast_manager'))
 
 @bp.route('/broadcast_manager/delete/<int:broadcast_id>', methods=['POST'])
@@ -675,7 +684,6 @@ def id_finder_analytics():
         busiest_days[m.timestamp.weekday()] += 1
         
     # Leaderboard & Activity Timeline
-    # Timeline is harder without more sophisticated grouping, let's do last 30 days for labels
     labels = []
     total_timeline = []
     if days:
