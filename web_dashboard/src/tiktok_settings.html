@@ -49,7 +49,12 @@
             </div>
 
             <div class="card bg-black border-0">
-                <div class="card-header border-0 pb-0"><h6 class="text-secondary small font-monospace">System Console</h6></div>
+                <div class="card-header border-0 pb-0 d-flex justify-content-between align-items-center">
+                    <h6 class="text-secondary small font-monospace mb-0">System Console</h6>
+                    <form action="/tiktok/clear-logs" method="POST" class="m-0">
+                        <button type="submit" class="btn btn-link text-danger p-0 small text-decoration-none" style="font-size: 0.7rem;">LOGS LÖSCHEN</button>
+                    </form>
+                </div>
                 <div class="card-body p-0">
                     <pre class="log-display mb-0" style="height: 400px; overflow-y: auto;">{% for line in logs %}{{ line.strip() }}
 {% endfor %}</pre>
@@ -81,13 +86,20 @@
                         </div>
 
                         <div class="mb-4">
-                            <label class="small text-secondary fw-bold mb-1">DEIN TIKTOK NAME (Target Unique ID)</label>
-                            <input type="text" class="form-control" name="target_unique_id" value="{{ config.target_unique_id or '' }}" placeholder="z.B. dein_name">
+                            <label class="small text-secondary fw-bold mb-1">ZIEL-ACCOUNTS (Bis zu 5 TikTok Namen)</label>
+                            <div id="targetList">
+                                {% set targets = config.target_unique_ids if config.target_unique_ids else ([config.target_unique_id] if config.target_unique_id else []) %}
+                                {% for i in range(5) %}
+                                    <input type="text" class="form-control mb-2" name="target_unique_ids" value="{{ targets[i] if i < targets|length else '' }}" placeholder="Name {{ i+1 }}">
+                                {% endfor %}
+                            </div>
+                            <div class="form-text">Diese Accounts werden überwacht (wenn sie selbst live gehen oder bei anderen auftauchen).</div>
                         </div>
 
                         <div class="mb-4">
                             <label class="small text-secondary fw-bold mb-1">CREATOR LISTE (Watch Hosts)</label>
                             <textarea class="form-control" name="watch_hosts" rows="2" placeholder="host1, host2, host3">{{ config.watch_hosts|join(', ') if config.watch_hosts else '' }}</textarea>
+                            <div class="form-text">Andere Kanäle, bei denen geprüft wird, ob die Ziel-Accounts oben im Panel sind.</div>
                         </div>
 
                         <div class="mb-4">
@@ -103,11 +115,11 @@
                             <div class="tab-content">
                                 <div class="tab-pane fade show active" id="self-template">
                                     <textarea class="form-control" name="message_template_self" rows="4">{{ config.message_template_self or "🔴 {target} ist jetzt LIVE!\n\n🔗 {url}" }}</textarea>
-                                    <p class="small text-secondary mt-1">Wird gesendet, wenn DU selbst live gehst.</p>
+                                    <p class="small text-secondary mt-1">Wird gesendet, wenn einer deiner Ziel-Accounts selbst live geht.</p>
                                 </div>
                                 <div class="tab-pane fade" id="presence-template">
                                     <textarea class="form-control" name="message_template_presence" rows="4">{{ config.message_template_presence or "👀 {target} wurde in einem TikTok-Live gesehen!\n\n🎥 Host: @{host}\n📌 Event: {event}\n🔗 {url}" }}</textarea>
-                                    <p class="small text-secondary mt-1">Wird gesendet, wenn DU bei jemand anderem auftauchst.</p>
+                                    <p class="small text-secondary mt-1">Wird gesendet, wenn einer deiner Ziel-Accounts bei jemand anderem im Panel ist.</p>
                                 </div>
                             </div>
                             <div class="mt-2">
@@ -122,7 +134,7 @@
                         <div class="row mb-4">
                             <div class="col-md-6">
                                 <label class="small text-secondary fw-bold mb-1">COOLDOWN (Sekunden)</label>
-                                <input type="number" class="form-control" name="alert_cooldown_seconds" value="{{ config.alert_cooldown_seconds or 600 }}">
+                                <input type="number" class="form-control" name="alert_cooldown_seconds" value="{{ config.alert_cooldown_seconds or 1800 }}">
                             </div>
                             <div class="col-md-6">
                                 <label class="small text-secondary fw-bold mb-1">MAX. VERBINDUNGEN</label>
