@@ -21,13 +21,17 @@ BASE_DIR = os.path.join(PROJECT_ROOT, 'web_dashboard')
 INVITE_BOT_PID_FILE = os.path.join(BASE_DIR, "invite_bot.pid")
 ID_FINDER_BOT_PID_FILE = os.path.join(BASE_DIR, "id_finder_bot.pid")
 TIKTOK_BOT_PID_FILE = os.path.join(BASE_DIR, "tiktok_bot.pid")
+QUIZ_BOT_PID_FILE = os.path.join(BASE_DIR, "quiz_bot.pid")
+UMFRAGE_BOT_PID_FILE = os.path.join(BASE_DIR, "umfrage_bot.pid")
+OUTFIT_BOT_PID_FILE = os.path.join(BASE_DIR, "outfit_bot.pid")
 
 # Log Files
-INVITE_BOT_ERROR_LOG = os.path.join(BASE_DIR, "invite_bot_error.log")
-USER_INTERACTION_LOG_FILE = os.path.join(PROJECT_ROOT, "user_interactions.log")
 INVITE_BOT_LOG_FILE = os.path.join(BASE_DIR, "invite_bot.log")
 ID_FINDER_BOT_LOG_FILE = os.path.join(PROJECT_ROOT, "bots", "id_finder_bot", "id_finder_bot.log")
 TIKTOK_BOT_LOG_FILE = os.path.join(PROJECT_ROOT, "bots", "tiktok_bot", "tiktok_bot.log")
+QUIZ_BOT_LOG_FILE = os.path.join(PROJECT_ROOT, "bots", "quiz_bot", "quiz_bot.log")
+UMFRAGE_BOT_LOG_FILE = os.path.join(PROJECT_ROOT, "bots", "umfrage_bot", "umfrage_bot.log")
+OUTFIT_BOT_LOG_FILE = os.path.join(PROJECT_ROOT, "bots", "outfit_bot", "outfit_bot.log")
 
 def is_process_running(pid):
     try:
@@ -53,6 +57,9 @@ def get_bot_status_simple():
     check_pid("invite", INVITE_BOT_PID_FILE)
     check_pid("id_finder", ID_FINDER_BOT_PID_FILE)
     check_pid("tiktok", TIKTOK_BOT_PID_FILE)
+    check_pid("quiz", QUIZ_BOT_PID_FILE)
+    check_pid("umfrage", UMFRAGE_BOT_PID_FILE)
+    check_pid("outfit", OUTFIT_BOT_PID_FILE)
     return status
 
 @bp.context_processor
@@ -531,6 +538,10 @@ def bot_action_route(bot_name, action):
     pfile, script, lpath = None, None, None
     if bot_name == 'id_finder': pfile, script, lpath = ID_FINDER_BOT_PID_FILE, os.path.join(PROJECT_ROOT, "bots", "id_finder_bot", "id_finder_bot.py"), ID_FINDER_BOT_LOG_FILE
     elif bot_name == 'tiktok': pfile, script, lpath = TIKTOK_BOT_PID_FILE, os.path.join(PROJECT_ROOT, "bots", "tiktok_bot", "tiktok_bot.py"), TIKTOK_BOT_LOG_FILE
+    elif bot_name == 'invite': pfile, script, lpath = INVITE_BOT_PID_FILE, os.path.join(PROJECT_ROOT, "bots", "invite_bot", "invite_bot.py"), INVITE_BOT_LOG_FILE
+    elif bot_name == 'quiz': pfile, script, lpath = QUIZ_BOT_PID_FILE, os.path.join(PROJECT_ROOT, "bots", "quiz_bot", "quiz_bot.py"), QUIZ_BOT_LOG_FILE
+    elif bot_name == 'umfrage': pfile, script, lpath = UMFRAGE_BOT_PID_FILE, os.path.join(PROJECT_ROOT, "bots", "umfrage_bot", "umfrage_bot.py"), UMFRAGE_BOT_LOG_FILE
+    elif bot_name == 'outfit': pfile, script, lpath = OUTFIT_BOT_PID_FILE, os.path.join(PROJECT_ROOT, "bots", "outfit_bot", "outfit_bot.py"), OUTFIT_BOT_LOG_FILE
     
     if pfile and script:
         if action == 'start':

@@ -58,7 +58,7 @@ def save_data(filename, data):
 # --- CONFIG LOADER ---
 def get_config():
     """Lädt Config aus DB + Env + Defaults"""
-    db_config = get_bot_config("outfit_bot")
+    db_config = get_bot_config("outfit")
     
     # Merge defaults
     config = DEFAULT_CONFIG.copy()
@@ -73,12 +73,12 @@ def get_config():
 
 # --- BOT INIT ---
 cfg = get_config()
-token = cfg.get("BOT_TOKEN")
+token = cfg.get("bot_token") or cfg.get("BOT_TOKEN")
 
 if not token or token == "DUMMY":
     logging.warning("Outfit-Bot hat keinen Token. Bitte OUTFIT_BOT_TOKEN setzen oder DB konfigurieren.")
-    # Dummy Start um Crash zu vermeiden, aber Bot wird nicht verbinden
-    bot = telebot.TeleBot("123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11", threaded=False) 
+    # No polling if no valid token
+    bot = None
 else:
     bot = telebot.TeleBot(token, threaded=False)
 
@@ -330,9 +330,11 @@ if __name__ == "__main__":
 
     threading.Thread(target=run_scheduler, daemon=True).start()
     
-    if token and token != "DUMMY":
+    if bot and token and token != "DUMMY":
         try:
             logging.info("Outfit Bot startet...")
             bot.polling(non_stop=True)
         except Exception as e:
             logging.error(f"Polling Crash: {e}")
+    else:
+        logging.error("Outfit Bot konnte nicht gestartet werden (kein valider Token). Beende...")
