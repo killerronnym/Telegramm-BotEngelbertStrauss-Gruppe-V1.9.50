@@ -317,6 +317,27 @@ def handle_vote(call):
         bot.answer_callback_query(call.id, txt)
     except: pass
 
+def process_triggers():
+    """Prüft auf manuelle Trigger-Dateien vom Dashboard."""
+    start_trigger = os.path.join(BASE_DIR, "start_contest.tmp")
+    winner_trigger = os.path.join(BASE_DIR, "announce_winner.tmp")
+    
+    while True:
+        try:
+            if os.path.exists(start_trigger):
+                logging.info("Manueller Trigger: Wettbewerb starten")
+                os.remove(start_trigger)
+                send_daily_post()
+            
+            if os.path.exists(winner_trigger):
+                logging.info("Manueller Trigger: Gewinner auslosen")
+                os.remove(winner_trigger)
+                determine_winner()
+        except Exception as e:
+            logging.error(f"Fehler bei Trigger-Verarbeitung: {e}")
+            
+        time.sleep(5)
+
 def run_scheduler():
     while True:
         schedule.run_pending()
@@ -329,6 +350,7 @@ if __name__ == "__main__":
         schedule.every().day.at(cfg.get("WINNER_TIME", "22:00")).do(determine_winner)
 
     threading.Thread(target=run_scheduler, daemon=True).start()
+    threading.Thread(target=process_triggers, daemon=True).start()
     
     if bot and token and token != "DUMMY":
         try:
