@@ -230,22 +230,43 @@ def clear_critical_errors():
     if os.path.exists(lpath): open(lpath, 'w').close()
     return redirect(url_for('dashboard.critical_errors'))
 
-# --- ID FINDER BOT ---
 @bp.route('/id-finder')
 def id_finder_dashboard():
     s = BotSettings.query.filter_by(bot_name='id_finder').first()
     if not s:
         cfg = {'bot_token': '', 'admin_group_id': 0, 'main_group_id': 0}
-        s = BotSettings(bot_name='id_finder', config_json=json.dumps(cfg)); db.session.add(s); db.session.commit()
+        s = BotSettings(bot_name='id_finder', config_json=json.dumps(cfg))
+        db.session.add(s)
+        db.session.commit()
+    
+    cfg = json.loads(s.config_json)
     us = IDFinderUser.query.order_by(IDFinderUser.last_contact.desc()).all()
-    return render_template('id_finder_dashboard.html', config=json.loads(s.config_json), user_registry=us, is_running=get_bot_status_simple()['id_finder']['running'], logs=[])
+    return render_template('id_finder_dashboard.html', config=cfg, user_registry=us, is_running=get_bot_status_simple()['id_finder']['running'], logs=[])
 
 @bp.route('/id-finder/save-config', methods=['POST'])
 def id_finder_save_config():
     s = BotSettings.query.filter_by(bot_name='id_finder').first()
     cfg = json.loads(s.config_json)
-    cfg.update({'bot_token': request.form.get('bot_token')})
-    s.config_json = json.dumps(cfg); db.session.commit(); return redirect(url_for('dashboard.id_finder_dashboard'))
+    cfg.update({
+        'bot_token': request.form.get('bot_token', ''),
+        'admin_group_id': request.form.get('admin_group_id', ''),
+        'main_group_id': request.form.get('main_group_id', ''),
+        'admin_log_topic_id': request.form.get('admin_log_topic_id', ''),
+        'delete_commands': 'delete_commands' in request.form,
+        'bot_message_cleanup_seconds': int(request.form.get('bot_message_cleanup_seconds') or 0),
+        'message_logging_enabled': 'message_logging_enabled' in request.form,
+        'message_logging_ignore_commands': 'message_logging_ignore_commands' in request.form,
+        'message_logging_groups_only': 'message_logging_groups_only' in request.form,
+        'max_warnings': int(request.form.get('max_warnings') or 3),
+        'punishment_type': request.form.get('punishment_type', 'none'),
+        'mute_duration': int(request.form.get('mute_duration') or 24),
+        'cleanup_notification_seconds': int(request.form.get('cleanup_notification_seconds') or 60),
+        'warning_bot_name': request.form.get('warning_bot_name', 'id_finder')
+    })
+    s.config_json = json.dumps(cfg)
+    db.session.commit()
+    flash('Einstellungen gespeichert.', 'success')
+    return redirect(url_for('dashboard.id_finder_dashboard'))
 
 @bp.route('/id-finder/user/<int:user_id>')
 def id_finder_user_detail(user_id):
@@ -265,10 +286,184 @@ def id_finder_commands(): return render_template('id_finder_commands.html')
 @bp.route('/id-finder/admin-panel')
 def id_finder_admin_panel():
     ads = IDFinderAdmin.query.all()
-    return render_template('id_finder_admin_panel.html', admins=ads, available_permission_groups={})
+    # Mocking admins as a dictionary for the template for demo purposes if needed, 
+    # but the template expects a dict per the loop: `for admin_id, admin_data in admins.items()`
+    # We should convert ads list to dict:
+    admins_dict = {str(a.telegram_user_id): {'name': a.name, 'permissions': json.loads(a.permissions) if a.permissions else {}} for a in ads}
+    return render_template('id_finder_admin_panel.html', admins=admins_dict, available_permission_groups={}, available_permissions={})
+
+@bp.route('/id-finder/admin-panel/add', methods=['POST'])
+def id_finder_add_admin():
+    admin_id = request.form.get('admin_id')
+    admin_name = request.form.get('admin_name')
+    if admin_id and admin_name:
+        existing = IDFinderAdmin.query.filter_by(telegram_user_id=int(admin_id)).first()
+        if not existing:
+            new_admin = IDFinderAdmin(telegram_user_id=int(admin_id), name=admin_name, permissions='{}')
+            db.session.add(new_admin)
+            db.session.commit()
+            flash('Admin erfolgreich hinzugefügt.', 'success')
+        else:
+            flash('Admin existiert bereits.', 'warning')
+    return redirect(url_for('dashboard.id_finder_admin_panel'))
+
+@bp.route('/id-finder/admin-panel/delete', methods=['POST'])
+def id_finder_delete_admin():
+    admin_id = request.form.get('admin_id')
+    if admin_id:
+        admin = IDFinderAdmin.query.filter_by(telegram_user_id=int(admin_id)).first()
+        if admin:
+            db.session.delete(admin)
+            db.session.commit()
+            flash('Admin erfolgreich gelöscht.', 'success')
+    return redirect(url_for('dashboard.id_finder_admin_panel'))
+
+@bp.route('/id-finder/admin-panel/update-permissions', methods=['POST'])
+def id_finder_update_admin_permissions():
+    admin_id = request.form.get('admin_id')
+    if admin_id:
+        admin = IDFinderAdmin.query.filter_by(telegram_user_id=int(admin_id)).first()
+        if admin:
+            # All form fields except admin_id are considered permissions
+            perms = {k: True for k in request.form.keys() if k != 'admin_id'}
+            admin.permissions = json.dumps(perms)
+            db.session.commit()
+            flash('Berechtigungen erfolgreich aktualisiert.', 'success')
+    return redirect(url_for('dashboard.id_finder_admin_panel'))
 
 @bp.route('/id-finder/analytics')
-def id_finder_analytics(): return render_template('id_finder_analytics.html', stats={}, activity={})
+def id_finder_analytics():
+    try:
+        days = int(request.args.get('days') or 7)
+    except ValueError:
+        days = 7
+
+    try:
+        month = int(request.args.get('month') or 0)
+        year = int(request.args.get('year') or 0)
+    except ValueError:
+        month = 0
+        year = 0
+
+    query_filter = True
+    base_query = IDFinderMessage.query
+    
+    # Handle time filtering
+    now = datetime.utcnow()
+    if year > 0 and month > 0:
+        query_filter = (db.extract('year', IDFinderMessage.timestamp) == year) & (db.extract('month', IDFinderMessage.timestamp) == month)
+    elif year > 0:
+        query_filter = db.extract('year', IDFinderMessage.timestamp) == year
+    elif days > 0:
+        cutoff = now - timedelta(days=days)
+        query_filter = IDFinderMessage.timestamp >= cutoff
+
+    total_users = IDFinderUser.query.count()
+
+    # Leaderboard
+    leaderboard_query = db.session.query(
+        IDFinderUser.telegram_id,
+        IDFinderUser.first_name,
+        func.count(IDFinderMessage.id).label('msg_count'),
+        func.sum(db.case((IDFinderMessage.content_type != 'text', 1), else_=0)).label('media_count')
+    ).join(IDFinderMessage, IDFinderUser.telegram_id == IDFinderMessage.telegram_user_id) \
+     .filter(query_filter) \
+     .group_by(IDFinderUser.telegram_id, IDFinderUser.first_name) \
+     .order_by(db.text('msg_count DESC')).limit(100).all()
+
+    leaderboard = [
+        {"uid": str(row.telegram_id), "name": row.first_name or "Unknown", "msgs": int(row.msg_count), "media": int(row.media_count or 0)}
+        for row in leaderboard_query
+    ]
+
+    # Timeline (Messages per day)
+    timeline_query = db.session.query(
+        func.date(IDFinderMessage.timestamp).label('date'),
+        func.count(IDFinderMessage.id).label('count')
+    ).filter(query_filter).group_by('date').order_by('date').all()
+
+    # Make sure timeline has continuous dates for the requested period if filtering by days
+    timeline_labels = []
+    total_data = []
+    
+    if days > 0 and year == 0 and month == 0:
+        date_map = {row.date.strftime('%d.%m'): row.count for row in timeline_query if row.date}
+        for i in range(days-1, -1, -1):
+            d = now - timedelta(days=i)
+            d_str = d.strftime('%d.%m')
+            timeline_labels.append(d_str)
+            total_data.append(date_map.get(d_str, 0))
+    else:
+        # For month/year filtering, rely on the data returned directly
+        timeline_labels = [row.date.strftime('%d.%m') if row.date else 'Unknown' for row in timeline_query]
+        total_data = [row.count for row in timeline_query]
+
+    # Hours distribution
+    # Using generic cast since extract('hour') is cross-compatible 
+    hours_query = db.session.query(
+        db.extract('hour', IDFinderMessage.timestamp).label('hour'),
+        func.count(IDFinderMessage.id).label('count')
+    ).filter(query_filter).group_by('hour').all()
+    
+    busiest_hours = [0] * 24
+    for row in hours_query:
+        if row.hour is not None:
+            busiest_hours[int(row.hour)] = row.count
+
+    # Weekdays distribution
+    # Extract 'dow' works across most dialects (0=Sun, 1=Mon... in some, or 1=Sun in others).
+    # MySQL: 1=Sun, 2=Mon
+    # SQLite: 0=Sun, 1=Mon
+    dow_query = db.session.query(
+        db.extract('dow', IDFinderMessage.timestamp).label('dow'),
+        func.count(IDFinderMessage.id).label('count')
+    ).filter(query_filter).group_by('dow').all()
+
+    busiest_days = [0] * 7
+    for row in dow_query:
+        if row.dow is not None:
+            engine_name = db.engine.dialect.name
+            if engine_name == 'mysql':
+                # Shift MySQL 1-7 (Sun-Sat) to 0-6 (Mon-Sun)
+                py_dow = (int(row.dow) + 5) % 7
+            else:
+                # Shift SQLite 0-6 (Sun-Sat) to 0-6 (Mon-Sun)
+                py_dow = (int(row.dow) + 6) % 7
+            busiest_days[py_dow] = row.count
+
+    return render_template('id_finder_analytics.html', 
+                           stats={'total_users': total_users}, 
+                           activity={
+                               'timeline': {'labels': timeline_labels, 'total': total_data}, 
+                               'leaderboard': leaderboard, 
+                               'busiest_hours': busiest_hours, 
+                               'busiest_days': busiest_days
+                           })
+
+@bp.route('/api/id-finder/user-activity/<int:uid>')
+def id_finder_user_activity(uid):
+    try:
+        days = int(request.args.get('days') or 7)
+    except ValueError:
+        days = 7
+
+    now = datetime.utcnow()
+    cutoff = now - timedelta(days=days)
+    
+    timeline_query = db.session.query(
+        func.date(IDFinderMessage.timestamp).label('date'),
+        func.count(IDFinderMessage.id).label('count')
+    ).filter(IDFinderMessage.telegram_user_id == uid, IDFinderMessage.timestamp >= cutoff) \
+     .group_by('date').order_by('date').all()
+
+    date_map = {row.date.strftime('%d.%m'): row.count for row in timeline_query if row.date}
+    
+    total_data = []
+    for i in range(days-1, -1, -1):
+        d_str = (now - timedelta(days=i)).strftime('%d.%m')
+        total_data.append(date_map.get(d_str, 0))
+
+    return jsonify({"timeline": total_data})
 
 # --- USER MANAGEMENT ---
 @bp.route('/users')
@@ -339,11 +534,28 @@ def bot_action_route(bot_name, action):
     
     if pfile and script:
         if action == 'start':
-            exe = os.path.join(PROJECT_ROOT, "venv", "bin", "python")
-            if not os.path.exists(exe): exe = sys.executable
+            # Check common Windows/Linux venv paths
+            exe = sys.executable
+            venv_win = os.path.join(PROJECT_ROOT, ".venv", "Scripts", "python.exe")
+            venv_lin = os.path.join(PROJECT_ROOT, ".venv", "bin", "python")
+            old_venv_win = os.path.join(PROJECT_ROOT, "venv", "Scripts", "python.exe")
+            old_venv_lin = os.path.join(PROJECT_ROOT, "venv", "bin", "python")
+            
+            if os.path.exists(venv_win): exe = venv_win
+            elif os.path.exists(venv_lin): exe = venv_lin
+            elif os.path.exists(old_venv_win): exe = old_venv_win
+            elif os.path.exists(old_venv_lin): exe = old_venv_lin
+
             os.makedirs(os.path.dirname(lpath), exist_ok=True)
             env = os.environ.copy(); env["PYTHONUNBUFFERED"] = "1"
-            with open(lpath, 'a') as lf: proc = subprocess.Popen([exe, script], start_new_session=True, stdout=lf, stderr=lf, env=env)
+            
+            # Use creationflags on Windows to detach the process properly
+            creationflags = 0
+            if os.name == 'nt':
+                creationflags = 0x00000008  # CREATE_NO_WINDOW
+                
+            with open(lpath, 'a', encoding='utf-8') as lf: 
+                proc = subprocess.Popen([exe, script], start_new_session=(os.name != 'nt'), creationflags=creationflags, stdout=lf, stderr=lf, env=env)
             with open(pfile, 'w') as f: f.write(str(proc.pid))
             s = BotSettings.query.filter_by(bot_name=f"{bot_name}_bot").first()
             if s: c = json.loads(s.config_json); c['is_active'] = True; s.config_json = json.dumps(c); db.session.commit()

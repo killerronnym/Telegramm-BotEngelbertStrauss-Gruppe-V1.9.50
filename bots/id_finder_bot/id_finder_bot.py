@@ -18,11 +18,13 @@ from flask import Flask
 # Import the tiktok monitor function
 from bots.tiktok_bot.tiktok_bot import start_tiktok_monitor
 
+# Import shared utils for DB URL resolution
+from shared_bot_utils import get_db_url
+
 # --- Database Helper ---
 def get_db_session():
     app = Flask(__name__)
-    db_path = os.path.join(PROJECT_ROOT, 'instance', 'app.db')
-    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+    app.config['SQLALCHEMY_DATABASE_URI'] = get_db_url()
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     db.init_app(app)
     return app
@@ -46,13 +48,12 @@ except ImportError:
     logger.error("Erforderliche Bibliothek 'python-telegram-bot' nicht gefunden!")
     sys.exit(1)
 
+from shared_bot_utils import get_bot_config
+
 # --- Config Management ---
 def get_config_from_db():
     try:
-        with flask_app.app_context():
-            settings = BotSettings.query.filter_by(bot_name='id_finder').first()
-            if settings:
-                return json.loads(settings.config_json)
+        return get_bot_config("id_finder")
     except Exception as e:
         logger.error(f"Fehler beim Laden der Konfiguration aus DB: {e}")
     return None

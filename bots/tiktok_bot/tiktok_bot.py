@@ -33,7 +33,12 @@ DB_PATH = os.path.join(PROJECT_ROOT, 'instance', 'app.db') if PROJECT_ROOT else 
 
 def log_print(msg):
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{timestamp}] TikTok Bot: {msg}", flush=True)
+    # Encode/decode to safely handle emojis in Windows console
+    safe_msg = str(msg).encode('utf-8', 'replace').decode('utf-8')
+    try:
+        print(f"[{timestamp}] TikTok Bot: {safe_msg}", flush=True)
+    except UnicodeEncodeError:
+        print(f"[{timestamp}] TikTok Bot: [Message contains unsupported characters]", flush=True)
 
 try:
     from TikTokLive import TikTokLiveClient
@@ -50,23 +55,13 @@ except Exception as e:
 # =========================
 # CONFIG LOAD
 # =========================
-
-def get_config_from_db(bot_name):
-    if not os.path.exists(DB_PATH): return {}
-    try:
-        conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True, timeout=10)
-        cursor = conn.cursor()
-        cursor.execute("SELECT config_json FROM bot_settings WHERE bot_name = ?", (bot_name,))
-        row = cursor.fetchone()
-        conn.close()
-        if row and row[0]: return json.loads(row[0])
-    except Exception as e:
-        log_print(f"Error reading DB for {bot_name} config: {e}")
-    return {}
+# Load config using the shared_bot_utils now capable of hitting MySQL
+sys.path.append(PROJECT_ROOT)
+from shared_bot_utils import get_bot_config
 
 def load_config():
-    id_finder_config = get_config_from_db("id_finder")
-    tiktok_config = get_config_from_db("tiktok_bot")
+    id_finder_config = get_bot_config("id_finder")
+    tiktok_config = get_bot_config("tiktok_bot")
     
     # Kompatibilität für alte und neue Config-Struktur
     targets = tiktok_config.get("target_unique_ids", [])
