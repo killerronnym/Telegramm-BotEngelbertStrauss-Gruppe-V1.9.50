@@ -24,3 +24,5 @@ instance/
 .env
 web_dashboard/critical_errors.log*
 app.log*
+.venv/
+venv/
