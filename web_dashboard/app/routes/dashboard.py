@@ -563,11 +563,22 @@ def bot_action_route(bot_name, action):
         elif action == 'stop' and os.path.exists(pfile):
             try:
                 with open(pfile, 'r') as f: pid = int(f.read().strip())
-                os.kill(pid, signal.SIGTERM); os.remove(pfile)
+                if os.name == 'nt':
+                    subprocess.run(['taskkill', '/F', '/T', '/PID', str(pid)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                else:
+                    os.kill(pid, signal.SIGTERM)
+                os.remove(pfile)
+            except Exception as e:
+                print(f"Fehler beim Stoppen von {bot_name} (PID: {pid}): {e}")
+            finally:
+                # Always update the database so the dashboard doesn't get stuck showing "Running"
                 s = BotSettings.query.filter_by(bot_name=f"{bot_name}_bot").first()
-                if s: c = json.loads(s.config_json); c['is_active'] = False; s.config_json = json.dumps(c); db.session.commit()
-                flash(f'{bot_name} Bot gestoppt.', 'success')
-            except: pass
+                if s: 
+                    c = json.loads(s.config_json)
+                    c['is_active'] = False
+                    s.config_json = json.dumps(c)
+                    db.session.commit()
+                flash(f'{bot_name} Bot Befehl gesendet.', 'success')
     return redirect(request.referrer or url_for('dashboard.index'))
 
 @bp.route('/api/bot-status')
