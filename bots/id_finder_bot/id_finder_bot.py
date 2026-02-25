@@ -221,8 +221,8 @@ async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
             content_type = "text"
             file_id = None
             
-            # Debug log for all message fields
-            logger.debug(f"Message fields: photo={bool(msg.photo)}, video={bool(msg.video)}, sticker={bool(msg.sticker)}, animation={bool(msg.animation)}, doc={bool(msg.document)}")
+            # Debug: log all media fields for every message
+            logger.info(f"[MEDIA-DEBUG] user={user.id} photo={bool(msg.photo)} video={bool(msg.video)} sticker={bool(msg.sticker)} animation={bool(msg.animation)} doc={bool(msg.document)} voice={bool(msg.voice)} video_note={bool(msg.video_note)}")
             
             if msg.photo: 
                 content_type = "photo"
@@ -231,8 +231,21 @@ async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 content_type = "video"
                 file_id = msg.video.file_id
             elif msg.sticker:
-                content_type = "sticker"
-                file_id = msg.sticker.file_id
+                sticker = msg.sticker
+                if sticker.is_animated:
+                    # Animated stickers are .tgs (Lottie) — browsers can't render them.
+                    # Use the thumbnail (JPEG) instead so the dashboard can display it.
+                    content_type = "sticker"
+                    file_id = sticker.thumbnail.file_id if sticker.thumbnail else sticker.file_id
+                elif sticker.is_video:
+                    # Video stickers are .webm — can be rendered with <video>.
+                    content_type = "sticker_video"
+                    file_id = sticker.file_id
+                else:
+                    # Static stickers are .webp — can be rendered with <img>.
+                    content_type = "sticker"
+                    file_id = sticker.file_id
+                logger.info(f"[STICKER] animated={sticker.is_animated} video={sticker.is_video} file_id={file_id}")
             elif msg.animation:
                 content_type = "animation"
                 file_id = msg.animation.file_id

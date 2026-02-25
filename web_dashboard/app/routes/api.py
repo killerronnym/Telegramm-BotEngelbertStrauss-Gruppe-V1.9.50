@@ -115,6 +115,7 @@ def get_media(file_id):
                     elif ext == 'png': mimetype = 'image/png'
                     elif ext == 'gif': mimetype = 'image/gif'
                     elif ext in ['mp4', 'm4v']: mimetype = 'video/mp4'
+                    elif ext == 'webm': mimetype = 'video/webm'
                     elif ext in ['mov', 'qt']: mimetype = 'video/quicktime'
                     elif ext in ['avi']: mimetype = 'video/x-msvideo'
                     elif ext in ['mpeg', 'mpg']: mimetype = 'video/mpeg'
@@ -122,6 +123,7 @@ def get_media(file_id):
                     elif ext in ['mp3']: mimetype = 'audio/mpeg'
                     elif ext in ['opus']: mimetype = 'audio/ogg'
                     elif ext in ['wav']: mimetype = 'audio/wav'
+                    elif ext == 'tgs': mimetype = 'application/x-tgsticker'
                     else: mimetype = f'image/{ext}'
                     return send_file(file_path, mimetype=mimetype)
         
@@ -150,6 +152,7 @@ def get_media(file_id):
                 elif ext == 'png': mimetype = 'image/png'
                 elif ext == 'gif': mimetype = 'image/gif'
                 elif ext in ['mp4', 'm4v']: mimetype = 'video/mp4'
+                elif ext == 'webm': mimetype = 'video/webm'
                 elif ext in ['mov', 'qt']: mimetype = 'video/quicktime'
                 elif ext in ['avi']: mimetype = 'video/x-msvideo'
                 elif ext in ['mpeg', 'mpg']: mimetype = 'video/mpeg'
@@ -157,6 +160,7 @@ def get_media(file_id):
                 elif ext in ['mp3']: mimetype = 'audio/mpeg'
                 elif ext in ['opus']: mimetype = 'audio/ogg'
                 elif ext in ['wav']: mimetype = 'audio/wav'
+                elif ext == 'tgs': mimetype = 'application/x-tgsticker'
                 else: mimetype = f'image/{ext}'
                 return send_file(io.BytesIO(img_res.content), mimetype=mimetype)
     except Exception as e:

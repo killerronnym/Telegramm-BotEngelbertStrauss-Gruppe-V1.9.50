@@ -472,6 +472,8 @@
                     mediaHtml = `<div class="message-media"><img src="/api/media/${msg.file_id}" onclick="window.open(this.src,'_blank')" onerror="this.parentElement.style.display='none'"></div>`;
                 } else if (msg.content_type === 'sticker' && msg.file_id) {
                     mediaHtml = `<div class="message-media sticker"><img src="/api/media/${msg.file_id}" onerror="this.parentElement.style.display='none'"></div>`;
+                } else if (msg.content_type === 'sticker_video' && msg.file_id) {
+                    mediaHtml = `<div class="message-media sticker"><video src="/api/media/${msg.file_id}" autoplay loop muted playsinline style="max-width:150px;max-height:150px;display:block;" onerror="this.parentElement.style.display='none'"></video></div>`;
                 } else if (msg.content_type === 'animation' && msg.file_id) {
                     mediaHtml = `<div class="message-media"><video src="/api/media/${msg.file_id}" autoplay loop muted playsinline style="max-width:100%;max-height:300px;display:block;" onerror="this.parentElement.style.display='none'"></video></div>`;
                 } else if (msg.content_type === 'video' && msg.file_id) {
