@@ -18,6 +18,15 @@ Nutzer, die bereits in der Gruppe sind, können ihren Steckbrief nachträglich a
 
 ![Admin Approval](docs/images/admin_approval.png)
 
+### 💻 Modernes Web-Dashboard
+Die gesamte Konfiguration erfolgt bequem über ein passwortgeschütztes Web-Interface.
+- **Bot-Steuerung:** Alle Module können zentral gestartet, gestoppt und konfiguriert werden.
+- **Analytics:** Echtzeit-Statistiken und Nutzer-Rankings für den ID-Finder.
+
+![Login Page](docs/images/login_page.png)
+![Dashboard Overview](docs/images/dashboard_home.png)
+![ID-Finder Stats](docs/images/id_finder_analytics.png)
+
 ### 🛠️ Technische Stabilität
 - **Bulletproof Process Locking:** Ein Datei-basierter Lock (`main_bot.lock`) verhindert Conflict-409 Fehler durch doppelt laufende Bot-Instanzen.
 - **Persistence:** Zustände (Conversation State) bleiben auch nach einem Bot-Neustart erhalten.
