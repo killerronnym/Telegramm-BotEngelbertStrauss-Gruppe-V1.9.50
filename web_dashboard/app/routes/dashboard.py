@@ -8,7 +8,7 @@ import signal
 from datetime import datetime, timedelta
 from sqlalchemy import func
 from werkzeug.utils import secure_filename
-from ..models import db, BotSettings, Broadcast, TopicMapping, User, IDFinderAdmin, IDFinderUser, IDFinderMessage
+from ..models import db, BotSettings, Broadcast, TopicMapping, User, IDFinderAdmin, IDFinderUser, IDFinderMessage, AVAILABLE_PERMISSIONS
 
 # Wir definieren den Blueprint explizit
 bp = Blueprint('dashboard', __name__)
@@ -41,26 +41,47 @@ def is_process_running(pid):
     except OSError:
         return False
 
+def safe_clear_log(filepath):
+    if not os.path.exists(filepath): return True
+    try:
+        os.remove(filepath)
+        return True
+    except Exception as e:
+        print(f"Error clearing log {filepath}: {e}")
+        return False
+
+def get_master_pid():
+    pfile = os.path.join(PROJECT_ROOT, "bots", "main_bot.pid")
+    if os.path.exists(pfile):
+        try:
+            with open(pfile, 'r') as f: return int(f.read().strip())
+        except: return None
+    return None
+
 def get_bot_status_simple():
     status = {
         "invite": {"running": False}, "quiz": {"running": False}, 
         "umfrage": {"running": False}, "outfit": {"running": False}, 
         "id_finder": {"running": False}, "tiktok": {"running": False}
     }
-    def check_pid(key, path):
-        if os.path.exists(path):
-            try:
-                with open(path, 'r') as f: pid = int(f.read().strip())
-                if is_process_running(pid): status[key]["running"] = True
-                else: os.remove(path)
-            except: 
-                if os.path.exists(path): os.remove(path)
-    check_pid("invite", INVITE_BOT_PID_FILE)
-    check_pid("id_finder", ID_FINDER_BOT_PID_FILE)
-    check_pid("tiktok", TIKTOK_BOT_PID_FILE)
-    check_pid("quiz", QUIZ_BOT_PID_FILE)
-    check_pid("umfrage", UMFRAGE_BOT_PID_FILE)
-    check_pid("outfit", OUTFIT_BOT_PID_FILE)
+    
+    # ID Finder (Master Bot) ist der einzige echte Prozess
+    pid = get_master_pid()
+    if pid and is_process_running(pid):
+        status["id_finder"]["running"] = True
+    
+    # Alle anderen Module lesen ihren "Aktiv" Status aus der Datenbank
+    try:
+        from web_dashboard.app.models import BotSettings
+        settings = BotSettings.query.all()
+        for s in settings:
+            if s.bot_name in status and s.bot_name != 'id_finder':
+                if s.config_json:
+                    c = json.loads(s.config_json)
+                    status[s.bot_name]["running"] = c.get('is_active', False)
+    except Exception as e:
+        print(f"Fehler beim Lesen des Bot-Status: {e}")
+        
     return status
 
 @bp.context_processor
@@ -111,7 +132,17 @@ def bot_settings():
     logs = []
     if os.path.exists(INVITE_BOT_LOG_FILE):
         with open(INVITE_BOT_LOG_FILE, 'r') as f: logs = f.readlines()[-50:]
-    return render_template("bot_settings.html", config=json.loads(s.config_json), is_invite_running=get_bot_status_simple()['invite']['running'], user_interaction_logs=[], invite_bot_logs=logs)
+        
+    user_logs = []
+    try:
+        from ..models import InviteLog
+        db_logs = InviteLog.query.order_by(InviteLog.timestamp.desc()).limit(100).all()
+        for log in db_logs:
+            user_logs.append(f"{log.timestamp.strftime('%Y-%m-%d %H:%M:%S')} - User ID: {log.telegram_user_id} - Username: @{log.username} - Message: {log.action}")
+    except Exception as e:
+        pass
+        
+    return render_template("bot_settings.html", config=json.loads(s.config_json), is_invite_running=get_bot_status_simple()['invite']['running'], user_interaction_logs=user_logs, invite_bot_logs=logs)
 
 @bp.route('/bot-settings/save-content', methods=['POST'])
 @login_required
@@ -161,13 +192,21 @@ def invite_bot_move_field(field_id, direction):
 @bp.route('/bot-settings/clear-logs/user', methods=['POST'])
 @login_required
 def clear_user_logs():
-    if os.path.exists(USER_INTERACTION_LOG_FILE): open(USER_INTERACTION_LOG_FILE, 'w').close()
+    from ..models import InviteLog
+    try:
+        InviteLog.query.delete()
+        db.session.commit()
+    except:
+        db.session.rollback()
     return redirect(url_for('dashboard.bot_settings'))
 
 @bp.route('/bot-settings/clear-logs/system', methods=['POST'])
 @login_required
 def clear_system_logs():
-    if os.path.exists(INVITE_BOT_LOG_FILE): open(INVITE_BOT_LOG_FILE, 'w').close()
+    if not safe_clear_log(INVITE_BOT_LOG_FILE):
+        flash('System-Logs konnten nicht gelöscht werden (File In Use).', 'warning')
+    else:
+        flash('System-Logs erfolgreich gelöscht.', 'success')
     return redirect(url_for('dashboard.bot_settings'))
 
 # --- BROADCAST ROUTES ---
@@ -534,8 +573,10 @@ def outfit_bot_actions(action):
         flash('Befehl zum Auslosen des Gewinners gesendet.', 'info')
         
     elif action == 'clear_logs':
-        if os.path.exists(OUTFIT_BOT_LOG_FILE): open(OUTFIT_BOT_LOG_FILE, 'w').close()
-        flash('Logs gelöscht.', 'success')
+        if not safe_clear_log(OUTFIT_BOT_LOG_FILE):
+            flash('Logs konnten nicht gelöscht werden (File In Use).', 'warning')
+        else:
+            flash('Logs gelöscht.', 'success')
         
     return redirect(url_for('dashboard.outfit_bot_dashboard'))
 
@@ -552,7 +593,8 @@ def critical_errors():
 @login_required
 def clear_critical_errors():
     lpath = os.path.join(BASE_DIR, "critical_errors.log")
-    if os.path.exists(lpath): open(lpath, 'w').close()
+    if not safe_clear_log(lpath):
+        flash('Kritische Fehler konnten nicht gelöscht werden.', 'warning')
     return redirect(url_for('dashboard.critical_errors'))
 
 @bp.route('/id-finder')
@@ -574,11 +616,14 @@ def id_finder_dashboard():
 def id_finder_save_config():
     s = BotSettings.query.filter_by(bot_name='id_finder').first()
     cfg = json.loads(s.config_json)
+    admin_group_id = request.form.get('admin_group_id', '').strip()
+    main_group_id = request.form.get('main_group_id', '').strip()
+    admin_log_topic_id = request.form.get('admin_log_topic_id', '').strip()
     cfg.update({
-        'bot_token': request.form.get('bot_token', ''),
-        'admin_group_id': request.form.get('admin_group_id', ''),
-        'main_group_id': request.form.get('main_group_id', ''),
-        'admin_log_topic_id': request.form.get('admin_log_topic_id', ''),
+        'bot_token': request.form.get('bot_token', '').strip(),
+        'admin_group_id': int(admin_group_id) if admin_group_id else 0,
+        'main_group_id': int(main_group_id) if main_group_id else 0,
+        'admin_log_topic_id': int(admin_log_topic_id) if admin_log_topic_id else 0,
         'delete_commands': 'delete_commands' in request.form,
         'bot_message_cleanup_seconds': int(request.form.get('bot_message_cleanup_seconds') or 0),
         'message_logging_enabled': 'message_logging_enabled' in request.form,
@@ -600,7 +645,14 @@ def id_finder_save_config():
 def id_finder_user_detail(user_id):
     u = IDFinderUser.query.filter_by(telegram_id=user_id).first_or_404()
     ms = IDFinderMessage.query.filter_by(telegram_user_id=user_id).order_by(IDFinderMessage.timestamp.desc()).limit(100).all()
-    return render_template('id_finder_user_detail.html', user=u, messages=ms)
+    
+    topic_ids = list(set([m.message_thread_id for m in ms if m.message_thread_id]))
+    topic_map = {}
+    if topic_ids:
+        mappings = TopicMapping.query.filter(TopicMapping.topic_id.in_(topic_ids)).all()
+        topic_map = {m.topic_id: m.topic_name for m in mappings}
+        
+    return render_template('id_finder_user_detail.html', user=u, messages=ms, topic_map=topic_map)
 
 @bp.route('/id-finder/delete-user/<int:user_id>', methods=['POST'])
 @login_required
@@ -617,30 +669,11 @@ def id_finder_commands(): return render_template('id_finder_commands.html')
 @login_required
 def id_finder_admin_panel():
     ads = IDFinderAdmin.query.all()
-    admins_dict = {str(a.telegram_user_id): {'name': a.name, 'permissions': json.loads(a.permissions) if a.permissions else {}} for a in ads}
-    
-    perm_groups = {
-        "Moderation": {
-            "can_warn": "Nutzer verwarnen",
-            "can_mute": "Nutzer stummschalten",
-            "can_kick": "Nutzer kicken",
-            "can_ban": "Nutzer bannen",
-            "can_delete": "Nachrichten löschen"
-        },
-        "Management": {
-            "can_broadcast": "Broadcasts senden",
-            "can_manage_topics": "Topics verwalten",
-            "can_view_logs": "Logs einsehen"
-        },
-        "System": {
-            "is_superadmin": "Vollzugriff (Superadmin)",
-            "can_manage_admins": "Andere Admins verwalten"
-        }
-    }
+    admins_dict = {str(a.telegram_id): {'name': a.name, 'permissions': a.permissions} for a in ads}
     
     return render_template('id_finder_admin_panel.html', 
                           admins=admins_dict, 
-                          available_permission_groups=perm_groups, 
+                          available_permission_groups=AVAILABLE_PERMISSIONS, 
                           available_permissions={})
 
 @bp.route('/id-finder/admin-panel/add', methods=['POST'])
@@ -649,9 +682,9 @@ def id_finder_add_admin():
     admin_id = request.form.get('admin_id')
     admin_name = request.form.get('admin_name')
     if admin_id and admin_name:
-        existing = IDFinderAdmin.query.filter_by(telegram_user_id=int(admin_id)).first()
+        existing = IDFinderAdmin.query.filter_by(telegram_id=int(admin_id)).first()
         if not existing:
-            new_admin = IDFinderAdmin(telegram_user_id=int(admin_id), name=admin_name, permissions='{}')
+            new_admin = IDFinderAdmin(telegram_id=int(admin_id), name=admin_name, permissions={})
             db.session.add(new_admin)
             db.session.commit()
             flash('Admin erfolgreich hinzugefügt.', 'success')
@@ -664,7 +697,7 @@ def id_finder_add_admin():
 def id_finder_delete_admin():
     admin_id = request.form.get('admin_id')
     if admin_id:
-        admin = IDFinderAdmin.query.filter_by(telegram_user_id=int(admin_id)).first()
+        admin = IDFinderAdmin.query.filter_by(telegram_id=int(admin_id)).first()
         if admin:
             db.session.delete(admin)
             db.session.commit()
@@ -676,11 +709,11 @@ def id_finder_delete_admin():
 def id_finder_update_admin_permissions():
     admin_id = request.form.get('admin_id')
     if admin_id:
-        admin = IDFinderAdmin.query.filter_by(telegram_user_id=int(admin_id)).first()
+        admin = IDFinderAdmin.query.filter_by(telegram_id=int(admin_id)).first()
         if admin:
             # All form fields except admin_id are considered permissions
             perms = {k: True for k in request.form.keys() if k != 'admin_id'}
-            admin.permissions = json.dumps(perms)
+            admin.permissions = perms
             db.session.commit()
             flash('Berechtigungen erfolgreich aktualisiert.', 'success')
     return redirect(url_for('dashboard.id_finder_admin_panel'))
@@ -983,90 +1016,96 @@ def tiktok_settings():
         with open(TIKTOK_BOT_LOG_FILE, 'r') as f: logs = f.readlines()[-100:]
     
     ids = BotSettings.query.filter_by(bot_name='id_finder').first()
-    cfg['api_token_display'] = json.loads(ids.config_json).get('bot_token', 'Nicht gesetzt') if ids else 'Nicht gesetzt'
+    cfg['api_token_display'] = json.loads(ids.config_json).get('bot_token', 'Nicht gesetzt') if ids and ids.config_json else 'Nicht gesetzt'
     return render_template('tiktok_settings.html', config=cfg, logs=logs)
 
 @bp.route('/tiktok/clear-logs', methods=['POST'])
 @login_required
 def tiktok_clear_logs():
-    if os.path.exists(TIKTOK_BOT_LOG_FILE): open(TIKTOK_BOT_LOG_FILE, 'w').close()
+    if not safe_clear_log(TIKTOK_BOT_LOG_FILE):
+        flash('Logs konnten nicht gelöscht werden (File In Use).', 'warning')
+    else:
+        flash('Logs erfolgreich gelöscht.', 'success')
     return redirect(url_for('dashboard.tiktok_settings'))
 
 # --- BOT ACTIONS ---
 @bp.route('/bot-action/<bot_name>/<action>', methods=['POST'])
+@login_required
 def bot_action_route(bot_name, action):
-    pfile, script, lpath = None, None, None
-    if bot_name == 'id_finder': pfile, script, lpath = ID_FINDER_BOT_PID_FILE, os.path.join(PROJECT_ROOT, "bots", "id_finder_bot", "id_finder_bot.py"), ID_FINDER_BOT_LOG_FILE
-    elif bot_name == 'tiktok': pfile, script, lpath = TIKTOK_BOT_PID_FILE, os.path.join(PROJECT_ROOT, "bots", "tiktok_bot", "tiktok_bot.py"), TIKTOK_BOT_LOG_FILE
-    elif bot_name == 'invite': pfile, script, lpath = INVITE_BOT_PID_FILE, os.path.join(PROJECT_ROOT, "bots", "invite_bot", "invite_bot.py"), INVITE_BOT_LOG_FILE
-    elif bot_name == 'quiz': pfile, script, lpath = QUIZ_BOT_PID_FILE, os.path.join(PROJECT_ROOT, "bots", "quiz_bot", "quiz_bot.py"), QUIZ_BOT_LOG_FILE
-    elif bot_name == 'umfrage': pfile, script, lpath = UMFRAGE_BOT_PID_FILE, os.path.join(PROJECT_ROOT, "bots", "umfrage_bot", "umfrage_bot.py"), UMFRAGE_BOT_LOG_FILE
-    elif bot_name == 'outfit': pfile, script, lpath = OUTFIT_BOT_PID_FILE, os.path.join(PROJECT_ROOT, "bots", "outfit_bot", "outfit_bot.py"), OUTFIT_BOT_LOG_FILE
-    
-    if pfile and script:
-        if action == 'start':
-            # Verhindern, dass mehrere Instanzen gestartet werden
-            if os.path.exists(pfile):
-                try:
-                    with open(pfile, 'r') as f: pid = int(f.read().strip())
-                    if is_process_running(pid):
-                        flash(f'{bot_name} Bot läuft bereits.', 'warning')
-                        return redirect(request.referrer or url_for('dashboard.index'))
-                except: pass
-            
-            # Start logic continues...
-            # Check common Windows/Linux venv paths
-            exe = sys.executable
-            venv_win = os.path.join(PROJECT_ROOT, ".venv", "Scripts", "python.exe")
-            venv_lin = os.path.join(PROJECT_ROOT, ".venv", "bin", "python")
-            old_venv_win = os.path.join(PROJECT_ROOT, "venv", "Scripts", "python.exe")
-            old_venv_lin = os.path.join(PROJECT_ROOT, "venv", "bin", "python")
-            
-            if os.path.exists(venv_win): exe = venv_win
-            elif os.path.exists(venv_lin): exe = venv_lin
-            elif os.path.exists(old_venv_win): exe = old_venv_win
-            elif os.path.exists(old_venv_lin): exe = old_venv_lin
+    # Master-Bot (ID-Finder) hat als einziges noch echte Prozess-Steuerung
+    if bot_name == 'id_finder':
+        return master_bot_action(action)
 
-            os.makedirs(os.path.dirname(lpath), exist_ok=True)
+    # Alle anderen Bots (Module) toggeln nur noch ihr "is_active" Flag in der DB
+    s = BotSettings.query.filter_by(bot_name=bot_name).first()
+    if s:
+        try:
+            c = json.loads(s.config_json)
+            if action == 'start':
+                c['is_active'] = True
+                flash(f'{bot_name.capitalize()} Modul aktiviert.', 'success')
+            elif action == 'stop':
+                c['is_active'] = False
+                flash(f'{bot_name.capitalize()} Modul deaktiviert.', 'warning')
             
-            # Ensure all environment variables from .env are loaded into the Flask process
-            from dotenv import load_dotenv as load_env_file
-            load_env_file(os.path.join(PROJECT_ROOT, '.env'))
-            
-            env = os.environ.copy()
-            env["PYTHONUNBUFFERED"] = "1"
-            env["PYTHONIOENCODING"] = "utf-8"
-            
-            # Use creationflags on Windows to detach the process properly
-            creationflags = 0
-            if os.name == 'nt':
-                creationflags = 0x00000008  # CREATE_NO_WINDOW
-                
-            with open(lpath, 'a', encoding='utf-8') as lf: 
-                proc = subprocess.Popen([exe, script], start_new_session=(os.name != 'nt'), creationflags=creationflags, stdout=lf, stderr=lf, env=env)
-            with open(pfile, 'w') as f: f.write(str(proc.pid))
-            s = BotSettings.query.filter_by(bot_name=bot_name).first()
-            if s: c = json.loads(s.config_json); c['is_active'] = True; s.config_json = json.dumps(c); db.session.commit()
-            flash(f'{bot_name} Bot gestartet.', 'success')
-        elif action == 'stop' and os.path.exists(pfile):
+            s.config_json = json.dumps(c)
+            db.session.commit()
+        except Exception as e:
+            flash(f'Fehler beim Ändern des Modul-Status: {e}', 'danger')
+    else:
+        flash(f'Bot-Einstellungen für {bot_name} nicht gefunden.', 'danger')
+        
+    return redirect(request.referrer or url_for('dashboard.index'))
+
+def master_bot_action(action):
+    pfile = os.path.join(PROJECT_ROOT, "bots", "main_bot.pid")
+    script = os.path.join(PROJECT_ROOT, "bots", "main_bot.py")
+    lpath = os.path.join(PROJECT_ROOT, "bots", "main_bot.log")
+    
+    if action == 'start':
+        if os.path.exists(pfile):
             try:
                 with open(pfile, 'r') as f: pid = int(f.read().strip())
-                if os.name == 'nt':
-                    subprocess.run(['taskkill', '/F', '/T', '/PID', str(pid)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                else:
-                    os.kill(pid, signal.SIGTERM)
-                os.remove(pfile)
-            except Exception as e:
-                print(f"Fehler beim Stoppen von {bot_name} (PID: {pid}): {e}")
-            finally:
-                # Always update the database so the dashboard doesn't get stuck showing "Running"
-                s = BotSettings.query.filter_by(bot_name=bot_name).first()
-                if s: 
-                    c = json.loads(s.config_json)
-                    c['is_active'] = False
-                    s.config_json = json.dumps(c)
-                    db.session.commit()
-                flash(f'{bot_name} Bot Befehl gesendet.', 'success')
+                if is_process_running(pid):
+                    flash('Master-Bot läuft bereits.', 'warning')
+                    return redirect(request.referrer or url_for('dashboard.index'))
+            except: pass
+        
+        exe = sys.executable
+        venv_win = os.path.join(PROJECT_ROOT, ".venv", "Scripts", "python.exe")
+        venv_lin = os.path.join(PROJECT_ROOT, ".venv", "bin", "python")
+        if os.path.exists(venv_win): exe = venv_win
+        elif os.path.exists(venv_lin): exe = venv_lin
+
+        os.makedirs(os.path.dirname(lpath), exist_ok=True)
+        
+        from dotenv import load_dotenv as load_env_file
+        load_env_file(os.path.join(PROJECT_ROOT, '.env'))
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
+        
+        creationflags = 0
+        if os.name == 'nt': creationflags = 0x00000008
+            
+        with open(lpath, 'a', encoding='utf-8') as lf: 
+            proc = subprocess.Popen([exe, script], start_new_session=(os.name != 'nt'), creationflags=creationflags, stdout=lf, stderr=lf, env=env)
+        with open(pfile, 'w') as f: f.write(str(proc.pid))
+        flash('Master-Bot gestartet.', 'success')
+        
+    elif action == 'stop' and os.path.exists(pfile):
+        try:
+            with open(pfile, 'r') as f: pid = int(f.read().strip())
+            if os.name == 'nt':
+                subprocess.run(['taskkill', '/F', '/T', '/PID', str(pid)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            else:
+                os.kill(pid, signal.SIGTERM)
+            os.remove(pfile)
+            flash('Master-Bot gestoppt.', 'success')
+        except Exception as e:
+            print(f"Fehler beim Stoppen vom Master Bot (PID: {pid}): {e}")
+            flash('Fehler beim Stoppen des Master-Bots.', 'danger')
+            
     return redirect(request.referrer or url_for('dashboard.index'))
 
 @bp.route('/api/bot-status')

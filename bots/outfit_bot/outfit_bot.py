@@ -1,21 +1,20 @@
-import telebot
-import schedule
-import time
-import threading
-import json
 import os
-import random
-import logging
 import sys
+import json
+import logging
+import asyncio
+from datetime import datetime
 
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8')
-if hasattr(sys.stderr, 'reconfigure'):
-    sys.stderr.reconfigure(encoding='utf-8')
-
-# --- Pfad-Hack für Shared Utils ---
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from shared_bot_utils import get_bot_config, get_env_var
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    filters,
+    ContextTypes,
+)
+from shared_bot_utils import get_bot_config, is_bot_active
 
 # --- PATH SETUP ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -31,6 +30,7 @@ logging.basicConfig(
         logging.StreamHandler(sys.stdout)
     ]
 )
+logger = logging.getLogger('outfit_bot')
 
 DEFAULT_CONFIG = {
     "CHAT_ID": "",
@@ -56,45 +56,17 @@ def load_data(filename, default=None):
 def save_data(filename, data):
     try:
         with open(filename, 'w', encoding='utf-8') as f: json.dump(data, f, indent=4)
-    except Exception as e: logging.error(f"Error saving data: {e}")
+    except Exception as e: logger.error(f"Error saving data: {e}")
 
-# --- CONFIG LOADER ---
 def get_config():
-    """Lädt Config aus DB + Env + Defaults"""
     db_config = get_bot_config("outfit")
-    
-    # Merge defaults
     config = DEFAULT_CONFIG.copy()
     config.update(db_config)
-    
-    # Token priority
-    env_token = get_env_var("OUTFIT_BOT_TOKEN")
-    if env_token:
-        config["BOT_TOKEN"] = env_token
-        
     return config
 
-# --- BOT INIT ---
-cfg = get_config()
-token = cfg.get("bot_token") or cfg.get("BOT_TOKEN")
-
-if not token or token == "DUMMY":
-    logging.warning("Outfit-Bot hat keinen Token. Bitte OUTFIT_BOT_TOKEN setzen oder DB konfigurieren.")
-    # No polling if no valid token
-    bot = None
-else:
-    bot = telebot.TeleBot(token, threaded=False)
-
-
 def get_topic_id(cfg):
-    """Returns the Topic ID as an integer if it exists."""
     topic_id_str = cfg.get("TOPIC_ID")
     return int(topic_id_str) if topic_id_str and str(topic_id_str).isdigit() else None
-
-def is_admin(user_id):
-    """Checks if a user is an admin."""
-    admins = get_config().get("ADMIN_USER_IDS", [])
-    return str(user_id) in [str(uid) for uid in admins]
 
 # --- PIN / UNPIN HELPERS ---
 def _save_pinned_message_id(message_id: int):
@@ -108,37 +80,33 @@ def _clear_pinned_message_id():
         del data["pinned_message_id"]
         save_data(DATA_FILE, data)
 
-def pin_daily_post_message(chat_id, message_id: int, topic_id=None):
+async def pin_daily_post_message(bot, chat_id, message_id: int):
     cfg = get_config()
     if not cfg.get("PIN_DAILY_POST", True): return
-
     try:
-        bot.pin_chat_message(
+        await bot.pin_chat_message(
             chat_id=chat_id,
             message_id=int(message_id),
             disable_notification=cfg.get("PIN_DISABLE_NOTIFICATION", True)
         )
         _save_pinned_message_id(int(message_id))
     except Exception as e:
-        logging.error(f"Error pinning: {e}")
+        logger.error(f"Error pinning: {e}")
 
-def unpin_daily_post_message(chat_id, topic_id=None):
+async def unpin_daily_post_message(bot, chat_id):
     data = load_data(DATA_FILE, {})
     pinned_id = data.get("pinned_message_id")
     if not pinned_id: return
-
     try:
-        bot.unpin_chat_message(chat_id=chat_id, message_id=int(pinned_id))
+        await bot.unpin_chat_message(chat_id=chat_id, message_id=int(pinned_id))
         _clear_pinned_message_id()
     except Exception as e:
-        logging.error(f"Error unpinning: {e}")
+        logger.error(f"Error unpinning: {e}")
 
-def reset_contest_data(is_starting_new_contest=False):
+async def reset_contest_data(bot, is_starting_new_contest=False):
     cfg = get_config()
     chat_id = cfg.get("CHAT_ID")
-    topic_id = get_topic_id(cfg)
-
-    if chat_id: unpin_daily_post_message(chat_id, topic_id)
+    if chat_id: await unpin_daily_post_message(bot, chat_id)
 
     new_data = {
         "submissions": {},
@@ -150,13 +118,13 @@ def reset_contest_data(is_starting_new_contest=False):
     save_data(DATA_FILE, new_data)
 
 def generate_markup(user_id, likes=0, loves=0, fires=0):
-    markup = types.InlineKeyboardMarkup()
-    markup.row(
-        types.InlineKeyboardButton(f"👍 ({likes})", callback_data=f"vote_like_{user_id}"),
-        types.InlineKeyboardButton(f"❤️ ({loves})", callback_data=f"vote_love_{user_id}"),
-        types.InlineKeyboardButton(f"🔥 ({fires})", callback_data=f"vote_fire_{user_id}")
-    )
-    return markup
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(f"👍 ({likes})", callback_data=f"outfitvote_like_{user_id}"),
+            InlineKeyboardButton(f"❤️ ({loves})", callback_data=f"outfitvote_love_{user_id}"),
+            InlineKeyboardButton(f"🔥 ({fires})", callback_data=f"outfitvote_fire_{user_id}")
+        ]
+    ])
 
 def count_votes(votes_dict):
     counts = {'like': 0, 'love': 0, 'fire': 0}
@@ -165,29 +133,29 @@ def count_votes(votes_dict):
     return counts
 
 # --- CORE LOGIC ---
-def send_daily_post():
-    reset_contest_data(is_starting_new_contest=True)
+async def send_daily_post(context: ContextTypes.DEFAULT_TYPE):
+    if not is_bot_active('outfit'): return
+    await reset_contest_data(context.bot, is_starting_new_contest=True)
     cfg = get_config()
     chat_id = cfg.get("CHAT_ID")
     if not chat_id: return
     
     topic_id = get_topic_id(cfg)
     try:
-        bot_username = bot.get_me().username
-        markup = types.InlineKeyboardMarkup().add(
-            types.InlineKeyboardButton("Mitmachen", url=f"https://t.me/{bot_username}?start=participate")
-        )
-        sent = bot.send_message(
-            chat_id,
-            "📸 Outfit des Tages – zeigt eure heutigen E.S-Outfits!",
+        bot_user = await context.bot.get_me()
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton("Mitmachen", url=f"https://t.me/{bot_user.username}?start=participate")]])
+        sent = await context.bot.send_message(
+            chat_id=chat_id,
+            text="📸 Outfit des Tages – zeigt eure heutigen E.S-Outfits!",
             reply_markup=markup,
             message_thread_id=topic_id
         )
-        pin_daily_post_message(chat_id, sent.message_id, topic_id)
+        await pin_daily_post_message(context.bot, chat_id, sent.message_id)
     except Exception as e:
-        logging.error(f"Daily post error: {e}")
+        logger.error(f"Daily post error: {e}")
 
-def determine_winner():
+async def determine_winner(context: ContextTypes.DEFAULT_TYPE):
+    if not is_bot_active('outfit'): return
     cfg = get_config()
     chat_id = cfg.get("CHAT_ID")
     if not chat_id: return
@@ -197,63 +165,58 @@ def determine_winner():
     votes = data.get("votes", {})
     
     if not votes:
-        try: bot.send_message(chat_id, "Keine Stimmen heute.", message_thread_id=topic_id)
+        try: await context.bot.send_message(chat_id=chat_id, text="Keine Stimmen heute.", message_thread_id=topic_id)
         except: pass
-        reset_contest_data(False)
+        await reset_contest_data(context.bot, False)
         return
 
-    # Count votes per submission (message_id)
     results = {}
     for msg_id, v_dict in votes.items():
         results[msg_id] = len(v_dict)
     
     if not results:
-        reset_contest_data(False)
+        await reset_contest_data(context.bot, False)
         return
 
     max_votes = max(results.values())
     winners = [mid for mid, c in results.items() if c == max_votes]
     
     if max_votes <= 0:
-        bot.send_message(chat_id, "Keine Stimmen abgegeben.", message_thread_id=topic_id)
-        reset_contest_data(False)
+        await context.bot.send_message(chat_id=chat_id, text="Keine Stimmen abgegeben.", message_thread_id=topic_id)
+        await reset_contest_data(context.bot, False)
         return
 
-    # Announce
     submissions = data.get("submissions", {})
     winner_names = []
-    
-    # Map message_id back to user submission
     for uid, sub in submissions.items():
         if str(sub["message_id"]) in winners:
             winner_names.append(f"@{sub.get('username', 'Unknown')}")
             
     text = f"🏆 Gewinner: {', '.join(winner_names)} mit {max_votes} Stimmen!"
-    bot.send_message(chat_id, text, message_thread_id=topic_id)
-    
-    reset_contest_data(False)
+    await context.bot.send_message(chat_id=chat_id, text=text, message_thread_id=topic_id)
+    await reset_contest_data(context.bot, False)
 
 # --- HANDLERS ---
-@bot.message_handler(commands=['start'])
-def handle_start(message):
-    if message.chat.type == 'private':
-        if "participate" in message.text:
-            bot.send_message(message.chat.id, "Bitte sende jetzt dein Foto!")
+async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_bot_active('outfit'): return
+    if update.message.chat.type == 'private':
+        if "participate" in update.message.text:
+            await update.message.reply_text("Bitte sende jetzt dein Foto (Outfit des Tages)!")
         else:
-            bot.send_message(message.chat.id, "Hallo vom Outfit-Bot!")
+            await update.message.reply_text("Hallo vom Outfit-Bot!")
 
-@bot.message_handler(content_types=['photo'])
-def handle_photo(message):
-    if message.chat.type != 'private': return
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_bot_active('outfit'): return
+    if update.message.chat.type != 'private': return
     
     data = load_data(DATA_FILE)
     if not data.get("contest_active"):
-        bot.send_message(message.chat.id, "Kein Wettbewerb aktiv.")
+        await update.message.reply_text("Aktuell ist kein Wettbewerb gestartet.")
         return
         
-    user_id = str(message.from_user.id)
+    user_id = str(update.effective_user.id)
     if user_id in data.get("submissions", {}):
-        bot.send_message(message.chat.id, "Du hast schon teilgenommen.")
+        await update.message.reply_text("Du hast heute schon teilgenommen!")
         return
 
     cfg = get_config()
@@ -261,105 +224,124 @@ def handle_photo(message):
     topic_id = get_topic_id(cfg)
     
     try:
-        sent = bot.send_photo(
-            chat_id, 
-            message.photo[-1].file_id, 
-            caption=f"Outfit von @{message.from_user.username}", 
-            reply_markup=generate_markup(message.from_user.id),
+        photo_file_id = update.message.photo[-1].file_id
+        sent = await context.bot.send_photo(
+            chat_id=chat_id, 
+            photo=photo_file_id, 
+            caption=f"Outfit von @{update.effective_user.username}", 
+            reply_markup=generate_markup(update.effective_user.id),
             message_thread_id=topic_id
         )
         
         data.setdefault("submissions", {})[user_id] = {
             "message_id": sent.message_id,
-            "photo_id": message.photo[-1].file_id,
-            "username": message.from_user.username
+            "photo_id": photo_file_id,
+            "username": update.effective_user.username
         }
         data.setdefault("votes", {})[str(sent.message_id)] = {}
         save_data(DATA_FILE, data)
-        bot.send_message(message.chat.id, "Foto gesendet!")
+        await update.message.reply_text("Foto erfolgreich eingereicht! Viel Erfolg.")
     except Exception as e:
-        logging.error(f"Send photo error: {e}")
-        bot.send_message(message.chat.id, "Fehler beim Senden.")
+        logger.error(f"Send photo error: {e}")
+        await update.message.reply_text("Fehler beim Senden in die Gruppe.")
 
-@bot.callback_query_handler(func=lambda call: True)
-def handle_vote(call):
+async def handle_vote(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_bot_active('outfit'): return
+    query = update.callback_query
+    
     try:
-        _, vote_type, target_user_id = call.data.split('_')
+        _, vote_type, target_user_id = query.data.split('_')
     except: return
 
     data = load_data(DATA_FILE)
-    user_id = str(call.from_user.id)
+    user_id = str(query.from_user.id)
     
-    # Find message ID
     target_msg_id = None
     for uid, sub in data.get("submissions", {}).items():
         if str(uid) == target_user_id:
             target_msg_id = str(sub["message_id"])
             break
             
-    if not target_msg_id: return
+    if not target_msg_id: 
+        await query.answer("Beitrag nicht gefunden.")
+        return
     
     votes = data.get("votes", {}).get(target_msg_id, {})
     if votes.get(user_id) == vote_type:
         del votes[user_id]
-        txt = "Entfernt."
+        txt = "Stimme entfernt."
     else:
         votes[user_id] = vote_type
-        txt = f"{vote_type}!"
+        txt = f"Abgestimmt: {vote_type.capitalize()}!"
         
     data["votes"][target_msg_id] = votes
     save_data(DATA_FILE, data)
     
     counts = count_votes(votes)
     try:
-        bot.edit_message_reply_markup(
-            call.message.chat.id,
-            call.message.message_id,
+        await query.edit_message_reply_markup(
             reply_markup=generate_markup(target_user_id, counts['like'], counts['love'], counts['fire'])
         )
-        bot.answer_callback_query(call.id, txt)
-    except: pass
+        await query.answer(txt)
+    except: 
+        pass
 
-def process_triggers():
-    """Prüft auf manuelle Trigger-Dateien vom Dashboard."""
+# --- SCHEDULER WERKZEUGE ---
+async def check_triggers(context: ContextTypes.DEFAULT_TYPE):
+    if not is_bot_active('outfit'): return
     start_trigger = os.path.join(BASE_DIR, "start_contest.tmp")
     winner_trigger = os.path.join(BASE_DIR, "announce_winner.tmp")
     
-    while True:
-        try:
-            if os.path.exists(start_trigger):
-                logging.info("Manueller Trigger: Wettbewerb starten")
-                os.remove(start_trigger)
-                send_daily_post()
-            
-            if os.path.exists(winner_trigger):
-                logging.info("Manueller Trigger: Gewinner auslosen")
-                os.remove(winner_trigger)
-                determine_winner()
-        except Exception as e:
-            logging.error(f"Fehler bei Trigger-Verarbeitung: {e}")
-            
-        time.sleep(5)
+    if os.path.exists(start_trigger):
+        logger.info("Manueller Trigger erkannt: Wettbewerb starten")
+        os.remove(start_trigger)
+        await send_daily_post(context)
+        
+    if os.path.exists(winner_trigger):
+        logger.info("Manueller Trigger erkannt: Gewinner auslosen")
+        os.remove(winner_trigger)
+        await determine_winner(context)
 
-def run_scheduler():
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+async def check_schedule(context: ContextTypes.DEFAULT_TYPE):
+    if not is_bot_active('outfit'): return
+    cfg = get_config()
+    if not cfg.get("AUTO_POST_ENABLED"): return
+    
+    now = datetime.now()
+    post_time_str = cfg.get("POST_TIME", "18:00")
+    winner_time_str = cfg.get("WINNER_TIME", "22:00")
+    
+    # Very simple time check for exact minute hit:
+    current_time_str = now.strftime("%H:%M")
+    
+    # Um Doppelpostings zu vermeiden, speichern wir das Datum in config/data
+    data = load_data(DATA_FILE)
+    last_post = data.get("last_auto_post_date", "")
+    last_winner = data.get("last_auto_winner_date", "")
+    today_str = now.strftime("%Y-%m-%d")
+    
+    if current_time_str == post_time_str and last_post != today_str:
+        await send_daily_post(context)
+        data["last_auto_post_date"] = today_str
+        save_data(DATA_FILE, data)
+        
+    if current_time_str == winner_time_str and last_winner != today_str:
+        await determine_winner(context)
+        data["last_auto_winner_date"] = today_str
+        save_data(DATA_FILE, data)
+
+# --- PLUGIN EXPORT ---
+def get_handlers():
+    return [
+        CommandHandler("start", handle_start),
+        MessageHandler(filters.PHOTO, handle_photo),
+        CallbackQueryHandler(handle_vote, pattern=r'^outfitvote_')
+    ]
+
+def setup_jobs(job_queue):
+    logger.info("Outfit Bot Job Queue registriert...")
+    job_queue.run_repeating(check_triggers, interval=5)
+    job_queue.run_repeating(check_schedule, interval=60)
 
 if __name__ == "__main__":
-    cfg = get_config()
-    if cfg.get("AUTO_POST_ENABLED"):
-        schedule.every().day.at(cfg.get("POST_TIME", "18:00")).do(send_daily_post)
-        schedule.every().day.at(cfg.get("WINNER_TIME", "22:00")).do(determine_winner)
-
-    threading.Thread(target=run_scheduler, daemon=True).start()
-    threading.Thread(target=process_triggers, daemon=True).start()
-    
-    if bot and token and token != "DUMMY":
-        try:
-            logging.info("Outfit Bot startet...")
-            bot.polling(non_stop=True)
-        except Exception as e:
-            logging.error(f"Polling Crash: {e}")
-    else:
-        logging.error("Outfit Bot konnte nicht gestartet werden (kein valider Token). Beende...")
+    print("Bitte main_bot.py verwenden!")

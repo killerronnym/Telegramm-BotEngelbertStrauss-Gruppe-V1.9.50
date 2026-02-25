@@ -119,3 +119,52 @@ class AutoCleanupTask(db.Model):
     message_id = db.Column(db.BigInteger, nullable=False)
     cleanup_at = db.Column(db.DateTime, nullable=False)
     status = db.Column(db.String(20), default='pending') # pending, done
+
+# --- Invite Bot Models ---
+
+class InviteApplication(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_user_id = db.Column(db.BigInteger, unique=True, nullable=False)
+    username = db.Column(db.String(100))
+    full_name = db.Column(db.String(100))
+    answers_json = db.Column(db.Text, default='{}')
+    status = db.Column(db.String(20), default='pending') # pending, accepted, rejected, completed
+    message_ids_json = db.Column(db.Text, default='[]') # Optional: um gesendete Bewerbungs-Nachrichten später editieren zu können
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @property
+    def answers(self):
+        try: return json.loads(self.answers_json)
+        except: return {}
+
+    @answers.setter
+    def answers(self, value):
+        self.answers_json = json.dumps(value)
+
+class InviteLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_user_id = db.Column(db.BigInteger, nullable=False)
+    username = db.Column(db.String(100))
+    action = db.Column(db.String(255), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+# --- Admin Permissions Definition ---
+AVAILABLE_PERMISSIONS = {
+    "Moderation": {
+        "can_warn": "Nutzer verwarnen",
+        "can_mute": "Nutzer stummschalten",
+        "can_kick": "Nutzer kicken",
+        "can_ban": "Nutzer bannen",
+        "can_delete": "Nachrichten löschen"
+    },
+    "Management": {
+        "can_broadcast": "Broadcasts senden",
+        "can_manage_topics": "Topics verwalten",
+        "can_view_logs": "Logs einsehen"
+    },
+    "System": {
+        "is_superadmin": "Vollzugriff (Superadmin)",
+        "can_manage_admins": "Andere Admins verwalten"
+    }
+}

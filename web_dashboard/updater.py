@@ -112,16 +112,30 @@ class Updater:
                 log.info(f"Applying update from {source_dir} to {self.project_root}")
 
                 # --- SCHUTZLOGIK FÜR DEINE DATEN ---
+                # --- SCHUTZLOGIK FÜR DEINE DATEN ---
                 def should_ignore(rel_path):
-                    # 1. Kompletter Daten-Ordner (Dort liegen deine Quizfragen, Logs, Avatare!)
+                    # 1. Datenbanken & Instanz-Daten schützen (Dort liegen deine User, Bewerbungen etc.)
+                    if rel_path.startswith("instance/") or rel_path == "instance": return True
+                    if rel_path.endswith(".db"): return True
+                    
+                    # 2. Persistente Daten-Ordner (Logs, Uploads etc.)
                     if rel_path.startswith("data/") or rel_path == "data": return True
-                    # 2. Python Environment & Logs
-                    if rel_path.startswith("venv/") or rel_path == "venv": return True
                     if rel_path.endswith(".log") or rel_path.endswith(".jsonl"): return True
-                    # 3. ALLE Konfigurationsdateien (.json) schützen, damit User-Settings bleiben
-                    if rel_path.endswith(".json"): return True
-                    # 4. Git-Dateien
-                    if rel_path.startswith(".git/"): return True
+                    
+                    # 3. Virtual Environment (wird bei Docker/Linux im Build-Prozess erstellt)
+                    if rel_path.startswith("venv/") or rel_path == "venv": return True
+                    if rel_path.startswith(".venv/") or rel_path == ".venv": return True
+                    
+                    # 4. Git & Umgebungsvariablen (.env darf NIEMALS überschrieben werden!)
+                    if rel_path.startswith(".git/") or rel_path == ".git": return True
+                    if rel_path == ".env": return True
+                    
+                    # 5. Eigene Versionsdatei (wird am Ende separat geschrieben)
+                    if rel_path == "version.json": return True
+                    
+                    # HINWEIS: Andere .json Dateien (Programm-Konfigurationen/Vorlagen) 
+                    # werden jetzt überschrieben, damit neue Features (z.B. neue Bot-Settings) 
+                    # korrekt ankommen! Deine Daten in der DB bleiben sicher.
                     return False
 
                 try:

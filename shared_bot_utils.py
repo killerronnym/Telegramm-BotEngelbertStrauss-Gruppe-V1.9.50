@@ -58,3 +58,8 @@ def get_bot_config(bot_name):
 
 def get_env_var(key, default=None):
     return os.environ.get(key, default)
+
+def is_bot_active(bot_name):
+    """Prüft direkt via SQL, ob das Modul im Dashboard aktiviert ist."""
+    config = get_bot_config(bot_name)
+    return config.get('is_active', False)

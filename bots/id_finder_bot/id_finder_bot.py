@@ -8,7 +8,7 @@ if hasattr(sys.stdout, 'reconfigure'):
 if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8')
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 
 # --- Paths ---
@@ -17,14 +17,14 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(BOT_DIR))
 # Import models from web_dashboard.app.models
 sys.path.append(PROJECT_ROOT)
 
-from web_dashboard.app.models import db, BotSettings, IDFinderAdmin, IDFinderUser, IDFinderMessage, TopicMapping, Broadcast, AutoCleanupTask
+from web_dashboard.app.models import db, BotSettings, IDFinderAdmin, IDFinderUser, IDFinderMessage, TopicMapping, Broadcast, AutoCleanupTask, IDFinderWarning
 from flask import Flask
 
 # Import the tiktok monitor function
 from bots.id_finder_bot.minecraft_bridge import register_minecraft
 
 # Import shared utils for DB URL resolution
-from shared_bot_utils import get_db_url
+from shared_bot_utils import get_db_url, get_bot_config, is_bot_active
 
 # --- Database Helper ---
 def get_db_session():
@@ -56,7 +56,7 @@ if sys.stdout.encoding != 'utf-8':
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 try:
-    from telegram import Update, ForumTopic
+    from telegram import Update, ForumTopic, ChatPermissions
     from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, Application
     from telegram.constants import ParseMode
 except ImportError:
@@ -75,6 +75,7 @@ def get_config_from_db():
 
 # --- Auto Cleanup Task ---
 async def process_cleanup_tasks(context: ContextTypes.DEFAULT_TYPE):
+    if not is_bot_active('id_finder'): return
     """
     Sucht nach abgelaufenen Bot-Meldungen und löscht diese aus dem Chat.
     """
@@ -106,6 +107,7 @@ async def process_cleanup_tasks(context: ContextTypes.DEFAULT_TYPE):
 
 # --- Broadcast Engine ---
 async def check_and_send_broadcasts(context: ContextTypes.DEFAULT_TYPE):
+    if not is_bot_active('id_finder'): return
     """
     Prüft die Datenbank nach fälligen Broadcasts und versendet sie.
     """
@@ -171,7 +173,52 @@ async def check_and_send_broadcasts(context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Fehler in der Broadcast Engine: {e}")
 
 # --- Activity Tracking ---
+def db_log_message_sync(user_dict, chat_dict, msg_dict, config):
+    try:
+        with flask_app.app_context():
+            now = datetime.utcnow()
+            # Update User Registry
+            db_user = IDFinderUser.query.filter_by(telegram_id=user_dict['id']).first()
+            if not db_user:
+                db_user = IDFinderUser(
+                    telegram_id=user_dict['id'], username=user_dict['username'],
+                    first_name=user_dict['first_name'], last_name=user_dict['last_name'],
+                    language_code=user_dict['language_code'], is_bot=user_dict['is_bot'],
+                    first_contact=now
+                )
+                db.session.add(db_user)
+            else:
+                db_user.username = user_dict['username']
+                db_user.first_name = user_dict['first_name']
+                db_user.last_name = user_dict['last_name']
+                db_user.last_contact = now
+            
+            # Discover Topics
+            if chat_dict['type'] in ["group", "supergroup"] and msg_dict.get('thread_id'):
+                thread_id = msg_dict['thread_id']
+                mapping = TopicMapping.query.filter_by(topic_id=thread_id).first()
+                if not mapping:
+                    db.session.add(TopicMapping(topic_id=thread_id, topic_name=msg_dict.get('topic_name', f"Topic {thread_id}")))
+
+            # Log Message
+            if msg_dict['is_command'] and config.get("message_logging_ignore_commands", True):
+                db.session.commit()
+                return
+
+            db_msg = IDFinderMessage(
+                telegram_user_id=user_dict['id'], message_id=msg_dict['id'],
+                chat_id=chat_dict['id'], message_thread_id=msg_dict.get('thread_id'),
+                chat_type=chat_dict['type'], text=msg_dict['text'],
+                content_type=msg_dict['content_type'], file_id=msg_dict['file_id'],
+                is_command=msg_dict['is_command'], timestamp=now
+            )
+            db.session.add(db_msg)
+            db.session.commit()
+    except Exception as e:
+        logger.error(f"Fehler beim synchronen Loggen: {e}")
+
 async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_bot_active('id_finder'): return
     msg, user, chat = update.effective_message, update.effective_user, update.effective_chat
     if not all([msg, user, chat]): return
     
@@ -180,103 +227,60 @@ async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if config.get("message_logging_groups_only", False) and chat.type not in ["group", "supergroup"]:
         return
 
-    now = datetime.utcnow()
+    user_dict = {
+        'id': user.id, 'username': user.username, 'first_name': user.first_name,
+        'last_name': user.last_name, 'language_code': user.language_code, 'is_bot': user.is_bot
+    }
+    chat_dict = {'id': chat.id, 'type': chat.type}
     
-    try:
-        with flask_app.app_context():
-            # Update User Registry
-            db_user = IDFinderUser.query.filter_by(telegram_id=user.id).first()
-            if not db_user:
-                db_user = IDFinderUser(
-                    telegram_id=user.id, username=user.username,
-                    first_name=user.first_name, last_name=user.last_name,
-                    language_code=user.language_code, is_bot=user.is_bot,
-                    first_contact=now
-                )
-                db.session.add(db_user)
-            else:
-                db_user.username = user.username
-                db_user.first_name = user.first_name
-                db_user.last_name = user.last_name
-                db_user.last_contact = now
-            
-            # Discover Topics
-            if chat.type in ["group", "supergroup"] and msg.message_thread_id:
-                thread_id = msg.message_thread_id
-                mapping = TopicMapping.query.filter_by(topic_id=thread_id).first()
-                if not mapping:
-                    topic_name = f"Topic {thread_id}"
-                    try:
-                        forum_topic = await context.bot.get_forum_topic(chat_id=chat.id, message_thread_id=thread_id)
-                        topic_name = forum_topic.name
-                    except: pass
-                    db.session.add(TopicMapping(topic_id=thread_id, topic_name=topic_name))
+    topic_name = f"Topic {msg.message_thread_id}"
+    if chat.type in ["group", "supergroup"] and msg.message_thread_id:
+        try:
+            forum_topic = await context.bot.get_forum_topic(chat_id=chat.id, message_thread_id=msg.message_thread_id)
+            topic_name = forum_topic.name
+        except: pass
 
-            # Log Message
-            is_command = msg.text.startswith("/") if msg.text else False
-            if is_command and config.get("message_logging_ignore_commands", True):
-                db.session.commit()
-                return
-
-            content_type = "text"
-            file_id = None
+    content_type = "text"
+    file_id = None
             
-            # Debug: log all media fields for every message
-            logger.info(f"[MEDIA-DEBUG] user={user.id} photo={bool(msg.photo)} video={bool(msg.video)} sticker={bool(msg.sticker)} animation={bool(msg.animation)} doc={bool(msg.document)} voice={bool(msg.voice)} video_note={bool(msg.video_note)}")
-            
-            if msg.photo: 
-                content_type = "photo"
-                file_id = msg.photo[-1].file_id
-            elif msg.video: 
-                content_type = "video"
-                file_id = msg.video.file_id
-            elif msg.sticker:
-                sticker = msg.sticker
-                if sticker.is_animated:
-                    # Animated stickers are .tgs (Lottie) — browsers can't render them.
-                    # Use the thumbnail (JPEG) instead so the dashboard can display it.
-                    content_type = "sticker"
-                    file_id = sticker.thumbnail.file_id if sticker.thumbnail else sticker.file_id
-                elif sticker.is_video:
-                    # Video stickers are .webm — can be rendered with <video>.
-                    content_type = "sticker_video"
-                    file_id = sticker.file_id
-                else:
-                    # Static stickers are .webp — can be rendered with <img>.
-                    content_type = "sticker"
-                    file_id = sticker.file_id
-                logger.info(f"[STICKER] animated={sticker.is_animated} video={sticker.is_video} file_id={file_id}")
-            elif msg.animation:
-                content_type = "animation"
-                file_id = msg.animation.file_id
-            elif msg.document:
-                content_type = "document"
-                file_id = msg.document.file_id
-            elif msg.voice:
-                content_type = "voice"
-                file_id = msg.voice.file_id
-            elif msg.audio:
-                content_type = "audio"
-                file_id = msg.audio.file_id
-            elif msg.video_note:
-                content_type = "video_note"
-                file_id = msg.video_note.file_id
+    if msg.photo: 
+        content_type = "photo"
+        file_id = msg.photo[-1].file_id
+    elif msg.video: 
+        content_type = "video"
+        file_id = msg.video.file_id
+    elif msg.sticker:
+        content_type = "sticker_video" if msg.sticker.is_video else "sticker"
+        file_id = msg.sticker.thumbnail.file_id if msg.sticker.is_animated and msg.sticker.thumbnail else msg.sticker.file_id
+    elif msg.animation:
+        content_type = "animation"
+        file_id = msg.animation.file_id
+    elif msg.document:
+        content_type = "document"
+        file_id = msg.document.file_id
+    elif msg.voice:
+        content_type = "voice"
+        file_id = msg.voice.file_id
+    elif msg.audio:
+        content_type = "audio"
+        file_id = msg.audio.file_id
+    elif msg.video_note:
+        content_type = "video_note"
+        file_id = msg.video_note.file_id
 
-            db_msg = IDFinderMessage(
-                telegram_user_id=user.id, message_id=msg.message_id,
-                chat_id=chat.id, message_thread_id=msg.message_thread_id,
-                chat_type=chat.type, text=msg.text or msg.caption or "",
-                content_type=content_type, file_id=file_id,
-                is_command=is_command, timestamp=now
-            )
-            logger.info(f"Logging message from {user.id}: type={content_type}, file_id={file_id}, text_len={len(db_msg.text)}")
-            db.session.add(db_msg)
-            db.session.commit()
-    except Exception as e:
-        logger.error(f"Fehler beim Loggen: {e}")
+    msg_dict = {
+        'id': msg.message_id, 'thread_id': msg.message_thread_id, 'text': msg.text or msg.caption or "",
+        'content_type': content_type, 'file_id': file_id,
+        'is_command': (msg.text.startswith("/") if msg.text else False),
+        'topic_name': topic_name
+    }
+    
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, db_log_message_sync, user_dict, chat_dict, msg_dict, config)
 
 # --- Commands ---
 async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_bot_active('id_finder'): return
     await update.message.reply_text(
         f"👤 *Benutzer-ID:* `{update.effective_user.id}`\n"
         f"💬 *Chat-ID:* `{update.effective_chat.id}`\n"
@@ -284,35 +288,114 @@ async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode=ParseMode.MARKDOWN
     )
 
-# --- Bot Lifecycle Callbacks ---
-async def post_init(app: Application) -> None:
-    logger.info("ID-Finder Bot initialisiert.")
-
-async def post_shutdown(app: Application) -> None:
-    logger.info("ID-Finder Bot wurde beendet und heruntergefahren.")
-
-def main():
-    config = get_config_from_db()
-    if not config or not config.get("bot_token"):
-        logger.critical("Bot Token nicht in Datenbank gefunden! Bitte im Dashboard unter 'ID-Finder Bot' einstellen.")
-        sys.exit(1)
-        
-    app = ApplicationBuilder().token(config["bot_token"])
-    app = app.post_init(post_init).post_shutdown(post_shutdown).build()
+async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_bot_active('id_finder'): return
+    user = update.effective_user
+    chat = update.effective_chat
+    msg = update.effective_message
     
-    # Handlers
-    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, track_activity))
-    app.add_handler(CommandHandler("id", get_id))
+    config = get_config_from_db()
+    
+    try:
+        with flask_app.app_context():
+            admin = IDFinderAdmin.query.filter_by(telegram_id=user.id).first()
+            if not admin or not admin.permissions.get("can_warn", False) and not admin.permissions.get("is_superadmin", False):
+                await msg.reply_text("❌ Du hast keine Berechtigung, Benutzer zu verwarnen.")
+                return
 
-    # Minecraft Bridge
-    register_minecraft(app)
+            if not msg.reply_to_message:
+                await msg.reply_text("⚠️ Bitte antworte auf eine Nachricht des Benutzers, den du verwarnen möchtest. (/warn <Grund>)")
+                return
 
-    # Jobs (Warteschlangen prüfen)
-    app.job_queue.run_repeating(check_and_send_broadcasts, interval=30)
-    app.job_queue.run_repeating(process_cleanup_tasks, interval=10) # Alle 10 Sek nach abgelaufenen Meldungen suchen
+            target_user = msg.reply_to_message.from_user
+            if target_user.is_bot:
+                await msg.reply_text("❌ Du kannst keine Bots verwarnen.")
+                return
 
-    logger.info("ID-Finder Bot startet (mit Broadcast, Auto-Cleanup & TikTok Monitor)...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+            reason = "Kein Grund angegeben."
+            if context.args:
+                reason = " ".join(context.args)
+
+            # Ensure user exists
+            db_user = IDFinderUser.query.filter_by(telegram_id=target_user.id).first()
+            if not db_user:
+                db_user = IDFinderUser(
+                    telegram_id=target_user.id, username=target_user.username,
+                    first_name=target_user.first_name, last_name=target_user.last_name,
+                    is_bot=target_user.is_bot
+                )
+                db.session.add(db_user)
+                db.session.commit()
+
+            # Add warning
+            warning = IDFinderWarning(
+                telegram_user_id=target_user.id,
+                reason=reason,
+                admin_id=user.id,
+                message_db_id=None # We'd need the db_id of the replied message ideally, but leaving None is fine for now
+            )
+            db.session.add(warning)
+            db.session.commit()
+            
+            warning_count = IDFinderWarning.query.filter_by(telegram_user_id=target_user.id).count()
+            max_warns = config.get('max_warnings', 3)
+            punishment = config.get('punishment_type', 'none')
+            
+            punishment_text = ""
+            if warning_count >= max_warns and punishment != 'none':
+                punishment_text = f"\n\n🚨 *Limit erreicht. Aktion: {punishment.upper()}*"
+                try:
+                    if punishment == 'mute':
+                        mute_hours = config.get('mute_duration', 24)
+                        until = datetime.utcnow() + timedelta(hours=mute_hours)
+                        await context.bot.restrict_chat_member(chat_id=chat.id, user_id=target_user.id, permissions=ChatPermissions(can_send_messages=False), until_date=until)
+                        punishment_text += f"\n(Stummgeschaltet für {mute_hours}h)"
+                    elif punishment == 'kick':
+                        await context.bot.ban_chat_member(chat_id=chat.id, user_id=target_user.id)
+                        await context.bot.unban_chat_member(chat_id=chat.id, user_id=target_user.id)
+                        punishment_text += "\n(Pausiert/Kick ausgeführt)"
+                    elif punishment == 'ban':
+                        await context.bot.ban_chat_member(chat_id=chat.id, user_id=target_user.id)
+                        punishment_text += "\n(Permanent gesperrt)"
+                except Exception as e:
+                    logger.error(f"Fehler bei Auto-Punishment: {e}")
+                    punishment_text += "\n_(Konnte nicht ausgeführt werden. Missing Admin Rights?)_"
+
+            # Optional: Delete the /warn command itself
+            if config and config.get("delete_commands", False):
+                try:
+                    await msg.delete()
+                except: pass
+
+            reply = await msg.reply_to_message.reply_text(
+                f"⚠️ *Verwarnung an {target_user.first_name}*\n"
+                f"Grund: {reason}\n"
+                f"Verwarnung {warning_count} / {max_warns}{punishment_text}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
+            # Optional: Automatic cleanup of bot message
+            cleanup_secs = config.get("bot_message_cleanup_seconds", 0)
+            if cleanup_secs > 0:
+                cleanup_time = datetime.utcnow() + timedelta(seconds=cleanup_secs)
+                task = AutoCleanupTask(chat_id=chat.id, message_id=reply.message_id, cleanup_at=cleanup_time, status='pending')
+                db.session.add(task)
+                db.session.commit()
+
+    except Exception as e:
+        logger.error(f"Fehler bei /warn: {e}")
+        await msg.reply_text("❌ Interner Fehler beim Verwarnen.")
+
+def get_handlers():
+    return [
+        MessageHandler(filters.ALL & ~filters.COMMAND, track_activity),
+        CommandHandler("id", get_id),
+        CommandHandler("warn", warn_user)
+    ]
+
+def setup_jobs(job_queue):
+    job_queue.run_repeating(check_and_send_broadcasts, interval=30)
+    job_queue.run_repeating(process_cleanup_tasks, interval=10)
 
 if __name__ == "__main__":
-    main()
+    logger.error("Dieses Modul läuft nur via main_bot.py")

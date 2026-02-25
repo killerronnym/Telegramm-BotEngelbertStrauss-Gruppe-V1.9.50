@@ -17,14 +17,26 @@ from telegram.ext import (
     ConversationHandler,
 )
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
-from shared_bot_utils import get_bot_config
+from flask import Flask
+from web_dashboard.app.models import db, BotSettings, InviteApplication, InviteLog
+
+# Import shared utils for DB URL resolution
+from shared_bot_utils import get_db_url, get_bot_config, is_bot_active
+
+# --- Database Helper ---
+def get_db_session():
+    app = Flask(__name__)
+    app.config['SQLALCHEMY_DATABASE_URI'] = get_db_url()
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    db.init_app(app)
+    return app
+
+flask_app = get_db_session()
 
 # --- Logging Setup --- 
 # Corrected paths for logging to be robust regardless of where the script is run from.
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 WEB_DASHBOARD_DIR = os.path.join(PROJECT_ROOT, 'web_dashboard')
-USER_INTERACTION_LOG_FILE = os.path.join(PROJECT_ROOT, "user_interactions.log")
 INVITE_BOT_LOG_FILE = os.path.join(WEB_DASHBOARD_DIR, "invite_bot.log")
 
 # Ensure directories exist before logging attempts
@@ -40,33 +52,42 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# --- Speicher --- 
-PENDING_PROFILES: Dict[int, Dict[str, Any]] = {} 
-PENDING_WHITELIST: Dict[int, Dict[str, Any]] = {} 
+# Globale Variablen komplett ausgebaut, Nutzung von SQLite DB!
 
 def log_user_interaction(user_id, username, message_text):
-    log_entry = f"{datetime.now():%Y-%m-%d %H:%M:%S} - User ID: {user_id} - Username: @{username} - Message: {message_text}\n"
     try:
-        with open(USER_INTERACTION_LOG_FILE, 'a', encoding='utf-8') as f:
-            f.write(log_entry)
+        with flask_app.app_context():
+            log_entry = InviteLog(telegram_user_id=user_id, username=username or "Unknown", action=message_text)
+            db.session.add(log_entry)
+            db.session.commit()
     except Exception as e:
-        logger.error(f"Fehler beim Schreiben der User-Log-Datei {USER_INTERACTION_LOG_FILE}: {e}")
+        logger.error(f"Fehler beim Schreiben in die Datenbank (InviteLog): {e}")
 
 # Conversation States
 ASKING_QUESTIONS, CONFIRMING_RULES = range(2)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_bot_active('invite'): return
     config = get_bot_config('invite')
     if not config.get('is_enabled'):
         await update.message.reply_text("Der Bot ist zur Zeit deaktiviert.")
         return
     await update.message.reply_text(config.get('start_message', 'Willkommen! Schreibe /letsgo um zu starten.'))
+    log_user_interaction(update.effective_user.id, update.effective_user.username, "/start command aufgerufen")
 
 async def letsgo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if not is_bot_active('invite'): return ConversationHandler.END
     config = get_bot_config('invite')
     if not config.get('is_enabled'):
         await update.message.reply_text("Der Bot ist zur Zeit deaktiviert.")
         return ConversationHandler.END
+
+    with flask_app.app_context():
+        existing_app = InviteApplication.query.filter_by(telegram_user_id=update.effective_user.id, status='pending').first()
+        if existing_app:
+            await update.message.reply_text("Du hast bereits eine laufende oder ausstehende Bewerbung, die von den Administratoren geprüft wird.")
+            return ConversationHandler.END
+
     fields = [f for f in config.get('form_fields', []) if f.get('enabled', True)]
     if not fields:
         await update.message.reply_text("Keine Fragen konfiguriert. Admin kontaktieren.")
@@ -177,8 +198,25 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
             return ConversationHandler.END
         
         approval_chat_id = int(approval_chat_id_str) if approval_chat_id_str.lstrip('-').isdigit() else approval_chat_id_str
-        PENDING_PROFILES[user.id] = profile_data
-        PENDING_WHITELIST[user.id] = {'full_name': user.full_name, 'username': user.username}
+        
+        # In Datenbank sichern anstatt in Dictionaries
+        with flask_app.app_context():
+            existing = InviteApplication.query.filter_by(telegram_user_id=user.id).first()
+            if existing:
+                existing.status = 'pending'
+                existing.answers = profile_data
+                existing.full_name = user.full_name
+                existing.username = user.username
+            else:
+                new_app = InviteApplication(
+                    telegram_user_id=user.id,
+                    username=user.username,
+                    full_name=user.full_name,
+                    answers_json=json.dumps(profile_data),
+                    status='pending'
+                )
+                db.session.add(new_app)
+            db.session.commit()
         
         keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("✅ Annehmen", callback_data=f"whitelist_accept_{user.id}"),
                                           InlineKeyboardButton("❌ Ablehnen", callback_data=f"whitelist_reject_{user.id}")]])
@@ -199,7 +237,18 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
             else:
                 raise BadRequest("User not a member")
         except BadRequest:
-            PENDING_PROFILES[user.id] = profile_data
+            # Ohne Whitelist direkt Link ausgeben und lokal als 'accepted' markieren
+            with flask_app.app_context():
+                new_app = InviteApplication(
+                    telegram_user_id=user.id,
+                    username=user.username,
+                    full_name=user.full_name,
+                    answers_json=json.dumps(profile_data),
+                    status='accepted'
+                )
+                db.session.add(new_app)
+                db.session.commit()
+                
             link = await context.bot.create_chat_invite_link(chat_id=target_chat_id, member_limit=1)
             await update.message.reply_text(f"Danke! Hier ist dein Link:\n{link.invite_link}")
 
@@ -214,37 +263,34 @@ async def handle_whitelist_callback(update: Update, context: ContextTypes.DEFAUL
     admin_user = query.from_user
     config = get_bot_config('invite')
 
-    if user_id not in PENDING_WHITELIST and user_id not in PENDING_PROFILES:
-        pass
-
-    if user_id not in PENDING_PROFILES:
-         await query.edit_message_text(f"Diese Anfrage ist nicht mehr verfügbar (vielleicht schon bearbeitet?).")
-         return
-
-    user_info = PENDING_WHITELIST.get(user_id, {'full_name': 'Unknown', 'username': 'Unknown'})
-    
-    if action == "accept":
-        profile_data = PENDING_PROFILES.get(user_id)
-        if profile_data:
-            target_chat_id = profile_data['target_chat_id']
-            link = await context.bot.create_chat_invite_link(chat_id=target_chat_id, member_limit=1)
-            await context.bot.send_message(user_id, f"Gute Nachrichten! Deine Anfrage wurde angenommen. Hier ist dein Einladungslink:\n{link.invite_link}")
-            await query.edit_message_text(f"✅ Angenommen von {admin_user.full_name}. Der Nutzer hat den Link erhalten.")
-            
-            # WICHTIG: Profil NICHT löschen! Wir brauchen es für handle_new_member.
-            PENDING_WHITELIST.pop(user_id, None)
-            
-        else:
-            await query.edit_message_text("Fehler: Profildaten nicht gefunden.")
-            
-    elif action == "reject":
-        rejection_message = config.get('whitelist_rejection_message', 'Deine Anfrage wurde leider abgelehnt.')
-        await context.bot.send_message(user_id, rejection_message)
-        await query.edit_message_text(f"❌ Abgelehnt von {admin_user.full_name}. Der Nutzer wurde benachrichtigt.")
+    with flask_app.app_context():
+        application = InviteApplication.query.filter_by(telegram_user_id=user_id).first()
         
-        # Bei Ablehnung alles löschen
-        PENDING_PROFILES.pop(user_id, None)
-        PENDING_WHITELIST.pop(user_id, None)
+        if not application or application.status != 'pending':
+            await query.edit_message_text(f"Diese Anfrage ist nicht mehr verfügbar (vielleicht schon bearbeitet?).")
+            return
+            
+        profile_data = application.answers
+
+        if action == "accept":
+            target_chat_id = profile_data.get('target_chat_id')
+            if target_chat_id:
+                link = await context.bot.create_chat_invite_link(chat_id=target_chat_id, member_limit=1)
+                await context.bot.send_message(user_id, f"Gute Nachrichten! Deine Anfrage wurde angenommen. Hier ist dein Einladungslink:\n{link.invite_link}")
+                await query.edit_message_text(f"✅ Angenommen von {admin_user.full_name}. Der Nutzer hat den Link erhalten.")
+                application.status = 'accepted'
+                db.session.commit()
+            else:
+                await query.edit_message_text("Fehler: Target Chat ID nicht gefunden.")
+                application.status = 'rejected'
+                db.session.commit()
+                
+        elif action == "reject":
+            rejection_message = config.get('whitelist_rejection_message', 'Deine Anfrage wurde leider abgelehnt.')
+            await context.bot.send_message(user_id, rejection_message)
+            await query.edit_message_text(f"❌ Abgelehnt von {admin_user.full_name}. Der Nutzer wurde benachrichtigt.")
+            application.status = 'rejected'
+            db.session.commit()
 
 async def handle_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.chat_member or not update.chat_member.new_chat_member or update.chat_member.new_chat_member.status != "member":
@@ -252,47 +298,39 @@ async def handle_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     user_id = update.chat_member.new_chat_member.user.id
     
-    if user_id in PENDING_PROFILES:
-        profile_data = PENDING_PROFILES.pop(user_id)
-        profile_data['text'] = profile_data['text'].replace("Steckbrief von", "Willkommen in der Gruppe!")
-        
-        await post_profile(context.bot, profile_data)
-        
-        PENDING_WHITELIST.pop(user_id, None)
+    with flask_app.app_context():
+        application = InviteApplication.query.filter_by(telegram_user_id=user_id, status='accepted').first()
+        if application:
+            profile_data = application.answers
+            if profile_data and 'text' in profile_data:
+                profile_data['text'] = profile_data['text'].replace("Steckbrief von", "Willkommen in der Gruppe!")
+                await post_profile(context.bot, profile_data)
+                
+            application.status = 'completed'
+            db.session.commit()
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Prozess abgebrochen.")
     return ConversationHandler.END
 
-def run_bot():
-    try:
-        config = get_bot_config('invite')
-        token = config.get('bot_token')
-        if not token:
-            logger.error("Kein Bot Token in der Datenbank gefunden. Bot startet nicht.")
-            return
+def get_handlers():
+    """Gleicht handlers für den Master Bot zurück."""
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("letsgo", letsgo)],
+        states={
+            ASKING_QUESTIONS: [MessageHandler(filters.TEXT | filters.PHOTO, handle_answer)],
+            CONFIRMING_RULES: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_rules_confirmation)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel), CommandHandler("start", start)],
+    )
 
-        application = Application.builder().token(token).build()
-        conv_handler = ConversationHandler(
-            entry_points=[CommandHandler("letsgo", letsgo)],
-            states={
-                ASKING_QUESTIONS: [MessageHandler(filters.TEXT | filters.PHOTO, handle_answer)],
-                CONFIRMING_RULES: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_rules_confirmation)],
-            },
-            fallbacks=[CommandHandler("cancel", cancel), CommandHandler("start", start)],
-        )
-        application.add_handler(conv_handler)
-        # HIER: /start Befehl auch außerhalb des Dialogs verfügbar machen
-        application.add_handler(CommandHandler("start", start))
-        
-        application.add_handler(CallbackQueryHandler(handle_whitelist_callback, pattern=r'^whitelist_'))
-        application.add_handler(ChatMemberHandler(handle_new_member, ChatMemberHandler.CHAT_MEMBER))
-        
-        logger.info("Invite Bot gestartet und lauscht auf Updates...")
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    return [
+        conv_handler,
+        CommandHandler("start", start),
+        CallbackQueryHandler(handle_whitelist_callback, pattern=r'^whitelist_'),
+        ChatMemberHandler(handle_new_member, ChatMemberHandler.CHAT_MEMBER)
+    ]
 
-    except Exception as e:
-        logger.exception(f"Kritischer Fehler im Invite Bot: {e}")
-
+# Nur wenn direkt ausgeführt (Legacy Fallback)
 if __name__ == "__main__":
-    run_bot()
+    logger.error("Dieses Skript sollte nicht direkt ausgeführt werden. Bitte main_bot.py nutzen.")

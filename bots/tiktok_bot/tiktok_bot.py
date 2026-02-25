@@ -43,7 +43,7 @@ except Exception as e:
 # =========================
 # Load config using the shared_bot_utils now capable of hitting MySQL
 sys.path.append(PROJECT_ROOT)
-from shared_bot_utils import get_bot_config
+from shared_bot_utils import get_bot_config, is_bot_active
 
 def load_config():
     id_finder_config = get_bot_config("id_finder")
@@ -107,9 +107,13 @@ async def watch_one_host(host_unique_id: str, targets: List[str], alert_state: A
         return
 
     while True:
+        if not is_bot_active('tiktok'):
+            await asyncio.sleep(60)
+            continue
+            
         config = load_config()
         if not config.get("IS_ACTIVE"):
-            log_print(f"TikTok Bot ist DEAKTIVIERT. Überspringe Überwachung für @{host_unique_id}.")
+            log_print(f"TikTok Bot ist in Config DEAKTIVIERT. Überspringe Überwachung für @{host_unique_id}.")
             await asyncio.sleep(config.get("RETRY_OFFLINE_SECONDS", 60))
             continue
 
@@ -194,8 +198,9 @@ async def start_tiktok_monitor(app_instance: Application = None):
         while True:
             await asyncio.sleep(60)
 
+def setup_jobs(job_queue):
+    """Wird vom main_bot aufgerufen, um den Hintergrund-Task zu starten."""
+    job_queue.run_once(lambda context: asyncio.create_task(start_tiktok_monitor()), 5)
+
 if __name__ == "__main__":
-    try:
-        asyncio.run(start_tiktok_monitor())
-    except KeyboardInterrupt:
-        pass
+    print("Bitte starte den Bot über main_bot.py")

@@ -1,34 +1,24 @@
 version: '3.8'
 
 services:
-  db:
-    image: mariadb:10.11
-    container_name: bot_db
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: root_password
-      MYSQL_DATABASE: bot_engine
-      MYSQL_USER: bot_user
-      MYSQL_PASSWORD: bot_password
-    volumes:
-      - db_data:/var/lib/mysql
-
-  app:
+  bot-system:
     build: .
-    container_name: bot_app
+    container_name: bot-engine-v2
     restart: always
     ports:
       - "9002:9002"
-    environment:
-      - DATABASE_URL=mysql+pymysql://bot_user:bot_password@db:3306/bot_engine?charset=utf8mb4
-      - SECRET_KEY=your_secret_key_here
-    depends_on:
-      - db
     volumes:
-      - .:/app
       - ./instance:/app/instance
+      - ./logs:/app/logs
       - ./data:/app/data
-      - ./bots:/app/bots
+      - ./.env:/app/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TZ=Europe/Berlin
+    # Falls eine externe MySQL Datenbank genutzt wird, kann diese hier verlinkt werden
+    # networks:
+    #   - bot-network
 
-volumes:
-  db_data:
+    # networks:
+    #   bot-network:
+    #     driver: bridge

@@ -194,8 +194,10 @@
                         <input type="hidden" name="action" value="save_settings">
                         <div class="mb-3">
                             <label class="small text-secondary fw-bold mb-1">TELEGRAM BOT TOKEN</label>
-                            <input type="password" class="form-control" name="token"
-                                value="{{ config.bot_token or '' }}">
+                            <input type="text" class="form-control text-muted bg-light"
+                                value="Gesperrt (Siehe ID-Finder Bot)" disabled readonly>
+                            <small class="text-muted" style="font-size: 0.75rem;">Alle Module teilen sich den Token des
+                                ID-Finder Bots.</small>
                         </div>
                         <div class="mb-3">
                             <label class="small text-secondary fw-bold mb-1">CHANNEL ID</label>
@@ -253,8 +255,24 @@
                     <h6 class="text-secondary small font-monospace">System Console</h6>
                 </div>
                 <div class="card-body p-0">
-                    <pre class="log-display mb-0" style="height: 200px; overflow-y: auto;">{% for line in logs %}{{ line.strip() }}
-{% endfor %}</pre>
+                    <div class="log-display rounded-0 border-0" style="height: 200px; overflow-y: auto;">
+                        {% if logs %}
+                        {% for line in logs %}
+                        {% if 'ERROR' in line or 'CRITICAL' in line %}
+                        <div class="py-1 px-2 text-wrap bg-danger text-white fw-bold" style="font-size: 0.75rem;">{{
+                            line }}</div>
+                        {% elif 'WARNING' in line %}
+                        <div class="py-1 px-2 text-wrap text-warning fw-bold" style="font-size: 0.75rem;">{{ line }}
+                        </div>
+                        {% else %}
+                        <div class="py-1 px-2 text-wrap" style="font-size: 0.75rem;">{{ line }}</div>
+                        {% endif %}
+                        {% endfor %}
+                        {% else %}
+                        <div class="text-success p-4 text-center fw-bold"><i
+                                class="bi bi-check-circle fs-4 d-block mb-2"></i> Keine Fehler / Logs verfügbar.</div>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>

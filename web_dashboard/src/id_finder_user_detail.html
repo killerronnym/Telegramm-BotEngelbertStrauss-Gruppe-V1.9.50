@@ -189,7 +189,8 @@
                     <span><i class="bi bi-clock"></i> {{ msg.timestamp.strftime('%d.%m.%Y %H:%M') }}</span>
                     <span><i class="bi bi-hash"></i> {{ msg.chat_type }}</span>
                     {% if msg.message_thread_id %}
-                    <span><i class="bi bi-tag"></i> Topic ID: {{ msg.message_thread_id }}</span>
+                    <span><i class="bi bi-tag"></i> {{ topic_map.get(msg.message_thread_id, 'Topic ' ~
+                        msg.message_thread_id) }}</span>
                     {% endif %}
                 </div>
             </div>

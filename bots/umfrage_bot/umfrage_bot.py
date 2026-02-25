@@ -27,7 +27,7 @@ USED_FILE = os.path.join(BASE_DIR, "umfragen_gestellt.json")
 
 # Navigating to project root
 sys.path.append(PROJECT_ROOT)
-from shared_bot_utils import get_bot_config
+from shared_bot_utils import get_bot_config, is_bot_active
 
 logging.basicConfig(
     level=logging.INFO,
@@ -86,7 +86,11 @@ def poll_fingerprint(p: dict) -> str:
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
 # ----------------- Core Logic -----------------
-async def send_poll():
+async def send_poll(context=None):
+    if not is_bot_active('umfrage'):
+        log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Umfrage Bot ist inaktiv. Abbruch.")
+        return False
+        
     log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Attempting to send poll...")
     cfg = load_config_from_db()
     token = cfg.get("bot_token", "").strip()
@@ -167,16 +171,17 @@ async def send_poll():
         return False
 
 # ----------------- Scheduler and Trigger -----------------
-def process_trigger():
+async def process_trigger(context=None):
+    if not is_bot_active('umfrage'): return
     if os.path.exists(TRIGGER_FILE):
         log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Manual trigger detected.")
         try:
             os.remove(TRIGGER_FILE)
-            asyncio.run(send_poll())
+            await send_poll()
         except Exception as e:
             log.error(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Error processing trigger: {e}")
 
-def check_schedule():
+async def check_schedule():
     cfg = load_config_from_db()
     schedule = cfg.get("schedule", {})
     
@@ -208,23 +213,22 @@ def check_schedule():
     # Check time
     if now.time() >= scheduled_time:
         log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Scheduled time reached. Sending poll...")
-        success = asyncio.run(send_poll())
+        success = await send_poll()
         if success:
             set_last_sent_date(today_date)
             log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Schedule marked as done for {today_date}")
 
-# ----------------- Main Loop -----------------
-def main():
-    log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Umfrage Bot started.")
-    
-    while True:
-        try:
-            process_trigger()
-            check_schedule()
-        except Exception as e:
-            log.error(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Error in main loop: {e}")
-        
-        time.sleep(10)
+async def check_schedule_job(context=None):
+    if not is_bot_active('umfrage'): return
+    await check_schedule()
+
+# ----------------- Master Bot Setup -----------------
+def setup_jobs(job_queue):
+    log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Umfrage Bot registriert Jobs...")
+    # Trigger-Check alle 10 Sekunden
+    job_queue.run_repeating(process_trigger, interval=10)
+    # Schedule-Check minutlich
+    job_queue.run_repeating(check_schedule_job, interval=60)
 
 if __name__ == "__main__":
-    main()
+    print("Bitte starte den Bot über main_bot.py")
