@@ -1,4 +1,6 @@
 #!/bin/bash
+# Updated: 2026-02-26 21:22
+
 set -e
 
 echo "--- Starting Bot Engine v2 Entrypoint ---"
