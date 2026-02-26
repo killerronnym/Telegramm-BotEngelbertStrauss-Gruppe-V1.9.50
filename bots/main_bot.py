@@ -26,7 +26,7 @@ from web_dashboard.app import create_app, db
 from shared_bot_utils import get_db_url, is_bot_active, get_bot_token
 
 # Setup Logging
-os.makedirs("bots", exist_ok=True)
+os.makedirs(os.path.join(BASE_DIR, "logs"), exist_ok=True)
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO,
@@ -78,6 +78,20 @@ def main():
             logger.warning("⚠️ Kein Locking-Mechanismus verfügbar (msvcrt/fcntl fehlt).")
             
         _keep_lock_alive = lock_file
+        
+        # --- PID-File für Dashboard schreiben ---
+        pid_file_path = os.path.join(BASE_DIR, "logs", "main_bot.pid")
+        os.makedirs(os.path.dirname(pid_file_path), exist_ok=True)
+        with open(pid_file_path, "w") as f:
+            f.write(str(os.getpid()))
+            
+        import atexit
+        def remove_pid():
+            if os.path.exists(pid_file_path):
+                try: os.remove(pid_file_path)
+                except: pass
+        atexit.register(remove_pid)
+
     except (IOError, ImportError):
         logger.error(f"❌ Eine andere Instanz des Bots läuft bereits (Lock auf {lock_file_path}). Beende PID {os.getpid()}...")
         sys.exit(1)

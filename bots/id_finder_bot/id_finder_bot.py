@@ -223,8 +223,19 @@ async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not all([msg, user, chat]): return
     
     config = get_config_from_db()
-    if not config or not config.get("message_logging_enabled", True): return
+    
+    logger.info(f"DEBUG: track_activity for user {user.id} in chat {chat.id} ({chat.type})")
+    
+    if not config:
+        logger.warning("Keine Konfiguration für id_finder in DB gefunden.")
+        return
+        
+    if not config.get("message_logging_enabled", True):
+        logger.info("Message Logging ist in der Config deaktiviert.")
+        return
+        
     if config.get("message_logging_groups_only", False) and chat.type not in ["group", "supergroup"]:
+        logger.info(f"Skipping private chat (groups_only=True). Chat type: {chat.type}")
         return
 
     user_dict = {
@@ -393,7 +404,8 @@ def get_handlers():
     ]
 
 def get_track_handler():
-    return MessageHandler(filters.ALL & ~filters.COMMAND, track_activity)
+    # Wir nehmen ALLE Nachrichten (auch Commands), die Filterung passiert in track_activity/db_log_message_sync
+    return MessageHandler(filters.ALL, track_activity)
 
 def setup_jobs(job_queue):
     job_queue.run_repeating(check_and_send_broadcasts, interval=30)
