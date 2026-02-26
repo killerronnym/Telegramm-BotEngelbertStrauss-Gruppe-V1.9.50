@@ -6,7 +6,7 @@ import subprocess
 import sys
 import signal
 from datetime import datetime, timedelta
-from sqlalchemy import func
+from sqlalchemy import func, extract, case, text
 from werkzeug.utils import secure_filename
 from ..models import db, BotSettings, Broadcast, TopicMapping, User, IDFinderAdmin, IDFinderUser, IDFinderMessage, AVAILABLE_PERMISSIONS
 
@@ -770,9 +770,9 @@ def id_finder_analytics():
     # Handle time filtering
     now = datetime.utcnow()
     if year > 0 and month > 0:
-        query_filter = (db.extract('year', IDFinderMessage.timestamp) == year) & (db.extract('month', IDFinderMessage.timestamp) == month)
+        query_filter = (extract('year', IDFinderMessage.timestamp) == year) & (extract('month', IDFinderMessage.timestamp) == month)
     elif year > 0:
-        query_filter = db.extract('year', IDFinderMessage.timestamp) == year
+        query_filter = extract('year', IDFinderMessage.timestamp) == year
     elif days > 0:
         cutoff = now - timedelta(days=days)
         query_filter = IDFinderMessage.timestamp >= cutoff
@@ -784,11 +784,11 @@ def id_finder_analytics():
         IDFinderUser.telegram_id,
         IDFinderUser.first_name,
         func.count(IDFinderMessage.id).label('msg_count'),
-        func.sum(db.case((IDFinderMessage.content_type != 'text', 1), else_=0)).label('media_count')
+        func.sum(case((IDFinderMessage.content_type != 'text', 1), else_=0)).label('media_count')
     ).join(IDFinderMessage, IDFinderUser.telegram_id == IDFinderMessage.telegram_user_id) \
      .filter(query_filter) \
      .group_by(IDFinderUser.telegram_id, IDFinderUser.first_name) \
-     .order_by(db.text('msg_count DESC')).limit(100).all()
+     .order_by(text('msg_count DESC')).limit(100).all()
 
     leaderboard = [
         {"uid": str(row.telegram_id), "name": row.first_name or "Unknown", "msgs": int(row.msg_count), "media": int(row.media_count or 0)}
@@ -820,7 +820,7 @@ def id_finder_analytics():
     # Hours distribution
     # Using generic cast since extract('hour') is cross-compatible 
     hours_query = db.session.query(
-        db.extract('hour', IDFinderMessage.timestamp).label('hour'),
+        extract('hour', IDFinderMessage.timestamp).label('hour'),
         func.count(IDFinderMessage.id).label('count')
     ).filter(query_filter).group_by('hour').all()
     
@@ -837,7 +837,7 @@ def id_finder_analytics():
         dow_expr = func.dayofweek(IDFinderMessage.timestamp)
     else:
         # SQLite: 0 (Sun) to 6 (Sat)
-        dow_expr = db.extract('dow', IDFinderMessage.timestamp)
+        dow_expr = extract('dow', IDFinderMessage.timestamp)
 
     dow_query = db.session.query(
         dow_expr.label('dow'),
