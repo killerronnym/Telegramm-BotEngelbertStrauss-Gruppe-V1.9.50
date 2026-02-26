@@ -218,24 +218,30 @@ def db_log_message_sync(user_dict, chat_dict, msg_dict, config):
         logger.error(f"Fehler beim synchronen Loggen: {e}")
 
 async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_bot_active('id_finder'): return
+    logger.info("--- [DIAG] track_activity triggered ---")
+    if not is_bot_active('id_finder'):
+        # logger.info("--- [DIAG] is_bot_active('id_finder') returned False ---")
+        # For Master Bot, we might want to log regardless or check why it's inactive
+        pass 
+        
     msg, user, chat = update.effective_message, update.effective_user, update.effective_chat
-    if not all([msg, user, chat]): return
+    if not all([msg, user, chat]):
+        logger.info(f"--- [DIAG] Missing components: msg={bool(msg)}, user={bool(user)}, chat={bool(chat)} ---")
+        return
     
-    config = get_config_from_db()
-    
-    logger.info(f"DEBUG: track_activity for user {user.id} in chat {chat.id} ({chat.type})")
+    config = get_bot_config("id_finder")
+    logger.info(f"--- [DIAG] User: {user.id}, Chat: {chat.id} ({chat.type}), Msg: {msg.message_id} ---")
     
     if not config:
-        logger.warning("Keine Konfiguration für id_finder in DB gefunden.")
+        logger.warning("--- [DIAG] No config found for id_finder! ---")
         return
         
     if not config.get("message_logging_enabled", True):
-        logger.info("Message Logging ist in der Config deaktiviert.")
+        logger.info("--- [DIAG] Message Logging disabled in config. ---")
         return
         
     if config.get("message_logging_groups_only", False) and chat.type not in ["group", "supergroup"]:
-        logger.info(f"Skipping private chat (groups_only=True). Chat type: {chat.type}")
+        logger.info(f"--- [DIAG] Skipping private chat (groups_only=True). ---")
         return
 
     user_dict = {
