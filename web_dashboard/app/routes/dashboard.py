@@ -778,7 +778,7 @@ def id_finder_analytics():
             month = 0
             year = 0
 
-        query_filter = True
+        query_filter = text("1=1")
         
         # Handle time filtering
         now = datetime.utcnow()
@@ -875,12 +875,14 @@ def id_finder_analytics():
                                })
     except Exception as e:
         # LOG AND CRASH gracefully
+        err_msg = f"\n--- Analytics Error [{datetime.now()}] ---\n{traceback.format_exc()}\n"
+        sys.stderr.write(err_msg)
         error_file = os.path.join(PROJECT_ROOT, "logs", "dashboard_error.log")
-        os.makedirs(os.path.dirname(error_file), exist_ok=True)
-        with open(error_file, "a", encoding="utf-8") as f:
-            f.write(f"\n--- Analytics Error [{datetime.now()}] ---\n")
-            f.write(traceback.format_exc())
-            f.write("\n")
+        try:
+            os.makedirs(os.path.dirname(error_file), exist_ok=True)
+            with open(error_file, "a", encoding="utf-8") as f:
+                f.write(err_msg)
+        except: pass
         raise e
 
 @bp.route('/api/id-finder/user-activity/<int:uid>')
@@ -909,12 +911,14 @@ def id_finder_user_activity(uid):
 
         return jsonify({"timeline": total_data})
     except Exception as e:
+        err_msg = f"\n--- User Activity Error [{datetime.now()}] ---\n{traceback.format_exc()}\n"
+        sys.stderr.write(err_msg)
         error_file = os.path.join(PROJECT_ROOT, "logs", "dashboard_error.log")
-        os.makedirs(os.path.dirname(error_file), exist_ok=True)
-        with open(error_file, "a", encoding="utf-8") as f:
-            f.write(f"\n--- User Activity Error [{datetime.now()}] ---\n")
-            f.write(traceback.format_exc())
-            f.write("\n")
+        try:
+            os.makedirs(os.path.dirname(error_file), exist_ok=True)
+            with open(error_file, "a", encoding="utf-8") as f:
+                f.write(err_msg)
+        except: pass
         raise e
 
 # --- USER MANAGEMENT ---
