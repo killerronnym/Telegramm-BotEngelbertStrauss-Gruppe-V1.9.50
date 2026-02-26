@@ -802,7 +802,7 @@ def id_finder_analytics():
             IDFinderUser.telegram_id,
             IDFinderUser.first_name,
             func.count(IDFinderMessage.id).label('msg_count'),
-            func.sum(case([(IDFinderMessage.content_type != 'text', 1)], else_=0)).label('media_count')
+            func.sum(case((IDFinderMessage.content_type != 'text', 1), else_=0)).label('media_count')
         ).join(IDFinderMessage, IDFinderUser.telegram_id == IDFinderMessage.telegram_user_id) \
          .filter(query_filter) \
          .group_by(IDFinderUser.telegram_id, IDFinderUser.first_name) \
