@@ -68,6 +68,20 @@ async def main_post_shutdown(app: Application) -> None:
 
 _keep_lock_alive = None
 
+async def update_heartbeat(context: ContextTypes.DEFAULT_TYPE):
+    """Aktualisiert einen Zeitstempel in der DB, damit das Dashboard weiß, dass der Bot lebt."""
+    try:
+        from web_dashboard.app.models import BotSettings
+        with flask_app.app_context():
+            s = BotSettings.query.filter_by(bot_name='id_finder').first()
+            if s:
+                cfg = json.loads(s.config_json) if s.config_json else {}
+                cfg['last_heartbeat'] = datetime.now().isoformat()
+                s.config_json = json.dumps(cfg)
+                db.session.commit()
+    except Exception as e:
+        logger.error(f"Heartbeat Fehler: {e}")
+
 def main():
     global _keep_lock_alive
     
@@ -168,9 +182,25 @@ def main():
         else:
             app.add_handler(h)
 
+    # Heartbeat alle 60 Sekunden
+    app.job_queue.run_repeating(update_heartbeat, interval=60, first=5)
+
     logger.info("Starte globales Polling für alle Module...")
-    # Polling starten
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Polling mit Retry bei Conflict (hilfreich bei Docker Restarts)
+    retry_count = 0
+    while True:
+        try:
+            app.run_polling(allowed_updates=Update.ALL_TYPES, close_loop=False)
+            break # Normaler Exit
+        except Exception as e:
+            if "Conflict" in str(e):
+                retry_count += 1
+                logger.warning(f"⚠️ Telegram Conflict (Instanz läuft noch?). Retry {retry_count} in 10s...")
+                import time
+                time.sleep(10)
+            else:
+                logger.critical(f"💥 Kritischer Fehler im Polling: {e}")
+                raise e
 
 if __name__ == "__main__":
     main()

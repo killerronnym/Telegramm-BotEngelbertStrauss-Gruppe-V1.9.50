@@ -95,10 +95,15 @@ def get_bot_status_simple():
         from web_dashboard.app.models import BotSettings
         settings = BotSettings.query.all()
         for s in settings:
-            if s.bot_name in status and s.bot_name != 'id_finder':
+            if s.bot_name in status: # Check if bot_name is in status dict
                 if s.config_json:
                     c = json.loads(s.config_json)
-                    status[s.bot_name]["running"] = c.get('is_active', False)
+                    if s.bot_name == 'id_finder':
+                        if 'last_heartbeat' in c:
+                            status['id_finder']['last_heartbeat'] = c['last_heartbeat']
+                    else: # For other bots, check 'is_active'
+                        if c.get('is_active'):
+                            status[s.bot_name]["running"] = True
     except Exception as e:
         print(f"Fehler beim Lesen des Bot-Status: {e}")
         
