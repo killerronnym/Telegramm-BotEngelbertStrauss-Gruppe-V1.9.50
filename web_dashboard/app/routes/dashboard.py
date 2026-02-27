@@ -498,12 +498,18 @@ def quiz_settings():
 @login_required
 def quiz_send_random():
     try:
-        tfile = os.path.join(PROJECT_ROOT, "bots", "quiz_bot", "send_now.tmp")
+        tfile = os.path.abspath(os.path.join(PROJECT_ROOT, "bots", "quiz_bot", "send_now.tmp"))
         os.makedirs(os.path.dirname(tfile), exist_ok=True)
         with open(tfile, 'w') as f: f.write('1')
         
+        # Verbose Log to file
+        trigger_log = os.path.join(PROJECT_ROOT, "logs", "trigger.log")
+        with open(trigger_log, 'a', encoding='utf-8') as f:
+            f.write(f"[{datetime.now()}] Quiz Trigger written to: {tfile}\n")
+            
         # Audit Log
-        log_entry = AuditLog(user_id=current_user.id, action="quiz_send_manual", details="Manuelle Quizfrage über Dashboard ausgelöst.")
+        details = f"Quiz-Trigger geschrieben nach: {tfile}"
+        log_entry = AuditLog(user_id=current_user.id, action="quiz_send_manual", details=details)
         db.session.add(log_entry)
         db.session.commit()
         
@@ -606,12 +612,18 @@ def umfrage_settings():
 @login_required
 def umfrage_send_now():
     try:
-        tfile = os.path.join(PROJECT_ROOT, "bots", "umfrage_bot", "send_now.tmp")
+        tfile = os.path.abspath(os.path.join(PROJECT_ROOT, "bots", "umfrage_bot", "send_now.tmp"))
         os.makedirs(os.path.dirname(tfile), exist_ok=True)
         with open(tfile, 'w') as f: f.write('1')
         
+        # Verbose Log to file
+        trigger_log = os.path.join(PROJECT_ROOT, "logs", "trigger.log")
+        with open(trigger_log, 'a', encoding='utf-8') as f:
+            f.write(f"[{datetime.now()}] Umfrage Trigger written to: {tfile}\n")
+            
         # Audit Log
-        log_entry = AuditLog(user_id=current_user.id, action="umfrage_send_manual", details="Manuelle Umfrage über Dashboard ausgelöst.")
+        details = f"Umfrage-Trigger geschrieben nach: {tfile}"
+        log_entry = AuditLog(user_id=current_user.id, action="umfrage_send_manual", details=details)
         db.session.add(log_entry)
         db.session.commit()
         
