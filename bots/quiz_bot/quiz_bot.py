@@ -218,9 +218,12 @@ async def check_schedule():
     if now.weekday() not in allowed_days:
         return
 
-    # Check if time is reached (with 1 minute tolerance to avoid double send in same minute if loop is fast)
-    # Actually, since we check last_sent_date, we just need to know if current time >= scheduled time
-    if now.time() >= scheduled_time:
+    # Check time (with 5 minute tolerance to avoid mass catch-up blasts on restart)
+    sched_datetime = datetime.combine(now.date(), scheduled_time)
+    time_diff = now - sched_datetime
+
+    # Only send if we are within a 5-minute window after the scheduled time
+    if timedelta(minutes=0) <= time_diff <= timedelta(minutes=5):
         log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Scheduled time reached. Sending quiz...")
         success = await send_quiz()
         if success:

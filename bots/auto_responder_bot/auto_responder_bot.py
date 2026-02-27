@@ -82,10 +82,11 @@ async def handle_dynamic_keyword(update: Update, context: ContextTypes.DEFAULT_T
 
 def get_handlers():
     """Gibt die Handler zurück, die main_bot.py registrieren soll."""
-    h1 = CommandHandler(filters=filters.COMMAND, callback=handle_dynamic_command)
-    # Filter: TEXT but NOT commands
+    # Um ALLE Commands dynamisch abzufangen, müssen wir MessageHandler mit filters.COMMAND nutzen
+    # Wir weisen dem eine eigene Gruppe (Group 5) zu, damit es nicht mit ID-Finder kollidiert.
+    h1 = MessageHandler(filters.COMMAND, handle_dynamic_command)
     h2 = MessageHandler(filters.TEXT & (~filters.COMMAND), handle_dynamic_keyword)
-    return [h1, h2]
+    return [(h1, 5), (h2, 5)]
 
 def get_fallback_handlers():
     return []
