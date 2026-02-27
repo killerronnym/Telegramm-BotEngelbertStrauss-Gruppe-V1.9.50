@@ -105,6 +105,23 @@ def get_env_var(key, default=None):
     return os.environ.get(key, default)
 
 def is_bot_active(bot_name):
-    """Prüft direkt via SQL, ob das Modul im Dashboard aktiviert ist."""
-    config = get_bot_config(bot_name)
-    return config.get('is_active', False)
+    """Prüft direkt via SQL, ob das Modul im Dashboard aktiviert ist (is_active Spalte)."""
+    try:
+        url = get_db_url()
+        if not os.path.exists(DB_PATH) and url.startswith("sqlite"):
+            return False
+
+        engine = create_engine(url)
+        with engine.connect() as conn:
+            if not inspect(engine).has_table("bot_settings"):
+                return False
+                
+            result = conn.execute(
+                text("SELECT is_active FROM bot_settings WHERE bot_name = :name"),
+                {"name": bot_name}
+            ).fetchone()
+            
+            return bool(result[0]) if result else False
+    except Exception as e:
+        sys.stderr.write(f"ERROR checking active status for {bot_name}: {str(e)}\n")
+        return False
