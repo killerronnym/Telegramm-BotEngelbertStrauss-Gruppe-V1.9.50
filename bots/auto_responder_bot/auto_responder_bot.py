@@ -52,13 +52,15 @@ async def handle_dynamic_command(update: Update, context: ContextTypes.DEFAULT_T
     
     rules = fetch_active_rules()
     for rule in rules:
-        if rule.trigger_type == 'command' and rule.trigger_text.lower() == command_text:
-            try:
-                await update.message.reply_text(rule.response_text)
-                logger.info(f"Auto-Antwort auf Befehl gesendet: {command_text}")
-                return
-            except Exception as e:
-                logger.error(f"Fehler beim Senden der Command-Antwort: {e}")
+        if rule.trigger_type == 'command':
+            trigger = rule.trigger_text.lower().strip()
+            if trigger and trigger == command_text:
+                try:
+                    await update.message.reply_text(rule.response_text)
+                    logger.info(f"Auto-Antwort auf Befehl gesendet: {command_text}")
+                    return
+                except Exception as e:
+                    logger.error(f"Fehler beim Senden der Command-Antwort: {e}")
 
 async def handle_dynamic_keyword(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Prüft Textnachrichten auf hinterlegte Schlüsselwörter."""
@@ -71,10 +73,11 @@ async def handle_dynamic_keyword(update: Update, context: ContextTypes.DEFAULT_T
     for rule in rules:
         if rule.trigger_type == 'keyword':
             # Einfacher Substring-Match: Keyword muss irgendwo im Text vorkommen
-            if rule.trigger_text.lower() in message_text:
+            trigger = rule.trigger_text.lower().strip()
+            if trigger and trigger in message_text:
                 try:
                     await update.message.reply_text(rule.response_text)
-                    logger.info(f"Auto-Antwort auf Keyword gesendet: '{rule.trigger_text}'")
+                    logger.info(f"Auto-Antwort auf Keyword gesendet: '{trigger}'")
                     # Break after the first match to avoid spamming multiple responses
                     return
                 except Exception as e:
