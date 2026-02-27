@@ -581,8 +581,8 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
             link = await context.bot.create_chat_invite_link(chat_id=target_chat_id, member_limit=1)
             await update.message.reply_text(f"Danke! Deine Anmeldung ist abgeschlossen. Hier ist dein Einladungslink zur Gruppe:\n\n{link.invite_link}")
         except Exception as e:
-            logger.error(f"Fehler bei Link-Generierung: {e}")
-            await update.message.reply_text("Fehler: Link konnte nicht generiert werden. Bitte Admin kontaktieren.")
+            logger.error(f"Fehler bei Link-Generierung (Chat ID: {target_chat_id}): {e}")
+            await update.message.reply_text(f"❌ Fehler bei Link-Generierung (ID: {target_chat_id}): {e}")
 
     return ConversationHandler.END
 
@@ -614,8 +614,8 @@ async def handle_whitelist_callback(update: Update, context: ContextTypes.DEFAUL
                     application.status = 'accepted'
                     db.session.commit()
                 except Exception as e:
-                    logger.error(f"Fehler bei Link-Generierung (Accept): {e}")
-                    await query.edit_message_text(f"❌ Fehler bei Link-Generierung: {e}")
+                    logger.error(f"Fehler bei Link-Generierung (Accept, ID: {target_chat_id}): {e}")
+                    await query.edit_message_text(f"❌ Fehler bei Link-Generierung (ID: {target_chat_id}): {e}")
             else:
                 await query.edit_message_text("Fehler: Target Chat ID nicht gefunden.")
                 application.status = 'rejected'
