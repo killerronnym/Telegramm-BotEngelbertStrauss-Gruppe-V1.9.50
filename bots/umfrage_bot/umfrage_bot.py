@@ -88,9 +88,9 @@ def poll_fingerprint(p: dict) -> str:
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
 # ----------------- Core Logic -----------------
-async def send_poll(context=None):
-    if not is_bot_active('umfrage'):
-        log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Umfrage Bot ist inaktiv. Abbruch.")
+async def send_poll(context=None, force=False):
+    if not force and not is_bot_active('umfrage'):
+        log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Umfrage Bot ist inaktiv (kein force). Abbruch.")
         return False
         
     log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Attempting to send poll...")
@@ -174,12 +174,12 @@ async def send_poll(context=None):
 
 # ----------------- Scheduler and Trigger -----------------
 async def process_trigger(context=None):
-    if not is_bot_active('umfrage'): return
+    # Trigger wird immer geprüft, auch wenn das Modul auf 'AUS' steht (ermöglicht Sofort-Senden)
     if os.path.exists(TRIGGER_FILE):
         log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Manual trigger detected.")
         try:
             os.remove(TRIGGER_FILE)
-            await send_poll()
+            await send_poll(force=True)
         except Exception as e:
             log.error(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Error processing trigger: {e}")
 

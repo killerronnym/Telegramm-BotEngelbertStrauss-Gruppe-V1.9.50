@@ -88,9 +88,9 @@ def question_fingerprint(q: dict) -> str:
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
 # ----------------- Core Logic -----------------
-async def send_quiz(context=None):
-    if not is_bot_active('quiz'):
-        log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Quiz Bot ist inaktiv. Abbruch.")
+async def send_quiz(context=None, force=False):
+    if not force and not is_bot_active('quiz'):
+        log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Quiz Bot ist inaktiv (kein force). Abbruch.")
         return False
         
     log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Attempting to send quiz...")
@@ -179,12 +179,12 @@ async def send_quiz(context=None):
 
 # ----------------- Scheduler and Trigger -----------------
 async def process_trigger(context=None):
-    if not is_bot_active('quiz'): return
+    # Trigger wird immer geprüft, auch wenn das Modul auf 'AUS' steht (ermöglicht Sofort-Senden)
     if os.path.exists(TRIGGER_FILE):
         log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Manual trigger detected.")
         try:
             os.remove(TRIGGER_FILE)
-            await send_quiz()
+            await send_quiz(force=True)
         except Exception as e:
             log.error(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Error processing trigger: {e}")
 
