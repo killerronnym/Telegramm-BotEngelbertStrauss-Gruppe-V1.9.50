@@ -54,7 +54,7 @@ except Exception as e:
 # =========================
 # Load config using the shared_bot_utils now capable of hitting MySQL
 sys.path.append(PROJECT_ROOT)
-from shared_bot_utils import get_bot_config, is_bot_active
+from shared_bot_utils import get_bot_config, is_bot_active, get_bot_token
 
 def load_config():
     log_print("Lade ID-Finder Config...")
