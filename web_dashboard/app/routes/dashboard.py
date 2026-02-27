@@ -1117,9 +1117,11 @@ def bot_action_route(bot_name, action):
             c = json.loads(s.config_json)
             if action == 'start':
                 c['is_active'] = True
+                s.is_active = True
                 flash(f'{bot_name.capitalize()} Modul aktiviert.', 'success')
             elif action == 'stop':
                 c['is_active'] = False
+                s.is_active = False
                 flash(f'{bot_name.capitalize()} Modul deaktiviert.', 'warning')
             
             s.config_json = json.dumps(c)

@@ -66,7 +66,7 @@ def load_config():
         targets = [tiktok_config.get("target_unique_id")]
     
     return {
-        "TELEGRAM_BOT_TOKEN": id_finder_config.get("bot_token"),
+        "TELEGRAM_BOT_TOKEN": tiktok_config.get("bot_token") or get_bot_token(),
         "TELEGRAM_CHAT_ID": tiktok_config.get("telegram_chat_id"),
         "TELEGRAM_TOPIC_ID": tiktok_config.get("telegram_topic_id"),
         "TARGETS": [t.lower() for t in targets],
@@ -119,6 +119,7 @@ async def watch_one_host(host_unique_id: str, targets: List[str], alert_state: A
 
     while True:
         if not is_bot_active('tiktok'):
+            log_print("TikTok Bot ist im Dashboard DEAKTIVIERT. Warte...")
             await asyncio.sleep(60)
             continue
             
