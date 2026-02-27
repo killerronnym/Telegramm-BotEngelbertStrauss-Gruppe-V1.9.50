@@ -7,6 +7,7 @@ from sqlalchemy.engine import URL
 
 # --- Globals & Engine Cache ---
 _ENGINE_CACHE = {}
+_SHARED_FLASK_APP = None
 
 def get_engine(url):
     """Gibt eine gecachte SQLAlchemy-Engine für die URL zurück."""
@@ -125,3 +126,12 @@ def is_bot_active(bot_name):
             return bool(result[0]) if result else False
     except Exception:
         return False
+
+def get_shared_flask_app():
+    """Gibt eine geteilte Flask-App für DB-Queries zurück (Singleton)."""
+    global _SHARED_FLASK_APP
+    if _SHARED_FLASK_APP is None:
+        # Import hier um zirkuläre Abhängigkeiten zu vermeiden
+        from web_dashboard.app import create_app
+        _SHARED_FLASK_APP = create_app()
+    return _SHARED_FLASK_APP

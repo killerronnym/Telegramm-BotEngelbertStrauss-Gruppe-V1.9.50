@@ -24,8 +24,8 @@ except ImportError:
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, Application, PicklePersistence
-from web_dashboard.app import create_app, db
-from shared_bot_utils import get_db_url, is_bot_active, get_bot_token
+from web_dashboard.app import db
+from shared_bot_utils import get_db_url, is_bot_active, get_bot_token, get_shared_flask_app
 
 # Setup Logging
 os.makedirs(os.path.join(BASE_DIR, "logs"), exist_ok=True)
@@ -49,8 +49,8 @@ os.environ["BOT_PROCESS"] = "1"
 # Konfiguration laden
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
-# Flask Setup für DB Querys ausserhalb von Requests
-flask_app = create_app({'SQLALCHEMY_DATABASE_URI': get_db_url()})
+# Flask Setup für DB Querys ausserhalb von Requests (Singleton aus utils nutzen)
+flask_app = get_shared_flask_app()
 
 import bots.id_finder_bot.id_finder_bot as id_finder_plugin
 import bots.invite_bot.invite_bot as invite_plugin
@@ -131,42 +131,44 @@ def main():
     app.add_handler(CommandHandler("masterping", master_ping))
 
     # --- EINBINDUNG DER MANAGER ---
-    logger.info("Lade Module-Handler...")
-    
-    # ID Finder (Master Logic)
-    if hasattr(id_finder_plugin, 'get_handlers'):
-        for h in id_finder_plugin.get_handlers(): app.add_handler(h)
-    if hasattr(id_finder_plugin, 'get_track_handler'):
-        app.add_handler(id_finder_plugin.get_track_handler(), group=1)
-    if hasattr(id_finder_plugin, 'setup_jobs'):
-        id_finder_plugin.setup_jobs(app.job_queue)
-        
     # --- HANDLER REGISTRIERUNG ---
     main_handlers = []
     fallback_handlers = []
 
-    # Invite Bot
-    if hasattr(invite_plugin, 'get_handlers'):
-        main_handlers.extend(invite_plugin.get_handlers())
-    if hasattr(invite_plugin, 'get_fallback_handlers'):
-        fallback_handlers.extend(invite_plugin.get_fallback_handlers())
+    # Safe registration helper
+    def register_plugin(plugin, name):
+        try:
+            # ID Finder (Master Logic) - hat spezielle Struktur
+            if name == "id_finder":
+                if hasattr(plugin, 'get_handlers'):
+                    for h in plugin.get_handlers(): app.add_handler(h)
+                if hasattr(plugin, 'get_track_handler'):
+                    app.add_handler(plugin.get_track_handler(), group=1)
+                if hasattr(plugin, 'setup_jobs'):
+                    plugin.setup_jobs(app.job_queue)
+                return
 
-    # Outfit Bot
-    if hasattr(outfit_plugin, 'get_handlers'):
-        for h in outfit_plugin.get_handlers():
-            main_handlers.append(h)
+            # Standard Module
+            if hasattr(plugin, 'get_handlers'):
+                for h in plugin.get_handlers():
+                    main_handlers.append(h)
+            
+            if hasattr(plugin, 'get_fallback_handlers'):
+                fallback_handlers.extend(plugin.get_fallback_handlers())
+            
+            if hasattr(plugin, 'setup_jobs'):
+                plugin.setup_jobs(app.job_queue)
+            
+            logger.info(f"✅ Modul '{name}' erfolgreich geladen.")
+        except Exception as e:
+            logger.error(f"❌ Fehler beim Laden von Modul '{name}': {e}")
 
-    # Quiz Bot
-    if hasattr(quiz_plugin, 'setup_jobs'):
-        quiz_plugin.setup_jobs(app.job_queue)
-        
-    # Umfrage Bot
-    if hasattr(umfrage_plugin, 'setup_jobs'):
-        umfrage_plugin.setup_jobs(app.job_queue)
-
-    # TikTok Bot (Hintergrund-Dienst)
-    if hasattr(tiktok_plugin, 'setup_jobs'):
-        tiktok_plugin.setup_jobs(app.job_queue)
+    register_plugin(id_finder_plugin, "id_finder")
+    register_plugin(invite_plugin, "invite")
+    register_plugin(outfit_plugin, "outfit")
+    register_plugin(quiz_plugin, "quiz")
+    register_plugin(umfrage_plugin, "umfrage")
+    register_plugin(tiktok_plugin, "tiktok")
 
     # 1. Alle Haupt-Handler registrieren (Gruppe 0)
     for h in main_handlers:

@@ -21,18 +21,10 @@ from telegram.ext import (
 from flask import Flask
 from web_dashboard.app.models import db, BotSettings, InviteApplication, InviteLog
 
-# Import shared utils for DB URL resolution
-from shared_bot_utils import get_db_url, get_bot_config, is_bot_active
+# Import shared utils for DB URL resolution and app context
+from shared_bot_utils import get_db_url, get_bot_config, is_bot_active, get_shared_flask_app
 
-# --- Database Helper ---
-def get_db_session():
-    app = Flask(__name__)
-    app.config['SQLALCHEMY_DATABASE_URI'] = get_db_url()
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    db.init_app(app)
-    return app
-
-flask_app = get_db_session()
+flask_app = get_shared_flask_app()
 
 # --- Logging Setup --- 
 # Corrected paths for logging to be robust regardless of where the script is run from.
@@ -264,7 +256,7 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             return WAITING_FOR_SOCIAL_DECISION
         else:
             # Kein Link -> Nach Plattform fragen (Möglichkeit B)
-            context.user_data['temp_social_name'] = answer_raw
+            context.user_data['temp_social_name'] = answer_text
             keyboard = []
             keys = list(PLATFORMS.keys())
             for i in range(0, len(keys), 2):
@@ -275,7 +267,7 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             keyboard.append([InlineKeyboardButton("Sonstiges / Nur Link", callback_data="social_platform_other")])
             
             await update.message.reply_text(
-                f"Für welche Plattform ist der Name '{answer_raw}'?",
+                f"Für welche Plattform ist der Name '{answer_text}'?",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
             return SELECTING_SOCIAL_PLATFORM
@@ -481,7 +473,7 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
     ordered_fields = context.user_data.get('fields', [])
     
     # Steckbrief zusammenbauen
-    lines = []
+    steckbrief_lines = []
     
     photo_file_id = None
     for field in ordered_fields:

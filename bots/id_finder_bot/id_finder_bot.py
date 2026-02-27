@@ -20,21 +20,10 @@ sys.path.append(PROJECT_ROOT)
 from web_dashboard.app.models import db, BotSettings, IDFinderAdmin, IDFinderUser, IDFinderMessage, TopicMapping, Broadcast, AutoCleanupTask, IDFinderWarning
 from flask import Flask
 
-# Import the tiktok monitor function
-from bots.id_finder_bot.minecraft_bridge import register_minecraft
+# Import shared utils for DB URL resolution and app context
+from shared_bot_utils import get_db_url, get_bot_config, is_bot_active, get_shared_flask_app
 
-# Import shared utils for DB URL resolution
-from shared_bot_utils import get_db_url, get_bot_config, is_bot_active
-
-# --- Database Helper ---
-def get_db_session():
-    app = Flask(__name__)
-    app.config['SQLALCHEMY_DATABASE_URI'] = get_db_url()
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    db.init_app(app)
-    return app
-
-flask_app = get_db_session()
+flask_app = get_shared_flask_app()
 
 # --- Logging ---
 LOG_FILE = os.path.join(BOT_DIR, "id_finder_bot.log")
