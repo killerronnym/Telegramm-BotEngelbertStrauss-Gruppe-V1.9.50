@@ -492,9 +492,21 @@ def quiz_settings():
 @bp.route('/quiz/send-random', methods=['POST'])
 @login_required
 def quiz_send_random():
-    tfile = os.path.join(PROJECT_ROOT, "bots", "quiz_bot", "send_now.tmp")
-    with open(tfile, 'w') as f: f.write('1')
-    flash('Trigger gesendet. Der Bot wird die Frage in Kürze senden.', 'info')
+    try:
+        tfile = os.path.join(PROJECT_ROOT, "bots", "quiz_bot", "send_now.tmp")
+        os.makedirs(os.path.dirname(tfile), exist_ok=True)
+        with open(tfile, 'w') as f: f.write('1')
+        
+        # Audit Log
+        log_entry = AuditLog(user_id=current_user.id, action="quiz_send_manual", details="Manuelle Quizfrage über Dashboard ausgelöst.")
+        db.session.add(log_entry)
+        db.session.commit()
+        
+        flash('Trigger an Quiz-Bot gesendet. Die Nachricht sollte in ca. 10 Sekunden erscheinen.', 'success')
+    except Exception as e:
+        flash(f'Fehler beim Sende-Trigger: {e}', 'danger')
+        print(f"Error in quiz_send_random: {e}")
+        
     return redirect(url_for('dashboard.quiz_settings'))
 
 @bp.route('/umfrage-settings', methods=['GET', 'POST'])
@@ -588,9 +600,21 @@ def umfrage_settings():
 @bp.route('/umfrage/send-now', methods=['POST'])
 @login_required
 def umfrage_send_now():
-    tfile = os.path.join(PROJECT_ROOT, "bots", "umfrage_bot", "send_now.tmp")
-    with open(tfile, 'w') as f: f.write('1')
-    flash('Trigger gesendet.', 'info')
+    try:
+        tfile = os.path.join(PROJECT_ROOT, "bots", "umfrage_bot", "send_now.tmp")
+        os.makedirs(os.path.dirname(tfile), exist_ok=True)
+        with open(tfile, 'w') as f: f.write('1')
+        
+        # Audit Log
+        log_entry = AuditLog(user_id=current_user.id, action="umfrage_send_manual", details="Manuelle Umfrage über Dashboard ausgelöst.")
+        db.session.add(log_entry)
+        db.session.commit()
+        
+        flash('Trigger an Umfrage-Bot gesendet.', 'success')
+    except Exception as e:
+        flash(f'Fehler beim Sende-Trigger: {e}', 'danger')
+        print(f"Error in umfrage_send_now: {e}")
+        
     return redirect(url_for('dashboard.umfrage_settings'))
 
 @bp.route('/outfit-bot', methods=['GET', 'POST'])

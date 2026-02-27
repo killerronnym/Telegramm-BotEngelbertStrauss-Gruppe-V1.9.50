@@ -181,7 +181,7 @@ async def send_quiz(context=None, force=False):
 async def process_trigger(context=None):
     # Trigger wird immer geprüft, auch wenn das Modul auf 'AUS' steht (ermöglicht Sofort-Senden)
     if os.path.exists(TRIGGER_FILE):
-        log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Manual trigger detected.")
+        log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Manual trigger detected at {TRIGGER_FILE}.")
         try:
             os.remove(TRIGGER_FILE)
             await send_quiz(force=True)
