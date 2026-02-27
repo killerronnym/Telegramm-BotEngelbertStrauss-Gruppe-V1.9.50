@@ -132,35 +132,85 @@ async def check_and_send_broadcasts(context: ContextTypes.DEFAULT_TYPE):
                     thread_id = int(b.topic_id) if b.topic_id and str(b.topic_id).isdigit() else None
                     
                     msg = None
-                    if b.media_path:
+                    media_files = []
+                    if b.media_files:
+                        try:
+                            media_files = json.loads(b.media_files)
+                        except:
+                            logger.error(f"Fehler beim Parsen der media_files für Broadcast {b.id}")
+
+                    # 1. Fall: Album (Mehrere Bilder/Videos)
+                    if media_files:
+                        from telegram import InputMediaPhoto, InputMediaVideo
+                        media_group = []
+                        for i, rel_path in enumerate(media_files):
+                            fpath = os.path.join(PROJECT_ROOT, 'web_dashboard', 'app', 'static', rel_path)
+                            if os.path.exists(fpath):
+                                cap = b.text if i == 0 else None # Caption nur beim ersten Bild
+                                if rel_path.lower().endswith(('.mp4', '.mov', '.avi')):
+                                    media_group.append(InputMediaVideo(open(fpath, 'rb'), caption=cap, parse_mode=ParseMode.HTML))
+                                else:
+                                    media_group.append(InputMediaPhoto(open(fpath, 'rb'), caption=cap, parse_mode=ParseMode.HTML))
+                        
+                        if media_group:
+                            msgs = await context.bot.send_media_group(
+                                chat_id=chat_id, media=media_group,
+                                message_thread_id=thread_id, disable_notification=b.silent_send
+                            )
+                            msg = msgs[0] if msgs else None
+
+                    # 2. Fall: Einzelne Datei (kompatibel zu altem System)
+                    elif b.media_path:
                         full_media_path = os.path.join(PROJECT_ROOT, 'web_dashboard', 'app', 'static', b.media_path)
                         if os.path.exists(full_media_path):
                             with open(full_media_path, 'rb') as f:
-                                if b.media_type == 'image':
-                                    msg = await context.bot.send_photo(
-                                        chat_id=chat_id, photo=f, caption=b.text,
-                                        message_thread_id=thread_id, disable_notification=b.silent_send,
-                                        parse_mode=ParseMode.HTML
-                                    )
-                                elif b.media_type == 'video':
-                                    msg = await context.bot.send_video(
-                                        chat_id=chat_id, video=f, caption=b.text,
-                                        message_thread_id=thread_id, disable_notification=b.silent_send,
-                                        parse_mode=ParseMode.HTML
-                                    )
+                                try:
+                                    if b.media_type == 'image':
+                                        msg = await context.bot.send_photo(
+                                            chat_id=chat_id, photo=f, caption=b.text,
+                                            message_thread_id=thread_id, disable_notification=b.silent_send,
+                                            parse_mode=ParseMode.HTML
+                                        )
+                                    elif b.media_type == 'video':
+                                        msg = await context.bot.send_video(
+                                            chat_id=chat_id, video=f, caption=b.text,
+                                            message_thread_id=thread_id, disable_notification=b.silent_send,
+                                            parse_mode=ParseMode.HTML
+                                        )
+                                except Exception as he:
+                                    if "Can't parse entities" in str(he):
+                                        logger.warning(f"HTML Parse Fehler bei Broadcast {b.id}, versende als Plaintext.")
+                                        f.seek(0)
+                                        if b.media_type == 'image':
+                                            msg = await context.bot.send_photo(chat_id=chat_id, photo=f, caption=b.text, message_thread_id=thread_id)
+                                        else:
+                                            msg = await context.bot.send_video(chat_id=chat_id, video=f, caption=b.text, message_thread_id=thread_id)
+                                    else: raise he
                         else:
                             logger.error(f"Mediendatei nicht gefunden: {full_media_path}")
                             b.status = 'failed'
                             continue
+
+                    # 3. Fall: Reiner Text
                     else:
-                        msg = await context.bot.send_message(
-                            chat_id=chat_id, text=b.text,
-                            message_thread_id=thread_id, disable_notification=b.silent_send,
-                            parse_mode=ParseMode.HTML
-                        )
+                        try:
+                            msg = await context.bot.send_message(
+                                chat_id=chat_id, text=b.text,
+                                message_thread_id=thread_id, disable_notification=b.silent_send,
+                                parse_mode=ParseMode.HTML
+                            )
+                        except Exception as he:
+                            if "Can't parse entities" in str(he):
+                                logger.warning(f"HTML Parse Fehler bei Text-Broadcast {b.id}, versende als Plaintext.")
+                                msg = await context.bot.send_message(chat_id=chat_id, text=b.text, message_thread_id=thread_id)
+                            else: raise he
                     
+                    # Nachricht anpinnen falls gewünscht
                     if b.pin_message and msg:
-                        await context.bot.pin_chat_message(chat_id=chat_id, message_id=msg.message_id)
+                        try:
+                            await context.bot.pin_chat_message(chat_id=chat_id, message_id=msg.message_id)
+                        except Exception as pe:
+                            logger.error(f"Konnte Nachricht {msg.message_id} nicht anpinnen: {pe}")
 
                     b.status = 'sent'
                     logger.info(f"Broadcast {b.id} erfolgreich gesendet.")
