@@ -15,6 +15,7 @@ def fix():
     print("--- Start Application Fix ---")
     
     db_url = get_db_url()
+    print(f"DEBUG: Using DB URL with driver: {db_url.split(':')[0]}")
     engine = create_engine(db_url)
     
     config = get_bot_config('invite')
@@ -30,7 +31,7 @@ def fix():
         with engine.connect() as conn:
             # Alle pending Anträge holen
             result = conn.execute(
-                text("SELECT id, answers_json FROM invite_applications WHERE status = 'pending'")
+                text("SELECT id, answers_json FROM invite_application WHERE status = 'pending'")
             ).fetchall()
 
             count = 0
@@ -42,7 +43,7 @@ def fix():
                 answers['target_chat_id'] = correct_chat_id
                 
                 conn.execute(
-                    text("UPDATE invite_applications SET answers_json = :ans WHERE id = :id"),
+                    text("UPDATE invite_application SET answers_json = :ans WHERE id = :id"),
                     {"ans": json.dumps(answers), "id": app_id}
                 )
                 count += 1
