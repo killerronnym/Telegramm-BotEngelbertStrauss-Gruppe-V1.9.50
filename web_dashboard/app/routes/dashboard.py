@@ -193,7 +193,7 @@ def save_invite_content():
     cfg = json.loads(s.config_json)
     cfg.update({k: request.form.get(k, '') for k in ['start_message', 'rules_message', 'blocked_message', 'privacy_policy', 'whitelist_pending_message', 'whitelist_rejection_message']})
     s.is_active = cfg.get('is_active', False)
-    s.config_json = json.dumps(cfg); db.session.commit(); flash('Texte gespeichert.', 'success')
+    s.config_json = json.dumps(cfg, ensure_ascii=True); db.session.commit(); flash('Texte gespeichert.', 'success')
     return redirect(url_for('dashboard.bot_settings'))
 
 @bp.route('/bot-settings/add-field', methods=['POST'])
@@ -213,7 +213,7 @@ def add_field():
         'min_age': int(min_age) if min_age and min_age.isdigit() else None,
         'min_age_error_msg': request.form.get('min_age_error_msg', '')
     })
-    s.config_json = json.dumps(cfg); db.session.commit(); return redirect(url_for('dashboard.bot_settings'))
+    s.config_json = json.dumps(cfg, ensure_ascii=True); db.session.commit(); return redirect(url_for('dashboard.bot_settings'))
 
 @bp.route('/bot-settings/edit-field', methods=['POST'])
 @login_required
@@ -233,7 +233,7 @@ def edit_field():
                 'min_age': int(min_age) if min_age and min_age.isdigit() else None,
                 'min_age_error_msg': request.form.get('min_age_error_msg', '')
             })
-    s.config_json = json.dumps(cfg); db.session.commit(); return redirect(url_for('dashboard.bot_settings'))
+    s.config_json = json.dumps(cfg, ensure_ascii=True); db.session.commit(); return redirect(url_for('dashboard.bot_settings'))
 
 @bp.route('/bot-settings/delete-field', methods=['POST'])
 @login_required
@@ -241,7 +241,7 @@ def delete_field():
     s = BotSettings.query.filter_by(bot_name='invite').first()
     cfg = json.loads(s.config_json); fid = request.form.get('field_id')
     cfg['form_fields'] = [f for f in cfg.get('form_fields', []) if f['id'] != fid]
-    s.config_json = json.dumps(cfg); db.session.commit(); return redirect(url_for('dashboard.bot_settings'))
+    s.config_json = json.dumps(cfg, ensure_ascii=True); db.session.commit(); return redirect(url_for('dashboard.bot_settings'))
 
 @bp.route('/bot-settings/move-field/<string:field_id>/<string:direction>', methods=['POST'])
 @login_required
