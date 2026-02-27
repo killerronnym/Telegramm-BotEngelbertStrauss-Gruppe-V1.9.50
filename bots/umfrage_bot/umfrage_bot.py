@@ -29,7 +29,7 @@ USED_FILE = os.path.join(PROJECT_ROOT, "instance", "umfragen_gestellt.json")
 
 # Navigating to project root
 sys.path.append(PROJECT_ROOT)
-from shared_bot_utils import get_bot_config, is_bot_active
+from shared_bot_utils import get_bot_config, is_bot_active, get_bot_token
 
 # logging.basicConfig is handled by main_bot.py
 log = logging.getLogger(__name__)
@@ -88,12 +88,15 @@ async def send_poll(context=None, force=False):
         
     log.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Attempting to send poll...")
     cfg = load_config_from_db()
-    token = cfg.get("bot_token", "").strip()
+    token = cfg.get("bot_token", "").strip() or get_bot_token()
     chat_id = cfg.get("channel_id", "").strip()
     topic_id = cfg.get("topic_id", "")
 
-    if not token or not chat_id:
-        log.warning(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Bot token or channel_id is not configured.")
+    if not token:
+        log.warning(f"No bot token found (neither in module config nor via get_bot_token).")
+        return False
+    if not chat_id:
+        log.warning(f"No channel_id/chat_id found in Umfrage config. Please set it in the Dashboard.")
         return False
 
     all_polls = load_json(POLL_FILE, [])
