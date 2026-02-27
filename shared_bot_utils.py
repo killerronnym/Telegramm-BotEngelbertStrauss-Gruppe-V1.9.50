@@ -25,7 +25,10 @@ def get_db_url():
     db_host = os.environ.get('DB_HOST')
     db_name = os.environ.get('DB_NAME')
     
+    sys.stderr.write(f"DEBUG DB: user={db_user}, host={db_host}, name={db_name}\n")
+
     if db_user and db_host and db_name:
+        sys.stderr.write(f"DEBUG DB: Using discrete variables\n")
         db_password = os.environ.get('DB_PASSWORD')
         db_port = os.environ.get('DB_PORT')
         db_driver = os.environ.get('DB_DRIVER', 'mysql+pymysql')
@@ -47,15 +50,17 @@ def get_db_url():
 
     # 2. Fallback alte DATABASE_URL
     db_url = os.environ.get('DATABASE_URL')
+    sys.stderr.write(f"DEBUG DB: DATABASE_URL env is {'Set' if db_url else 'None'}\n")
     if db_url:
+        sys.stderr.write(f"DEBUG DB: Using DATABASE_URL\n")
         # Pymysql-Parameter für UTF-8 sicherstellen
         if "mysql" in db_url and "charset=utf8mb4" not in db_url:
             separator = "&" if "?" in db_url else "?"
             db_url += f"{separator}charset=utf8mb4"
         return db_url
     
-    # 3. Fallback SQLite (Konsistent mit Docker/Windows Pfaden)
-    # Bevorzugte Pfade: /app/instance/app.db oder ./instance/app.db
+    # 3. Fallback SQLite
+    sys.stderr.write(f"DEBUG DB: Falling back to SQLite at {DB_PATH}\n")
     if not os.path.exists(INSTANCE_DIR):
         os.makedirs(INSTANCE_DIR, exist_ok=True)
     return f"sqlite:///{DB_PATH}"
