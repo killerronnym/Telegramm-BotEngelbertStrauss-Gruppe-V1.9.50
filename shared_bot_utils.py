@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 
 # Env laden - expliziter Pfad zum Root
 ENV_FILE = os.path.join(PROJECT_ROOT, '.env')
-sys.stderr.write(f"DEBUG: Loading env from {ENV_FILE} - Exists: {os.path.exists(ENV_FILE)}\n")
+print(f"DEBUG: Loading env from {ENV_FILE} - Exists: {os.path.exists(ENV_FILE)}")
 if os.path.exists(ENV_FILE):
     load_dotenv(ENV_FILE, override=True) # Override to be sure
 
@@ -25,10 +25,10 @@ def get_db_url():
     db_host = os.environ.get('DB_HOST')
     db_name = os.environ.get('DB_NAME')
     
-    sys.stderr.write(f"DEBUG DB: user={db_user}, host={db_host}, name={db_name}\n")
+    print(f"DEBUG DB: user={db_user}, host={db_host}, name={db_name}")
 
     if db_user and db_host and db_name:
-        sys.stderr.write(f"DEBUG DB: Using discrete variables\n")
+        print(f"DEBUG DB: Using discrete variables")
         db_password = os.environ.get('DB_PASSWORD')
         db_port = os.environ.get('DB_PORT')
         db_driver = os.environ.get('DB_DRIVER', 'mysql+pymysql')
@@ -50,9 +50,9 @@ def get_db_url():
 
     # 2. Fallback alte DATABASE_URL
     db_url = os.environ.get('DATABASE_URL')
-    sys.stderr.write(f"DEBUG DB: DATABASE_URL env is {'Set' if db_url else 'None'}\n")
+    print(f"DEBUG DB: DATABASE_URL env is {'Set' if db_url else 'None'}")
     if db_url:
-        sys.stderr.write(f"DEBUG DB: Using DATABASE_URL\n")
+        print(f"DEBUG DB: Using DATABASE_URL")
         # Pymysql-Parameter für UTF-8 sicherstellen
         if "mysql" in db_url and "charset=utf8mb4" not in db_url:
             separator = "&" if "?" in db_url else "?"
@@ -60,7 +60,7 @@ def get_db_url():
         return db_url
     
     # 3. Fallback SQLite
-    sys.stderr.write(f"DEBUG DB: Falling back to SQLite at {DB_PATH}\n")
+    print(f"DEBUG DB: Falling back to SQLite at {DB_PATH}")
     if not os.path.exists(INSTANCE_DIR):
         os.makedirs(INSTANCE_DIR, exist_ok=True)
     return f"sqlite:///{DB_PATH}"
