@@ -1227,24 +1227,28 @@ def bot_action_route(bot_name, action):
 
     # Alle anderen Bots (Module) toggeln nur noch ihr "is_active" Flag in der DB
     s = BotSettings.query.filter_by(bot_name=bot_name).first()
-    if s:
-        try:
-            c = json.loads(s.config_json)
-            if action == 'start':
-                c['is_active'] = True
-                s.is_active = True
-                flash(f'{bot_name.capitalize()} Modul aktiviert.', 'success')
-            elif action == 'stop':
-                c['is_active'] = False
-                s.is_active = False
-                flash(f'{bot_name.capitalize()} Modul deaktiviert.', 'warning')
-            
-            s.config_json = json.dumps(c)
-            db.session.commit()
-        except Exception as e:
-            flash(f'Fehler beim Ändern des Modul-Status: {e}', 'danger')
-    else:
-        flash(f'Bot-Einstellungen für {bot_name} nicht gefunden.', 'danger')
+    
+    # Auto-create if not exists (e.g. for new modules like auto_responder)
+    if not s:
+        s = BotSettings(bot_name=bot_name, config_json=json.dumps({"is_active": False}), is_active=False)
+        db.session.add(s)
+        db.session.commit()
+
+    try:
+        c = json.loads(s.config_json) if s.config_json else {}
+        if action == 'start':
+            c['is_active'] = True
+            s.is_active = True
+            flash(f'{bot_name.capitalize()} Modul aktiviert.', 'success')
+        elif action == 'stop':
+            c['is_active'] = False
+            s.is_active = False
+            flash(f'{bot_name.capitalize()} Modul deaktiviert.', 'warning')
+        
+        s.config_json = json.dumps(c)
+        db.session.commit()
+    except Exception as e:
+        flash(f'Fehler beim Ändern des Modul-Status: {e}', 'danger')
         
     return redirect(request.referrer or url_for('dashboard.index'))
 
