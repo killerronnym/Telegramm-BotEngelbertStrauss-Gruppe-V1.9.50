@@ -232,6 +232,42 @@ def invite_bot_move_field(field_id, direction):
         elif direction == 'down' and idx < len(fs)-1: fs[idx], fs[idx+1] = fs[idx+1], fs[idx]
     s.config_json = json.dumps(cfg); db.session.commit(); return redirect(url_for('dashboard.bot_settings'))
 
+@bp.route('/bot-settings/add-command', methods=['POST'])
+@login_required
+def add_custom_command():
+    s = BotSettings.query.filter_by(bot_name='invite').first()
+    cfg = json.loads(s.config_json)
+    commands = cfg.setdefault('custom_commands', {})
+    
+    cmd = request.form.get('command_name', '').strip().lower().replace('/', '')
+    resp = request.form.get('response_text', '').strip()
+    
+    if cmd and resp:
+        commands[cmd] = resp
+        s.config_json = json.dumps(cfg)
+        db.session.commit()
+        flash(f'Befehl /{cmd} hinzugefügt.', 'success')
+    else:
+        flash('Befehl und Antwort sind erforderlich.', 'danger')
+        
+    return redirect(url_for('dashboard.bot_settings'))
+
+@bp.route('/bot-settings/delete-command', methods=['POST'])
+@login_required
+def delete_custom_command():
+    s = BotSettings.query.filter_by(bot_name='invite').first()
+    cfg = json.loads(s.config_json)
+    commands = cfg.get('custom_commands', {})
+    
+    cmd = request.form.get('command_name')
+    if cmd in commands:
+        del commands[cmd]
+        s.config_json = json.dumps(cfg)
+        db.session.commit()
+        flash(f'Befehl /{cmd} gelöscht.', 'info')
+        
+    return redirect(url_for('dashboard.bot_settings'))
+
 @bp.route('/bot-settings/clear-logs/user', methods=['POST'])
 @login_required
 def clear_user_logs():

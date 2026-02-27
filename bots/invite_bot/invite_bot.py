@@ -163,8 +163,14 @@ async def letsgo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     
     context.user_data.clear() # Alles löschen für sauberen Neustart
     context.user_data.update({'fields': fields, 'current_field_index': 0, 'answers': {}})
-    logger.info(f"letsgo: Sende erste Frage (Index 0): {fields[0].get('label', 'Frage?')}")
-    await update.message.reply_text(fields[0].get('label', 'Frage?'))
+    
+    first_field = fields[0]
+    keyboard = None
+    if not first_field.get('required'):
+        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏭️ Überspringen / Nein", callback_data="skip_field")]])
+    
+    logger.info(f"letsgo: Sende erste Frage (Index 0): {first_field.get('label', 'Frage?')}")
+    await update.message.reply_text(first_field.get('label', 'Frage?'), reply_markup=keyboard)
     return ASKING_QUESTIONS
 
 async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -267,19 +273,50 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     logger.info(f"handle_answer: Speichere Antwort für {field['id']}. Nächster Index: {idx+1}")
     context.user_data['answers'][field['id']] = answer
-    idx += 1
+    return await next_question(update, context)
+
+async def handle_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    
+    idx = context.user_data.get('current_field_index', 0)
+    fields = context.user_data.get('fields', [])
+    field = fields[idx]
+    
+    logger.info(f"handle_skip: User überspringt Feld {field['id']}")
+    context.user_data['answers'][field['id']] = "n/a" # Oder leer lassen
+    return await next_question(update, context)
+
+async def next_question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    idx = context.user_data.get('current_field_index', 0) + 1
+    fields = context.user_data.get('fields', [])
     context.user_data['current_field_index'] = idx
     
+    effective_chat_id = update.effective_chat.id
+
     if idx < len(fields):
-        next_label = fields[idx].get('label', 'Nächste Frage?')
-        logger.info(f"handle_answer: Sende nächste Frage (Index {idx}): {next_label}")
-        await update.message.reply_text(next_label)
+        next_field = fields[idx]
+        next_label = next_field.get('label', 'Nächste Frage?')
+        
+        keyboard = None
+        if not next_field.get('required'):
+            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏭️ Überspringen / Nein", callback_data="skip_field")]])
+            
+        logger.info(f"next_question: Sende nächste Frage (Index {idx}): {next_label}")
+        if update.callback_query:
+            await context.bot.send_message(chat_id=effective_chat_id, text=next_label, reply_markup=keyboard)
+        else:
+            await update.message.reply_text(next_label, reply_markup=keyboard)
         return ASKING_QUESTIONS
     else:
-        logger.info(f"handle_answer: Alle Fragen beantwortet. Sende Regeln.")
+        logger.info(f"next_question: Alle Fragen beantwortet. Sende Regeln.")
         config = get_bot_config('invite')
         rules = config.get('rules_message', 'Danke!')
-        await update.message.reply_text(f"{rules}\n\nSchreibe 'ok' zum Bestätigen.")
+        msg = f"{rules}\n\nSchreibe 'ok' zum Bestätigen."
+        if update.callback_query:
+            await context.bot.send_message(chat_id=effective_chat_id, text=msg)
+        else:
+            await update.message.reply_text(msg)
         return CONFIRMING_RULES
 
 async def handle_social_platform_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -693,6 +730,24 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     log_user_interaction(update.effective_user.id, update.effective_user.username, "/cancel command aufgerufen")
     return ConversationHandler.END
 
+async def handle_custom_commands(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_bot_active('invite'): return
+    if not update.message or not update.message.text: return
+    
+    text = update.message.text.lower().strip()
+    if not text.startswith('/'): return
+    
+    # Extrahiere Befehl ohne /
+    cmd_name = text[1:].split('@')[0].split(' ')[0]
+    
+    config = get_bot_config('invite')
+    custom_commands = config.get('custom_commands', {})
+    
+    if cmd_name in custom_commands:
+        response = custom_commands[cmd_name]
+        await update.message.reply_text(response)
+        log_user_interaction(update.effective_user.id, update.effective_user.username, f"Custom Command /{cmd_name} ausgeführt")
+
 async def catch_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not is_bot_active('invite'): return
     if update.effective_chat.type != "private": return
@@ -724,7 +779,12 @@ def get_handlers():
                 CallbackQueryHandler(handle_social_platform_selection, pattern=r'^social_platform_')
             ]
         },
-        fallbacks=[CommandHandler("cancel", cancel), CommandHandler("start", start), CommandHandler("datenschutz", datenschutz)],
+        fallbacks=[
+            CommandHandler("cancel", cancel), 
+            CommandHandler("start", start), 
+            CommandHandler("datenschutz", datenschutz),
+            CallbackQueryHandler(handle_skip, pattern=r'^skip_field$')
+        ],
         persistent=True,
         name="invite_conversation",
         allow_reentry=True
@@ -736,7 +796,8 @@ def get_handlers():
         (CommandHandler("datenschutz", datenschutz), 0),
         (CallbackQueryHandler(handle_whitelist_callback, pattern=r'^whitelist_'), 0),
         (CallbackQueryHandler(handle_existing_member_callback, pattern=r'^existing_'), 0),
-        (ChatMemberHandler(handle_new_member, ChatMemberHandler.CHAT_MEMBER), 0)
+        (ChatMemberHandler(handle_new_member, ChatMemberHandler.CHAT_MEMBER), 0),
+        (MessageHandler(filters.COMMAND, handle_custom_commands), 0)
     ]
 
 def get_fallback_handlers():
