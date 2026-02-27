@@ -1,16 +1,24 @@
 import os
 import sys
 import json
+from dotenv import load_dotenv
 from sqlalchemy import create_engine, text, inspect
 from sqlalchemy.engine import URL
 
-# Pfade bestimmen
+# --- Globals & Engine Cache ---
+_ENGINE_CACHE = {}
+
+def get_engine(url):
+    """Gibt eine gecachte SQLAlchemy-Engine für die URL zurück."""
+    if url not in _ENGINE_CACHE:
+        _ENGINE_CACHE[url] = create_engine(url, pool_pre_ping=True)
+    return _ENGINE_CACHE[url]
+
+# Basispfade bestimmen
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 WEB_DASHBOARD_DIR = os.path.join(PROJECT_ROOT, 'web_dashboard')
 INSTANCE_DIR = os.path.join(PROJECT_ROOT, 'instance')
 DB_PATH = os.path.join(INSTANCE_DIR, 'app.db')
-
-from dotenv import load_dotenv
 
 # Env laden - expliziter Pfad zum Root
 ENV_FILE = os.path.join(PROJECT_ROOT, '.env')
@@ -21,21 +29,16 @@ if os.path.exists(ENV_FILE):
 def get_db_url():
     """Gibt die konfigurierte Datenbank-URL zurück oder fällt auf SQLite zurück."""
     # 1. Discrete Environment Variables (Best Practice für URLs mit Sonderzeichen)
-    db_user = os.environ.get('DB_USER')
-    db_host = os.environ.get('DB_HOST')
     db_name = os.environ.get('DB_NAME')
+    db_user = os.environ.get('DB_USER') # Added this line as it was missing
+    db_host = os.environ.get('DB_HOST') # Added this line as it was missing
     
-    print(f"DEBUG DB: user={db_user}, host={db_host}, name={db_name}")
-
     if db_user and db_host and db_name:
-        print(f"DEBUG DB: Using discrete variables")
         db_password = os.environ.get('DB_PASSWORD')
         db_port = os.environ.get('DB_PORT')
         db_driver = os.environ.get('DB_DRIVER', 'mysql+pymysql')
         
-        query = {}
-        if "mysql" in db_driver:
-            query["charset"] = "utf8mb4"
+        query = {"charset": "utf8mb4"} if "mysql" in db_driver else {}
             
         url_obj = URL.create(
             drivername=db_driver,
@@ -48,37 +51,29 @@ def get_db_url():
         )
         return str(url_obj)
 
-    # 2. Fallback alte DATABASE_URL
+    # 2. Fallback DATABASE_URL
     db_url = os.environ.get('DATABASE_URL')
-    print(f"DEBUG DB: DATABASE_URL env is {'Set' if db_url else 'None'}")
     if db_url:
-        print(f"DEBUG DB: Using DATABASE_URL")
-        # Pymysql-Parameter für UTF-8 sicherstellen
         if "mysql" in db_url and "charset=utf8mb4" not in db_url:
             separator = "&" if "?" in db_url else "?"
             db_url += f"{separator}charset=utf8mb4"
         return db_url
     
     # 3. Fallback SQLite
-    print(f"DEBUG DB: Falling back to SQLite at {DB_PATH}")
     if not os.path.exists(INSTANCE_DIR):
         os.makedirs(INSTANCE_DIR, exist_ok=True)
     return f"sqlite:///{DB_PATH}"
 
 def get_bot_config(bot_name):
-    """
-    Lädt die Konfiguration für einen Bot aus der Datenbank.
-    Gibt ein leeres Dictionary zurück, falls keine Config existiert.
-    """
+    """Optimiertes Laden der Bot-Konfiguration."""
     try:
         url = get_db_url()
-        # Fallback zum Verhindern von Abstürzen wenn DB noch nicht bereit
-        if not os.path.exists(DB_PATH) and url.startswith("sqlite"):
+        if url.startswith("sqlite") and not os.path.exists(DB_PATH):
             return {}
 
-        engine = create_engine(url)
+        engine = get_engine(url)
         with engine.connect() as conn:
-            # Tabelle prüfen bevor Query
+            # Tabelle prüfen bevor Query (optional, kann entfernt werden, wenn Tabelle immer existiert)
             if not inspect(engine).has_table("bot_settings"):
                 return {}
                 
@@ -89,35 +84,37 @@ def get_bot_config(bot_name):
             
             if result and result[0]:
                 return json.loads(result[0])
-            else:
-                return {}
     except Exception as e:
-        sys.stderr.write(f"ERROR loading config for {bot_name}: {str(e)}\n")
-        return {}
+        sys.stderr.write(f"ERROR: get_bot_config({bot_name}): {e}\n")
+    return {}
 
 def get_bot_token():
     """Zentrale Stelle für den Bot-Token. Priorisiert ENV vor DB."""
-    # 1. Check ENV (am wichtigsten für Docker)
+    # 1. Check ENV
     env_token = os.environ.get('TELEGRAM_BOT_TOKEN')
-    if env_token and env_token.strip() and env_token != 'MASTER_TOKEN_IN_DB_ID_FINDER':
-        return env_token
-    
-    # 2. Check DB ('id_finder' gilt als Master-Bot Config)
-    config = get_bot_config('id_finder')
-    return config.get('bot_token')
+    if env_token and env_token.strip():
+        return env_token.strip()
+
+    # 2. Check DB (ID Finder / Master Bot)
+    try:
+        config = get_bot_config("id_finder")
+        return config.get("bot_token")
+    except:
+        return None
 
 def get_env_var(key, default=None):
     return os.environ.get(key, default)
 
 def is_bot_active(bot_name):
-    """Prüft direkt via SQL, ob das Modul im Dashboard aktiviert ist (is_active Spalte)."""
+    """Effiziente Prüfung des Aktiv-Status."""
     try:
         url = get_db_url()
-        if not os.path.exists(DB_PATH) and url.startswith("sqlite"):
+        if url.startswith("sqlite") and not os.path.exists(DB_PATH):
             return False
 
-        engine = create_engine(url)
+        engine = get_engine(url)
         with engine.connect() as conn:
+            # Tabelle prüfen bevor Query (optional, kann entfernt werden, wenn Tabelle immer existiert)
             if not inspect(engine).has_table("bot_settings"):
                 return False
                 
@@ -125,8 +122,6 @@ def is_bot_active(bot_name):
                 text("SELECT is_active FROM bot_settings WHERE bot_name = :name"),
                 {"name": bot_name}
             ).fetchone()
-            
             return bool(result[0]) if result else False
-    except Exception as e:
-        sys.stderr.write(f"ERROR checking active status for {bot_name}: {str(e)}\n")
+    except Exception:
         return False

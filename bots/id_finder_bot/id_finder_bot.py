@@ -265,8 +265,11 @@ def db_log_message_sync(user_dict, chat_dict, msg_dict, config):
             )
             db.session.add(db_msg)
             db.session.commit()
+            logger.info(f"✅ Message {msg_dict['id']} from {user_dict['id']} saved to DB.")
     except Exception as e:
-        logger.error(f"Fehler beim synchronen Loggen: {e}")
+        logger.error(f"❌ Fehler beim synchronen Loggen: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
 
 async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("--- [DIAG] track_activity triggered ---")
@@ -290,6 +293,8 @@ async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not config.get("message_logging_enabled", True):
         logger.info("--- [DIAG] Message Logging disabled in config. ---")
         return
+        
+    logger.info(f"--- [DIAG] Processing message {msg.message_id} from {user.id} in {chat.id} ---")
         
     if config.get("message_logging_groups_only", False) and chat.type not in ["group", "supergroup"]:
         logger.info(f"--- [DIAG] Skipping private chat (groups_only=True). ---")
