@@ -1,28 +1,46 @@
-# 🤖 Bot Engine V2 - Engelbert Strauss Gruppe
+# 🤖 Bot Engine V2 - Engelbert Strauss Gruppe (v1.8.7)
 
-Ein leistungsstarker Telegram-Bot mit Dashboard zur Verwaltung von Einladungen, ID-Suche, Quiz und Umfragen. Optimiert für Windows und Linux (Docker).
+Ein leistungsstarker Telegram-Bot mit einem modernen Web-Dashboard zur Verwaltung von Einladungen, ID-Suche, Moderation, Quiz, Umfragen und KI-Chat-Integration. Optimiert für Windows und Linux (Docker/Synology).
+
+---
+
+## 📸 Screenshots vom Dashboard
+
+Hier ein kleiner Einblick in das moderne Web-Dashboard:
+
+### Dashboard Startseite
+![Dashboard Übersicht](assets/dashboard_home.png)
+*Echtzeit-Statistiken, Live-Protokolle und schnelle System-Steuerung auf einen Blick.*
+
+### Live-Moderation & Bot-Steuerung
+![Live Moderation](assets/dashboard_moderation.png)
+*Zentrale Steuerung aller Module und detaillierte Live-Moderation (Kick, Ban, Mute, Warnungen).*
+
+*(Hinweis: Erstelle am besten im Projektordner einen Ordner `assets/` und speichere dort deine Screenshots unter den Namen `dashboard_home.png` und `dashboard_moderation.png` ab, um sie direkt auf GitHub im README anzeigen zu lassen!)*
 
 ---
 
 ## 🚀 Übersicht der Features
 
 ### 🧩 Verfügbare Bot Module
-- **Invite Bot:** Automatisierte Bewerbungen mit Steckbrief und Admin-Whitelist-Funktion, inklusive intelligenter Erkennung von Social-Media-Links.
-- **ID-Finder Bot:** Gruppen-Moderation (Kick, Ban, Mute, Warnungen) und Nutzer-Identifizierung.
+- **Invite Bot:** Automatisierte Bewerbungen mit Steckbrief, Admin-Whitelist-Funktion und intelligenter Erkennung von Social-Media-Links.
+- **ID-Finder Bot:** Gruppen-Moderation (Kick, Ban, Mute, Warnungen), Nutzer-Identifizierung und das neue **Live-Moderation v2** Interface.
+- **KI-Chat-Monitoring:** Intelligente Überwachung und Beantwortung von Chat-Nachrichten durch integrierte KI-Modelle.
 - **Quiz Bot:** Planbare Quiz-Runden in der Telegram-Gruppe.
 - **Umfrage Bot:** Automatisierte und wiederkehrende Umfragen.
 - **TikTok Monitor:** Benachrichtigung in Telegram, sobald hinterlegte User auf TikTok live gehen.
 
-### 💻 Modernes Web-Dashboard
-Die gesamte Konfiguration erfolgt bequem über ein passwortgeschütztes Web-Interface auf Port `9002`.
-- **Bot-Steuerung:** Alle Module können zentral gestartet, gestoppt und konfiguriert werden.
+### 💻 Modernes Web-Dashboard (Port `9002`)
+Die gesamte Konfiguration erfolgt bequem über ein passwortgeschütztes Web-Interface.
+- **Bot-Steuerung:** Alle Module (Haupt-Bot, TikTok-Bot, etc.) können zentral über das Dashboard gestartet und gestoppt werden.
 - **Analytics:** Echtzeit-Statistiken, Live-Protokolle und Nutzer-Rankings.
-- **Auto-Update:** Automatische Aktualisierung des Systems direkt über GitHub.
+- **Setup-Wizard:** Geführte Ersteinrichtung im Web-Browser bei frischen Installationen inkl. Token-Verwaltung.
 
-### 🛠️ Technische Stabilität
-- **Robuste Datenbank-Verbindungen:** Unterstützung für sichere MySQL Verbindungen via `.env` (Sonderzeichen in Passwörtern werden nativ unterstützt).
-- **Bulletproof Process Locking:** Ein Datei-basierter Lock (`main_bot.lock`) verhindert Conflict-409 Fehler durch doppelt laufende Instanzen.
-- **Persistence:** Zustände (Conversation State) bleiben auch nach einem Bot-Neustart erhalten.
+### ⚙️ System & Stabilität
+- **Auto-Update System:** Integrierter Updater (APScheduler), der auf neue Releases prüft und diese automatisch herunterladen/installieren kann (inkl. Windows Auto-Restart Loop).
+- **Robuste Datenbank:** Native Unterstützung für MariaDB/MySQL (`.env` Konfiguration) und SQLite, inklusive Migrations-Skript (`migrate_to_mysql.py`).
+- **Bulletproof Process Locking:** Dateibasierte Locks für alle Prozesse verhindern zuverlässig Konflikt-Fehler bei doppelt laufenden Instanzen.
+- **Docker-Optimiert:** Startet Webserver und Bot effizient parallel im Container und lädt Tokens priorisiert aus den Environment Variables.
 
 ---
 
@@ -31,47 +49,43 @@ Das System nutzt eine aufgeräumte Ordnerstruktur zur sicheren Trennung von Code
 
 ```text
 📦 Telegramm-BotEngelbertStrauss-Gruppe-V2-1
+ ┣ 📂 assets/          # Bilder für dieses README (Screenshots)
  ┣ 📂 bots/            # Die Kernlogik der einzelnen Bot-Module
  ┣ 📂 data/            # Vorlagen für Quiz-Fragen und Umfragen
- ┣ 📂 instance/        # [ISOLIERT] Deine SQLite Datenbank und gespeicherten Konfigurationen (.json)
- ┣ 📂 logs/            # [ISOLIERT] Alle Bot-Logfiles (.log) und Prozess-Sperren (.pid / .lock)
- ┣ 📂 scripts/         # Optionale Hilfsskripte (z.B. für Datenbank-Fixes)
- ┣ 📂 web_dashboard/   # Das Backend und Frontend des Flask Web-Dashboards
+ ┣ 📂 instance/        # [ISOLIERT] Deine SQLite Datenbank und Konfigurationen
+ ┣ 📂 logs/            # [ISOLIERT] Alle Bot-Logfiles (.log) und Prozess-Sperren
+ ┣ 📂 scripts/         # Optionale Hilfsskripte (z.B. Datenbank-Migration)
+ ┣ 📂 web_dashboard/   # Dashboard-Backend (Flask) und Frontend
  ┣ 📜 docker-compose.yml
  ┣ 📜 Dockerfile
- ┗ 📜 .env             # (Muss angelegt werden) Beinhaltet sensible Zugangsdaten
+ ┗ 📜 .env             # (Wird beim Setup erstellt) Beinhaltet sensible Zugänge
 ```
-
-Alle sensiblen Logs und lokalen Datenbanken sind vom Git-Tracking ausgeschlossen, damit keine echten Konfigurationen ungewollt auf GitHub landen.
+Alle sensiblen Logs und Datenbanken sind vom Git-Tracking durch `.gitignore` ausgeschlossen.
 
 ---
 
-## 🐳 Installation (Docker / Synology)
+## 🐳 Installation (Docker / Synology NAS)
 
-Diese Methode wird für Server und NAS (z.B. Synology) dringend empfohlen.
+Diese Methode wird für Server und NAS dringend empfohlen.
 
-1. **Voraussetzungen:** Docker und Docker-Compose installiert.
-2. **Repository klonen** oder das ZIP-Archiv entpacken.
-3. **Konfiguration:** Kopiere die Datei `.env.example` und markiere sie in `.env` um.
-   Trage deine Daten ein. **Für externe MySQL/MariaDB Server nutze die stabilen Environment-Variablen:**
+1. **Repository klonen** oder das ZIP-Archiv entpacken.
+2. **Konfiguration:**
+   Starte den Container und folge dem Setup-Wizard im Browser oder nutze die `.env`-Datei für externe Datenbanken:
    ```env
    DB_DRIVER=mysql+pymysql
    DB_USER=dein_db_username
-   DB_PASSWORD=dein_sicheres_passwort_mit_sonderzeichen
+   DB_PASSWORD=dein_passwort
    DB_HOST=127.0.0.1
    DB_PORT=3306
    DB_NAME=bot_engine_db
    
    TELEGRAM_BOT_TOKEN=dein_bot_token
    ```
-4. **Starten:**
+3. **Starten:**
    ```bash
    docker-compose up -d --build
    ```
-5. **Dashboard:** Aufrufen über `http://<server-ip>:9002`.
-
-> [!IMPORTANT]
-> **Automatik-Betrieb im Docker:** Das System startet im Container **automatisch** das Web-Dashboard sowie den Master-Bot (ID-Finder). Du musst das Bot-Script im Container nicht manuell antippen.
+4. **Dashboard:** Aufrufen über `http://<server-ip>:9002`. Docker startet jetzt Web Dashboard und Master-Bot parallel!
 
 ---
 
@@ -92,21 +106,18 @@ Diese Methode wird für Server und NAS (z.B. Synology) dringend empfohlen.
    ```powershell
    pip install -r requirements.txt
    ```
-5. **Starten des Dashboards (Flask Server):**
+5. **Starten des Dashboards (Waitress Server):**
    ```powershell
-   python web_dashboard/wsgi.py
+   python run_waitress.py
    ```
-   *Alternativ für Produktionsleistung unter Windows: `python run_waitress.py`*
-   
-   Das Dashboard ist nun unter `http://localhost:5000` (bzw. `9002` bei Waitress) erreichbar.
-6. **Starten des Master-Bots:**
-   Der Bot kann direkt aus dem Dashboard heraus gestartet werden ("Start"-Button).
+   *(Das Dashboard ist nun unter `http://localhost:9002` erreichbar. Bei Neuinstallation öffnet sich automatisch der Wizard).*
+6. **Starten der Bots:** Direkt über die Weboberfläche!
 
 ---
 
 ## 🔄 Updates
-- **Automatisch:** Aktiviere in den Dashboard-Systemeinstellungen die Option "Auto-Update".
-- **Manuell (Dashboard):** Klicke auf "Nach Updates suchen" und dann auf "Update jetzt installieren".
+- **Automatisch:** Über das Dashboard kann das Auto-Update konfiguriert werden.
+- **Manuell (Dashboard):** Klicke auf "Nach Updates suchen" und auf "Update jetzt installieren".
 - **Docker-Konsole:** 
   ```bash
   docker-compose pull && docker-compose up -d

@@ -522,8 +522,9 @@
                 const data = await res.json();
                 if (data.success) {
                     btn.className = "btn btn-success w-100 py-3";
-                    btn.innerHTML = "FERTIG! 🎉";
-                    setTimeout(() => window.location.href = "/auth/login", 1500);
+                    btn.innerHTML = "FERTIG! Container startet neu... 🔄";
+                    // Docker needs a few seconds to restart the container, so we wait 5s instead of 1.5s
+                    setTimeout(() => window.location.href = "/auth/login", 5000);
                 } else {
                     alert("Installation fehlgeschlagen: " + data.error);
                     btn.disabled = false;

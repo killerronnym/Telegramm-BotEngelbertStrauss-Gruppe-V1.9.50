@@ -85,6 +85,25 @@ def setup():
         with open(INSTALL_LOCK, 'w') as f:
             f.write(f"Installed on {os.uname() if hasattr(os, 'uname') else 'Windows'}")
 
+        # Restart Container logic (Triggered with slight delay so the UI gets a success response)
+        # Senden eines Signals an den Gunicorn-Hauptprozess (PPID) oder den eigenen Prozess (PID)
+        # Dadurch beendet sich das Script und Docker startet den Container (`restart unless-stopped`) neu
+        import threading
+        import time
+        import signal
+        def restart_server():
+            time.sleep(2)
+            print("Setup Complete! Triggering container restart...")
+            # Versuche, Gunicorn (Parent Process) zu beenden
+            try:
+                os.kill(os.getppid(), signal.SIGTERM)
+            except:
+                pass
+            # Fallback: Sich selbst beenden
+            os.kill(os.getpid(), signal.SIGTERM)
+            
+        threading.Thread(target=restart_server, daemon=True).start()
+
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
