@@ -229,7 +229,8 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             return ASKING_QUESTIONS
             
         # Social Media / HTML Check
-        if field['id'] == 'instagram' or 'social' in field['id'].lower():
+        is_social_field = field['id'] == 'instagram' or 'social' in field.get('id', '').lower() or 'social' in field.get('display_name', '').lower() or 'insta' in field.get('display_name', '').lower()
+        if is_social_field:
             if '<' in answer_text and '>' in answer_text:
                 await update.message.reply_text("Bitte sende keine HTML-Inhalte. Gib einfach deinen Benutzernamen oder Link ein.")
                 return ASKING_QUESTIONS
@@ -243,7 +244,7 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     log_user_interaction(user.id, user.username, f"Antwort auf {field['id']}: {answer}")
     
     # --- Multi-Social Support (nur wenn Social Media) ---
-    is_social = field['id'] == 'instagram' or 'social' in field['id'].lower()
+    is_social = field['id'] == 'instagram' or 'social' in field.get('id', '').lower() or 'social' in field.get('display_name', '').lower() or 'insta' in field.get('display_name', '').lower()
     if is_social and answer.lower() != 'nein': # 'nein' allows skipping social fields
         detected = detect_social_platform(answer)
         if detected:
@@ -484,7 +485,7 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
     photo_file_id = None
     for field in ordered_fields:
         answer = answers.get(field['id'])
-        if answer is None or (isinstance(answer, str) and answer.lower().strip() == 'nein'):
+        if answer is None or (isinstance(answer, str) and answer.lower().strip() in ['nein', 'n/a']):
             continue
         if field['type'] == 'photo':
             photo_file_id = answer
@@ -493,7 +494,8 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
             name = field.get('display_name', field['id'].capitalize())
             
             # Link-Formatierung für Social Media (HTML)
-            if field['id'] == 'instagram' or 'social' in field['id'].lower():
+            is_social_field = field['id'] == 'instagram' or 'social' in field.get('id', '').lower() or 'social' in field.get('display_name', '').lower() or 'insta' in field.get('display_name', '').lower()
+            if is_social_field:
                 answers_list = answer if isinstance(answer, list) else [answer]
                 formatted_socials = []
                 for entry in answers_list:
