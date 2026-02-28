@@ -1330,3 +1330,73 @@ def master_bot_action(action):
 @bp.route('/api/bot-status')
 @login_required
 def bot_status_api(): return jsonify(get_bot_status_simple())
+
+# --- PROFANITY FILTER ---
+@bp.route('/profanity-filter')
+@login_required
+def profanity_filter():
+    from ..models import ProfanityWord
+    words = ProfanityWord.query.order_by(ProfanityWord.word).all()
+    s = BotSettings.query.filter_by(bot_name='profanity_filter').first()
+    is_running = False
+    if s and s.config_json:
+        try:
+            cfg = json.loads(s.config_json)
+            is_running = cfg.get('is_active', False)
+        except:
+            pass
+    return render_template('profanity_filter.html', words=words, is_running=is_running)
+
+@bp.route('/profanity-filter/add', methods=['POST'])
+@login_required
+def profanity_filter_add():
+    from ..models import ProfanityWord
+    new_word = request.form.get('word', '').strip().lower()
+    if new_word:
+        exists = ProfanityWord.query.filter_by(word=new_word).first()
+        if not exists:
+            if len(new_word) <= 100:
+                db.session.add(ProfanityWord(word=new_word))
+                db.session.commit()
+                flash(f'Wort "{new_word}" hinzugefügt.', 'success')
+            else:
+                flash('Wort ist zu lang.', 'danger')
+        else:
+            flash(f'Wort "{new_word}" existiert bereits.', 'warning')
+    return redirect(url_for('dashboard.profanity_filter'))
+
+@bp.route('/profanity-filter/delete/<int:word_id>', methods=['POST'])
+@login_required
+def profanity_filter_delete(word_id):
+    from ..models import ProfanityWord
+    w = ProfanityWord.query.get(word_id)
+    if w:
+        db.session.delete(w)
+        db.session.commit()
+        flash('Wort gelöscht.', 'info')
+    return redirect(url_for('dashboard.profanity_filter'))
+
+@bp.route('/profanity-filter/import-google', methods=['POST'])
+@login_required
+def profanity_filter_import_google():
+    from ..models import ProfanityWord
+    import urllib.request
+    try:
+        url = "https://raw.githubusercontent.com/coffee-and-fun/google-profanity-words/main/data/de.txt"
+        response = urllib.request.urlopen(url)
+        content = response.read().decode('utf-8')
+        lines = content.splitlines()
+        
+        added = 0
+        for line in lines:
+            w = line.strip().lower()
+            if w and len(w) <= 100:
+                if not ProfanityWord.query.filter_by(word=w).first():
+                    db.session.add(ProfanityWord(word=w, language='de'))
+                    added += 1
+        db.session.commit()
+        flash(f'{added} neue Wörter aus der Google-Liste importiert.', 'success')
+    except Exception as e:
+        flash(f'Fehler beim Importieren: {e}', 'danger')
+        
+    return redirect(url_for('dashboard.profanity_filter'))

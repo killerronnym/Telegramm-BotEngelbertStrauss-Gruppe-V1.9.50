@@ -2,6 +2,11 @@
 
 Alle signifikanten Änderungen an diesem Projekt werden hier dokumentiert.
 
+## [1.8.11] - 2026-02-28
+
+### ✨ Neu
+- **Beleidigungsmanagement (Profanity Filter)**: Eine neue Blacklist für verbotene Wörter inklusive Google-Profanity Imports und automatischer Verwarnung.
+
 ## [1.0.0] - 2026-02-24
 
 ### ✨ Neu

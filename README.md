@@ -25,6 +25,7 @@ Hier ein kleiner Einblick in das moderne Web-Dashboard:
 ### 🧩 Verfügbare Bot Module
 - **Invite Bot:** Automatisierte Bewerbungen mit Steckbrief, Admin-Whitelist-Funktion und intelligenter Erkennung von Social-Media-Links.
 - **ID-Finder Bot:** Gruppen-Moderation (Kick, Ban, Mute, Warnungen), Nutzer-Identifizierung und das neue **Live-Moderation v2** Interface.
+- **Beleidigungsfilter:** Eine anpassbare Blacklist (inkl. Google-Profanity-Import), die Nachrichten automatisch löscht und den Nutzer verwarnt.
 - **KI-Chat-Monitoring:** Intelligente Überwachung und Beantwortung von Chat-Nachrichten durch integrierte KI-Modelle.
 - **Quiz Bot:** Planbare Quiz-Runden in der Telegram-Gruppe.
 - **Umfrage Bot:** Automatisierte und wiederkehrende Umfragen.

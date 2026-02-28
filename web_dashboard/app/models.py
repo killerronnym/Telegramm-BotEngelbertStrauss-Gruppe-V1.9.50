@@ -178,3 +178,11 @@ AVAILABLE_PERMISSIONS = {
         "can_manage_admins": "Andere Admins verwalten"
     }
 }
+
+# --- Profanity Filter Models ---
+class ProfanityWord(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    word = db.Column(db.String(100), unique=True, nullable=False)
+    language = db.Column(db.String(10), default='custom') # 'de', 'en', 'custom'
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
