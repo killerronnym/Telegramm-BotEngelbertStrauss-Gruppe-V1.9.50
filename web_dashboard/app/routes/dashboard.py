@@ -1382,7 +1382,7 @@ def profanity_filter_import_google():
     from ..models import ProfanityWord
     import urllib.request
     try:
-        url = "https://raw.githubusercontent.com/coffee-and-fun/google-profanity-words/main/data/de.txt"
+        url = "https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/de"
         response = urllib.request.urlopen(url)
         content = response.read().decode('utf-8')
         lines = content.splitlines()
