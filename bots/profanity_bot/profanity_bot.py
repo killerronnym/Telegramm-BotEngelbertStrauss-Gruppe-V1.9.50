@@ -116,10 +116,21 @@ async def handle_profanity_check(update: Update, context: ContextTypes.DEFAULT_T
                             
                         notice = await context.bot.send_message(
                             chat_id=chat.id,
-                            text=f"⚠️ {update.message.from_user.mention_html()} wurde wegen Beleidigung verwarnt.\n"
-                                 f"Verwarnung {warning_count} / {max_warns}{punishment_text}",
+                            text=f"⚠️ {update.message.from_user.mention_html()}, deine Nachricht wurde gelöscht wegen beleidigenden Inhalten.\n\n"
+                                 f"Verwarnung {warning_count} / {max_warns}{punishment_text}\n\n"
+                                 f"<i>(Diese Nachricht wird in 60 Sekunden gelöscht)</i>",
                             parse_mode="HTML"
                         )
+                        
+                        import asyncio
+                        async def delete_notice_later(bot, chat_id, message_id):
+                            await asyncio.sleep(60)
+                            try:
+                                await bot.delete_message(chat_id=chat_id, message_id=message_id)
+                            except Exception as e:
+                                logger.error(f"Fehler beim Löschen der Profanity-Warnung: {e}")
+                                
+                        asyncio.create_task(delete_notice_later(context.bot, chat.id, notice.message_id))
                         
                         # Execute punishment if limit reached
                         if warning_count >= max_warns and punishment != 'none':
