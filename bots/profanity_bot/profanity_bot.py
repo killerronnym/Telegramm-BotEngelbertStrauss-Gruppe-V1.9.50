@@ -160,12 +160,22 @@ async def handle_profanity_check(update: Update, context: ContextTypes.DEFAULT_T
                                 logger.info(f"Auto-Mod Strafe '{punishment}' ausgeführt an {user_id}")
                             except Exception as e:
                                 logger.error(f"Fehler bei Auto-Mod Strafe: {e}")
+                                await context.bot.send_message(chat_id=chat.id, text=f"⚠️ DEBUG System-Fehler: Konnte Strafe nicht ausführen. Grund: {str(e)}")
                                 
                         # Return after the first word is found to avoid double penalization
                         return
                         
             except Exception as e:
-                logger.error(f"Fehler beim Bearbeiten der Beleidigung: {e}")
+                logger.error(f"Fehler beim Bearbeiten der Beleidigung '{word}': {e}")
+                # Tell the chat exactly what went wrong!
+                try:
+                    await context.bot.send_message(
+                        chat_id=chat.id, 
+                        text=f"🤖 <b>SYSTEM-DEBUG-MELDUNG</b>\nIch habe das verbotene Wort <code>{word}</code> in der Nachricht von {update.message.from_user.first_name} gefunden, aber Telegram verbietet mir das Löschen der Nachricht!\n\n<b>Technischer Grund vom Server:</b> {str(e)}\n\n(Das passiert meistens, wenn der Sender ein Administrator ist oder dem Bot Rechte fehlen.)",
+                        parse_mode="HTML"
+                    )
+                except:
+                    pass
 
 def get_handlers():
     """Gibt die Handler zurück, die main_bot.py registrieren soll."""
