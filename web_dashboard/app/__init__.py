@@ -53,18 +53,19 @@ def create_app(test_config=None):
         return redirect(url_for('install.index'))
 
     with app.app_context():
-        try:
-            db.create_all()
-            # Initialer Admin nur erstellen, wenn wir nicht im Setup-Modus sind oder explizit gewünscht
-            # In der neuen Version übernimmt der Installer das
-            if os.path.exists(INSTALL_LOCK):
+        # INITIALISIERUNG NUR WENN INSTALLIERT
+        # Andernfalls stürzt die App beim Start mit SQLAlchemy-Fehlern ab,
+        # wenn in der .env noch eine fehlerhafte oder alte Datenbank steht.
+        if os.path.exists(INSTALL_LOCK):
+            try:
+                db.create_all()
                 if not User.query.filter_by(username='admin').first():
                     admin = User(username='admin', role='admin')
                     admin.set_password('admin') 
                     db.session.add(admin)
                     db.session.commit()
-        except Exception as e:
-            print(f"DB Error during app context: {e}")
+            except Exception as e:
+                print(f"DB Error during app context: {e}")
 
     # Root-Route leitet direkt zum Dashboard weiter
     @app.route('/')
