@@ -49,8 +49,13 @@ def setup():
 
     data = request.json
     db_url = data.get('db_url')
+    db_type = data.get('db_type')
     admin_user = data.get('admin_user')
     admin_pass = data.get('admin_pass')
+
+    if db_type == 'sqlite' and not db_url:
+        from shared_bot_utils import DB_PATH
+        db_url = f"sqlite:///{DB_PATH}"
 
     try:
         # Update .env file
@@ -69,16 +74,22 @@ def setup():
         with open(env_path, 'w') as f:
             f.writelines(new_lines)
         
-        # Reload env and re-init DB
-        os.environ['DATABASE_URL'] = db_url
+        # Initialize tables using a direct SQLAlchemy engine to avoid Flask-SQLAlchemy using the old cached .env engine
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        engine = create_engine(db_url)
+        db.metadata.create_all(engine)
         
-        with current_app.app_context():
-            db.create_all()
-            if not User.query.filter_by(username=admin_user).first():
-                admin = User(username=admin_user, role='admin')
-                admin.set_password(admin_pass)
-                db.session.add(admin)
-                db.session.commit()
+        Session = sessionmaker(bind=engine)
+        session = Session()
+        
+        if not session.query(User).filter_by(username=admin_user).first():
+            admin = User(username=admin_user, role='admin')
+            admin.set_password(admin_pass)
+            session.add(admin)
+            session.commit()
+        
+        session.close()
 
         # Create lock file
         os.makedirs(os.path.dirname(INSTALL_LOCK), exist_ok=True)
