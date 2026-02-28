@@ -44,7 +44,7 @@ def fetch_profanity_words():
 async def handle_profanity_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Prüft Textnachrichten auf Beleidigungen."""
     # We only care about group messages (or wherever the bot has delete permissions)
-    if not update.message or not update.message.text or not is_bot_active_local():
+    if not update.message or not update.message.text:
         return
         
     chat = update.message.chat
@@ -52,9 +52,16 @@ async def handle_profanity_check(update: Update, context: ContextTypes.DEFAULT_T
         return # Do not filter private messages to the bot
         
     message_text = update.message.text.lower()
+    logger.info(f"⚡ Profanity Check Triggered on '{message_text[:20]}...'")
+    
+    active = is_bot_active_local()
+    if not active:
+        logger.info("-> Ignoriert: Modul ist im Dashboard ausgeschaltet.")
+        return
     
     words = fetch_profanity_words()
     if not words:
+        logger.info("-> Ignoriert: Blacklist ist leer oder DB Fehler.")
         return
         
     for word in words:
@@ -162,9 +169,9 @@ async def handle_profanity_check(update: Update, context: ContextTypes.DEFAULT_T
 
 def get_handlers():
     """Gibt die Handler zurück, die main_bot.py registrieren soll."""
-    # Group 1 = Vor allen anderen Befehlen laufen lassen, als Filter
+    # Group -1 = Vor allen anderen Befehlen laufen lassen, absolute Priorität als Filter
     h1 = MessageHandler(filters.TEXT, handle_profanity_check)
-    return [(h1, 1)]
+    return [(h1, -1)]
 
 def get_fallback_handlers():
     return []
