@@ -83,7 +83,7 @@ def get_bot_status_simple():
         "invite": {"running": False}, "quiz": {"running": False}, 
         "umfrage": {"running": False}, "outfit": {"running": False}, 
         "id_finder": {"running": False}, "tiktok": {"running": False},
-        "auto_responder": {"running": False}
+        "auto_responder": {"running": False}, "profanity_filter": {"running": False}
     }
     
     # ID Finder (Master Bot) ist der einzige echte Prozess
