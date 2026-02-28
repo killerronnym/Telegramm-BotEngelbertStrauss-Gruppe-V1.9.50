@@ -71,13 +71,14 @@ def create_app(test_config=None):
     def root():
         return redirect(url_for('dashboard.index'))
 
-    # Scheduler initialisieren
-    scheduler = APScheduler()
-    scheduler.init_app(app)
-    scheduler.start()
-    
-    # Auto-Update Job registrieren (läuft alle 6 Stunden)
-    from .updater_task import check_and_auto_update
-    scheduler.add_job(id='auto_update_job', func=check_and_auto_update, trigger='interval', hours=6, args=[app])
+    # Scheduler initialisieren (nur wenn installiert, sonst crasht er wegen fehlender DB!)
+    if os.path.exists(INSTALL_LOCK):
+        scheduler = APScheduler()
+        scheduler.init_app(app)
+        scheduler.start()
+        
+        # Auto-Update Job registrieren (läuft alle 6 Stunden)
+        from .updater_task import check_and_auto_update
+        scheduler.add_job(id='auto_update_job', func=check_and_auto_update, trigger='interval', hours=6, args=[app])
 
     return app
