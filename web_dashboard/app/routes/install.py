@@ -23,8 +23,8 @@ def check_db():
     db_type = data.get('db_type')
     
     if db_type == 'sqlite':
-        from shared_bot_utils import get_db_url
-        db_url = get_db_url()
+        from shared_bot_utils import DB_PATH
+        db_url = f"sqlite:///{DB_PATH}"
     else:
         host = data.get('host')
         port = data.get('port')
