@@ -53,7 +53,7 @@ def setup():
     admin_user = data.get('admin_user')
     admin_pass = data.get('admin_pass')
 
-    if db_type == 'sqlite' and not db_url:
+    if db_type == 'sqlite':
         from shared_bot_utils import DB_PATH
         db_url = f"sqlite:///{DB_PATH}"
 
