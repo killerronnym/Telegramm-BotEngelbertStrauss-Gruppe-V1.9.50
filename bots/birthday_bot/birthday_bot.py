@@ -32,7 +32,7 @@ def get_birthday_settings():
                 'target_topic_id': ''
             }
         return json.loads(setting.config_json)
-
+async def start_birthday_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
     settings = get_birthday_settings()
     text = settings.get('prompt_text', '🎂 <b>Geburtstags-Bot</b>\n\nWann hast du Geburtstag?\nBitte schreibe es im Format <code>Tag.Monat</code> oder <code>Tag.Monat.Jahr</code>.\n<i>(Beispiel: 15.08. oder 15.08.1990 - das Jahr ist komplett freiwillig!)</i>\n\nWenn du abbrechen möchtest, tippe /cancel.')
     if update.message:
@@ -49,7 +49,6 @@ async def handle_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     match = DATE_PATTERN.match(text_input)
     
-    settings = get_birthday_settings()
     settings = get_birthday_settings()
     if not match:
         msg = settings.get('error_format_text', "Das war leider das falsche Format.\nBeispiele: `15.08.` oder `15 08 1990`\nVersuche es nochmal oder tippe /cancel.")
