@@ -33,12 +33,19 @@ def get_birthday_settings():
             }
         return json.loads(setting.config_json)
 async def start_birthday_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from shared_bot_utils import is_bot_active
+    if not is_bot_active('birthday'):
+        logger.info("Birthday registration ignored: bot is inactive in settings.")
+        return ConversationHandler.END
+
+    logger.info(f"Starting birthday registration for user {update.effective_user.id} in chat {update.effective_chat.id} (Thread: {update.message.message_thread_id if update.message.is_topic_message else 'None'})")
     settings = get_birthday_settings()
     text = settings.get('prompt_text', '🎂 <b>Geburtstags-Bot</b>\n\nWann hast du Geburtstag?\nBitte schreibe es im Format <code>Tag.Monat</code> oder <code>Tag.Monat.Jahr</code>.\n<i>(Beispiel: 15.08. oder 15.08.1990 - das Jahr ist komplett freiwillig!)</i>\n\nWenn du abbrechen möchtest, tippe /cancel.')
     if update.message:
         kwargs = {'text': text, 'parse_mode': 'HTML'}
         if update.message.is_topic_message:
             kwargs['message_thread_id'] = update.message.message_thread_id
+        logger.info(f"Sending prompt to user {update.effective_user.id} with kwargs: {kwargs}")
         await update.message.reply_text(**kwargs)
     return WAITING_FOR_DATE
 
