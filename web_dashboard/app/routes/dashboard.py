@@ -1511,3 +1511,23 @@ def birthday_settings():
             user_avatars[b.telegram_user_id] = u
             
     return render_template('birthday.html', settings=cfg, birthdays=birthdays, user_avatars=user_avatars)
+
+@bp.route('/api/backup/download')
+@login_required
+def download_backup():
+    import os
+    from flask import send_file, flash, redirect, url_for
+    from flask_login import current_user
+    
+    if getattr(current_user, 'role', 'user') != 'admin':
+        flash('Keine Berechtigung. Nur Administratoren können Backups herunterladen.', 'danger')
+        return redirect(url_for('dashboard.index'))
+        
+    from shared_bot_utils import DB_PATH
+    
+    if os.path.exists(DB_PATH):
+        return send_file(DB_PATH, as_attachment=True, download_name='app_backup.db')
+    else:
+        flash('Datenbank-Datei nicht gefunden. Nutzen Sie ggf. eine externe MariaDB?', 'danger')
+        return redirect(url_for('dashboard.index'))
+
