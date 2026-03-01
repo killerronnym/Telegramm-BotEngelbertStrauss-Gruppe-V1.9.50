@@ -36,7 +36,10 @@ def get_birthday_settings():
     settings = get_birthday_settings()
     text = settings.get('prompt_text', '🎂 <b>Geburtstags-Bot</b>\n\nWann hast du Geburtstag?\nBitte schreibe es im Format <code>Tag.Monat</code> oder <code>Tag.Monat.Jahr</code>.\n<i>(Beispiel: 15.08. oder 15.08.1990 - das Jahr ist komplett freiwillig!)</i>\n\nWenn du abbrechen möchtest, tippe /cancel.')
     if update.message:
-        await update.message.reply_text(text, parse_mode='HTML')
+        kwargs = {'text': text, 'parse_mode': 'HTML'}
+        if update.message.is_topic_message:
+            kwargs['message_thread_id'] = update.message.message_thread_id
+        await update.message.reply_text(**kwargs)
     return WAITING_FOR_DATE
 
 async def handle_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -47,9 +50,13 @@ async def handle_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     match = DATE_PATTERN.match(text_input)
     
     settings = get_birthday_settings()
+    settings = get_birthday_settings()
     if not match:
         msg = settings.get('error_format_text', "Das war leider das falsche Format.\nBeispiele: `15.08.` oder `15 08 1990`\nVersuche es nochmal oder tippe /cancel.")
-        await update.message.reply_text(msg, parse_mode='Markdown')
+        kwargs = {'text': msg, 'parse_mode': 'Markdown'}
+        if update.message.is_topic_message:
+            kwargs['message_thread_id'] = update.message.message_thread_id
+        await update.message.reply_text(**kwargs)
         return WAITING_FOR_DATE
         
     day = int(match.group(1))
@@ -58,7 +65,10 @@ async def handle_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if not (1 <= month <= 12) or not (1 <= day <= 31):
         msg = settings.get('error_date_text', "Das ist leider kein echtes Kalenderdatum. Bitte versuche es noch einmal:")
-        await update.message.reply_text(msg)
+        kwargs = {'text': msg}
+        if update.message.is_topic_message:
+            kwargs['message_thread_id'] = update.message.message_thread_id
+        await update.message.reply_text(**kwargs)
         return WAITING_FOR_DATE
         
     if year and (year < 1900 or year > datetime.now().year):
@@ -103,14 +113,18 @@ async def handle_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if year:
             reply_text += f"\n(Jahrgang: {year} gespeichert)"
             
-        await update.message.reply_text(reply_text)
+        await update.message.reply_text(reply_text, message_thread_id=update.message.message_thread_id if update.message.is_topic_message else None)
         
     return ConversationHandler.END
 
 async def cancel_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
     settings = get_birthday_settings()
     msg = settings.get('cancel_text', "Geburtstags-Eintragung abgebrochen.")
-    await update.message.reply_text(msg)
+    kwargs = {'text': msg}
+    if update.message and update.message.is_topic_message:
+        kwargs['message_thread_id'] = update.message.message_thread_id
+    if update.message:
+        await update.message.reply_text(**kwargs)
     return ConversationHandler.END
 
 async def check_birthdays(context: ContextTypes.DEFAULT_TYPE):
