@@ -135,7 +135,7 @@ async def cancel_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text(**kwargs)
     return ConversationHandler.END
 
-async def check_birthdays(context: ContextTypes.DEFAULT_TYPE):
+async def check_birthdays(context: ContextTypes.DEFAULT_TYPE, force: bool = False):
     # Standard-Zeitzone (könnte man später konfigurierbar machen)
     tz = pytz.timezone('Europe/Berlin')
     now = datetime.now(tz)
@@ -144,14 +144,17 @@ async def check_birthdays(context: ContextTypes.DEFAULT_TYPE):
     announce_time = settings.get('announce_time', '00:01')
     current_time_str = now.strftime('%H:%M')
     
-    # Nur ein Log-Eintrag pro Minute (wenn wir getriggert werden)
-    if now.second < 10: # Nur am Anfang der Minute loggen um Spam zu vermeiden
-        logger.info(f"Checking birthdays... Local Time: {current_time_str}, Announce Time: {announce_time}")
-    
-    if current_time_str != announce_time:
-        return
+    if not force:
+        # Nur am Anfang der Minute loggen um Spam zu vermeiden
+        if now.second < 10:
+            print(f"DEBUG BIRTHDAY: Checking... Local Time: {current_time_str}, Announce Time: {announce_time}")
         
-    logger.info(f"⏰ IT IS TIME! Sending congratulations for {now.day}.{now.month}. at {current_time_str}")
+        if current_time_str != announce_time:
+            return
+            
+        print(f"⏰ DEBUG BIRTHDAY: IT IS TIME! Sending congratulations for {now.day}.{now.month}. at {current_time_str}")
+    else:
+        print(f"🛠 DEBUG BIRTHDAY: Manual trigger! Sending congratulations for {now.day}.{now.month}.")
     
     # Ziel-Chat auslesen
     global_target_chat = settings.get('target_chat_id', '').strip()
@@ -161,10 +164,16 @@ async def check_birthdays(context: ContextTypes.DEFAULT_TYPE):
     with flask_app.app_context():
         # Wir suchen nach Geburtstagen für HEUTE in der Zeitzone
         birthdays = Birthday.query.filter_by(day=now.day, month=now.month).all()
-        logger.info(f"Found {len(birthdays)} birthdays for today ({now.day}.{now.month}.)")
+        print(f"DEBUG BIRTHDAY: Found {len(birthdays)} birthdays for today ({now.day}.{now.month}.)")
+        
+        global_target_chat = settings.get('target_chat_id', '').strip()
+        global_target_topic = settings.get('target_topic_id', '').strip()
+        print(f"DEBUG BIRTHDAY: Settings -> GlobalChat: {global_target_chat}, GlobalTopic: {global_target_topic}")
+
         for b in birthdays:
             # Prio1: Global, Prio2: Ort der Eintragung
             final_chat_id = global_target_chat if global_target_chat else b.chat_id
+            print(f"DEBUG BIRTHDAY: Processing user {b.telegram_user_id} ({b.first_name}). Target: {final_chat_id}")
             
             if final_chat_id:
                 try:
@@ -174,7 +183,7 @@ async def check_birthdays(context: ContextTypes.DEFAULT_TYPE):
                     
                     if '{age}' in text:
                         if b.year:
-                            age = today.year - b.year
+                            age = now.year - b.year
                             text = text.replace('{age}', str(age))
                         else:
                             text = text.replace('{age}', '?')
@@ -182,18 +191,28 @@ async def check_birthdays(context: ContextTypes.DEFAULT_TYPE):
                     kwargs = {'chat_id': final_chat_id, 'text': text}
                     if global_target_topic and global_target_topic.isdigit():
                         kwargs['message_thread_id'] = int(global_target_topic)
+                    elif b.chat_id == int(final_chat_id) and b.topic_id: # Fallback to registration topic
+                         kwargs['message_thread_id'] = b.topic_id
                         
                     await context.bot.send_message(**kwargs)
-                    logger.info(f"Geburtstagsgruß gesendet an {name} in Chat {final_chat_id}")
+                    print(f"DEBUG BIRTHDAY: SUCCESS sent to {name} in {final_chat_id}")
                 except Exception as e:
-                    logger.error(f"Fehler beim Senden des Geburtstagsgrußes für {b.telegram_user_id}: {e}")
+                    print(f"DEBUG BIRTHDAY: ERROR sending to {final_chat_id}: {e}")
 
 def get_handlers():
     logger.info("Registering birthday bot handlers...")
+    
+    # Manueller Trigger Command
+    async def manual_birthday_trigger(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text("Starte manuellen Geburtstags-Check...")
+        await check_birthdays(context, force=True)
+        await update.message.reply_text("Check abgeschlossen. (Siehe Logs für Details)")
+
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler("geburtstag", start_birthday_registration),
-            CommandHandler("gb", start_birthday_registration)
+            CommandHandler("gb", start_birthday_registration),
+            CommandHandler("testgb", manual_birthday_trigger)
         ],
         states={
             WAITING_FOR_DATE: [
