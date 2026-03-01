@@ -23,20 +23,18 @@ def get_birthday_settings():
             return {
                 'registration_text': 'Dein Geburtstag ({day}.{month}.) wurde erfolgreich eingetragen!',
                 'congratulation_text': 'Herzlichen Glückwunsch zum Geburtstag, {user}!',
+                'prompt_text': '🎂 <b>Geburtstags-Bot</b>\n\nWann hast du Geburtstag?\nBitte schreibe es im Format <code>Tag.Monat</code> oder <code>Tag.Monat.Jahr</code>.\n<i>(Beispiel: 15.08. oder 15.08.1990 - das Jahr ist komplett freiwillig!)</i>\n\nWenn du abbrechen möchtest, tippe /cancel.',
+                'error_format_text': 'Das war leider das falsche Format.\nBeispiele: `15.08.` oder `15 08 1990`\nVersuche es nochmal oder tippe /cancel.',
+                'error_date_text': 'Das ist leider kein echtes Kalenderdatum. Bitte versuche es noch einmal:',
+                'cancel_text': 'Geburtstags-Eintragung abgebrochen.',
                 'announce_time': '00:01',
                 'target_chat_id': '',
                 'target_topic_id': ''
             }
         return json.loads(setting.config_json)
 
-async def start_birthday_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (
-        "🎂 <b>Geburtstags-Bot</b>\n\n"
-        "Wann hast du Geburtstag?\n"
-        "Bitte schreibe es im Format <code>Tag.Monat</code> oder <code>Tag.Monat.Jahr</code>.\n"
-        "<i>(Beispiel: 15.08. oder 15.08.1990 - das Jahr ist komplett freiwillig!)</i>\n\n"
-        "Wenn du abbrechen möchtest, tippe /cancel."
-    )
+    settings = get_birthday_settings()
+    text = settings.get('prompt_text', '🎂 <b>Geburtstags-Bot</b>\n\nWann hast du Geburtstag?\nBitte schreibe es im Format <code>Tag.Monat</code> oder <code>Tag.Monat.Jahr</code>.\n<i>(Beispiel: 15.08. oder 15.08.1990 - das Jahr ist komplett freiwillig!)</i>\n\nWenn du abbrechen möchtest, tippe /cancel.')
     if update.message:
         await update.message.reply_text(text, parse_mode='HTML')
     return WAITING_FOR_DATE
@@ -48,8 +46,10 @@ async def handle_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     match = DATE_PATTERN.match(text_input)
     
+    settings = get_birthday_settings()
     if not match:
-        await update.message.reply_text("Das war leider das falsche Format.\nBeispiele: `15.08.` oder `15 08 1990`\nVersuche es nochmal oder tippe /cancel.", parse_mode='Markdown')
+        msg = settings.get('error_format_text', "Das war leider das falsche Format.\nBeispiele: `15.08.` oder `15 08 1990`\nVersuche es nochmal oder tippe /cancel.")
+        await update.message.reply_text(msg, parse_mode='Markdown')
         return WAITING_FOR_DATE
         
     day = int(match.group(1))
@@ -57,7 +57,8 @@ async def handle_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     year = int(match.group(3)) if match.group(3) else None
     
     if not (1 <= month <= 12) or not (1 <= day <= 31):
-        await update.message.reply_text("Das ist leider kein echtes Kalenderdatum. Bitte versuche es noch einmal:")
+        msg = settings.get('error_date_text', "Das ist leider kein echtes Kalenderdatum. Bitte versuche es noch einmal:")
+        await update.message.reply_text(msg)
         return WAITING_FOR_DATE
         
     if year and (year < 1900 or year > datetime.now().year):
@@ -107,7 +108,9 @@ async def handle_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def cancel_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Geburtstags-Eintragung abgebrochen.")
+    settings = get_birthday_settings()
+    msg = settings.get('cancel_text', "Geburtstags-Eintragung abgebrochen.")
+    await update.message.reply_text(msg)
     return ConversationHandler.END
 
 async def check_birthdays(context: ContextTypes.DEFAULT_TYPE):

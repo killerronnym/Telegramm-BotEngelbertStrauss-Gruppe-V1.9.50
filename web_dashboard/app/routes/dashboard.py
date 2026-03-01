@@ -1442,6 +1442,10 @@ def birthday_settings():
         cfg = {
             'registration_text': 'Dein Geburtstag ({day}.{month}.) wurde erfolgreich eingetragen!',
             'congratulation_text': 'Herzlichen Glückwunsch zum Geburtstag, {user}!',
+            'prompt_text': '🎂 <b>Geburtstags-Bot</b>\n\nWann hast du Geburtstag?\nBitte schreibe es im Format <code>Tag.Monat</code> oder <code>Tag.Monat.Jahr</code>.\n<i>(Beispiel: 15.08. oder 15.08.1990 - das Jahr ist komplett freiwillig!)</i>\n\nWenn du abbrechen möchtest, tippe /cancel.',
+            'error_format_text': 'Das war leider das falsche Format.\nBeispiele: `15.08.` oder `15 08 1990`\nVersuche es nochmal oder tippe /cancel.',
+            'error_date_text': 'Das ist leider kein echtes Kalenderdatum. Bitte versuche es noch einmal:',
+            'cancel_text': 'Geburtstags-Eintragung abgebrochen.',
             'announce_time': '00:01',
             'target_chat_id': '',
             'target_topic_id': ''
@@ -1458,6 +1462,10 @@ def birthday_settings():
         if action == 'update_settings':
             cfg['registration_text'] = request.form.get('registration_text')
             cfg['congratulation_text'] = request.form.get('congratulation_text')
+            cfg['prompt_text'] = request.form.get('prompt_text')
+            cfg['error_format_text'] = request.form.get('error_format_text')
+            cfg['error_date_text'] = request.form.get('error_date_text')
+            cfg['cancel_text'] = request.form.get('cancel_text')
             cfg['announce_time'] = request.form.get('announce_time')
             cfg['target_chat_id'] = request.form.get('target_chat_id', '').strip()
             cfg['target_topic_id'] = request.form.get('target_topic_id', '').strip()
