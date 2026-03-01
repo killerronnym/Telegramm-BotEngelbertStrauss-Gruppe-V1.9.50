@@ -1448,7 +1448,8 @@ def birthday_settings():
             'cancel_text': 'Geburtstags-Eintragung abgebrochen.',
             'announce_time': '00:01',
             'target_chat_id': '',
-            'target_topic_id': ''
+            'target_topic_id': '',
+            'auto_delete_registration': False
         }
         s = BotSettings(bot_name='birthday', config_json=json.dumps(cfg))
         db.session.add(s)
@@ -1469,6 +1470,7 @@ def birthday_settings():
             cfg['announce_time'] = request.form.get('announce_time')
             cfg['target_chat_id'] = request.form.get('target_chat_id', '').strip()
             cfg['target_topic_id'] = request.form.get('target_topic_id', '').strip()
+            cfg['auto_delete_registration'] = request.form.get('auto_delete_registration') == 'on'
             s.config_json = json.dumps(cfg)
             db.session.commit()
             flash('Geburtstags-Einstellungen gespeichert.', 'success')
