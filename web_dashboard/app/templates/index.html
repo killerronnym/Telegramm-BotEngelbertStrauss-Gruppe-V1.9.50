@@ -384,7 +384,7 @@
     let sortable = null;
 
     // Load saved layout
-    const savedLayout = {{ layout| tojson if layout else 'null' }};
+    const savedLayout = {{ layout | tojson | safe if layout else 'null' }};
     if (savedLayout) {
         if (savedLayout.order) {
             savedLayout.order.forEach(id => {
