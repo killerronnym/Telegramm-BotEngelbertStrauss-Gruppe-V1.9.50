@@ -96,6 +96,12 @@ class Updater:
                 try:
                     with zipfile.ZipFile(zip_path, "r") as zip_ref:
                         zip_ref.extractall(tmp_dir)
+                        # Ensure .sh scripts keep their executable permissions
+                        if os.name != 'nt':
+                            for root_d, _, files in os.walk(tmp_dir):
+                                for f in files:
+                                    if f.endswith('.sh'):
+                                        os.chmod(os.path.join(root_d, f), 0o755)
                     log.info("Update extracted successfully.")
                 except zipfile.BadZipFile as e:
                     raise Exception(f"Corrupted zip file: {e}")
