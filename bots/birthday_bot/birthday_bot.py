@@ -174,7 +174,13 @@ async def check_birthdays(context: ContextTypes.DEFAULT_TYPE, force: bool = Fals
 
         for b in birthdays:
             # Prio1: Global, Prio2: Ort der Eintragung
-            final_chat_id = global_target_chat if global_target_chat else b.chat_id
+            final_chat_id = str(global_target_chat) if global_target_chat else str(b.chat_id)
+            
+            # Korrektur für Supergroups (müssen mit -100 beginnen)
+            if final_chat_id and not final_chat_id.startswith('-') and len(final_chat_id) >= 10:
+                print(f"DEBUG BIRTHDAY: Auto-fixing Chat ID {final_chat_id} -> -100{final_chat_id}")
+                final_chat_id = f"-100{final_chat_id}"
+
             print(f"DEBUG BIRTHDAY: Processing user {b.telegram_user_id} ({b.first_name}). Target: {final_chat_id}")
             
             if final_chat_id:
