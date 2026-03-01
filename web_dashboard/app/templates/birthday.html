@@ -113,7 +113,7 @@
         <div class="card shadow mb-4">
             <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                 <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-users"></i> Eingetragene Geburtstage</h6>
-                <button class="btn btn-sm btn-success" data-toggle="modal" data-target="#addBirthdayModal"><i
+                <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#addBirthdayModal"><i
                         class="fas fa-plus"></i> Hinzufügen</button>
             </div>
             <div class="card-body">
@@ -151,8 +151,8 @@
                                 <td>{{ b.year or '-' }}</td>
                                 <td>{{ b.chat_id or '-' }}</td>
                                 <td>
-                                    <button class="btn btn-sm btn-info" data-toggle="modal"
-                                        data-target="#editBirthdayModal{{ b.id }}" title="Bearbeiten"><i
+                                    <button class="btn btn-sm btn-info" data-bs-toggle="modal"
+                                        data-bs-target="#editBirthdayModal{{ b.id }}" title="Bearbeiten"><i
                                             class="fas fa-edit"></i></button>
                                     <form action="{{ url_for('dashboard.birthday_settings') }}" method="POST"
                                         class="d-inline" onsubmit="return confirm('Geburtstag wirklich löschen?');">
@@ -185,9 +185,7 @@
             <form action="{{ url_for('dashboard.birthday_settings') }}" method="POST">
                 <div class="modal-header">
                     <h5 class="modal-title">Geburtstag bearbeiten</h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <input type="hidden" name="action" value="update_birthday">
@@ -211,7 +209,7 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Abbrechen</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
                     <button type="submit" class="btn btn-primary">Speichern</button>
                 </div>
             </form>
@@ -232,9 +230,7 @@
             <form action="{{ url_for('dashboard.birthday_settings') }}" method="POST">
                 <div class="modal-header">
                     <h5 class="modal-title">Geburtstag hinzufügen</h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <input type="hidden" name="action" value="add_birthday">
@@ -258,7 +254,7 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Abbrechen</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
                     <button type="submit" class="btn btn-primary">Hinzufügen</button>
                 </div>
             </form>
