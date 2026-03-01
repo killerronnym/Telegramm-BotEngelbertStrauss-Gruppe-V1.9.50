@@ -2,6 +2,11 @@
 
 Alle signifikanten Änderungen an diesem Projekt werden hier dokumentiert.
 
+## [1.9.1] - 2026-03-01
+
+### 🛠️ Behobene Fehler (Fixes)
+- **Auto-Updater Docker Fix**: Der Auto-Updater behält beim Entpacken des ZIP-Archivs nun die ausführbaren Datei-Rechte (`chmod +x`) für `docker-entrypoint.sh` bei. Dies verhindert Abstürze beim Docker-Neustart (`permission denied`).
+
 ## [1.9.0] - 2026-03-01
 
 ### ✨ Neu
