@@ -29,10 +29,12 @@ if os.path.exists(ENV_FILE):
 
 def get_db_url():
     """Gibt die konfigurierte Datenbank-URL zurück oder fällt auf SQLite zurück."""
-    # 1. Discrete Environment Variables (Best Practice für URLs mit Sonderzeichen)
+    final_url = None
+    
+    # 1. Discrete Environment Variables
     db_name = os.environ.get('DB_NAME')
-    db_user = os.environ.get('DB_USER') # Added this line as it was missing
-    db_host = os.environ.get('DB_HOST') # Added this line as it was missing
+    db_user = os.environ.get('DB_USER')
+    db_host = os.environ.get('DB_HOST')
     
     if db_user and db_host and db_name:
         db_password = os.environ.get('DB_PASSWORD')
@@ -40,7 +42,6 @@ def get_db_url():
         db_driver = os.environ.get('DB_DRIVER', 'mysql+pymysql')
         
         query = {"charset": "utf8mb4"} if "mysql" in db_driver else {}
-            
         url_obj = URL.create(
             drivername=db_driver,
             username=db_user,
@@ -50,20 +51,29 @@ def get_db_url():
             database=db_name,
             query=query
         )
-        return str(url_obj)
+        final_url = str(url_obj)
 
     # 2. Fallback DATABASE_URL
-    db_url = os.environ.get('DATABASE_URL')
-    if db_url:
-        if "mysql" in db_url and "charset=utf8mb4" not in db_url:
-            separator = "&" if "?" in db_url else "?"
-            db_url += f"{separator}charset=utf8mb4"
-        return db_url
+    if not final_url:
+        db_url = os.environ.get('DATABASE_URL')
+        if db_url:
+            if "mysql" in db_url and "charset=utf8mb4" not in db_url:
+                separator = "&" if "?" in db_url else "?"
+                db_url += f"{separator}charset=utf8mb4"
+            final_url = db_url
     
     # 3. Fallback SQLite
-    if not os.path.exists(INSTANCE_DIR):
-        os.makedirs(INSTANCE_DIR, exist_ok=True)
-    return f"sqlite:///{DB_PATH}"
+    if not final_url:
+        if not os.path.exists(INSTANCE_DIR):
+            os.makedirs(INSTANCE_DIR, exist_ok=True)
+        final_url = f"sqlite:///{DB_PATH}"
+
+    # Log masked URL
+    masked = final_url.split('@')[-1] if '@' in final_url else "SQLite"
+    if "sqlite" in final_url: masked = "SQLite (Local)"
+    print(f"DEBUG: Using Database: {masked}")
+    
+    return final_url
 
 def get_bot_config(bot_name):
     """Optimiertes Laden der Bot-Konfiguration."""
