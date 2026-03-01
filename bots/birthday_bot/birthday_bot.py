@@ -8,7 +8,8 @@ import json
 import re
 from datetime import datetime
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("BirthdayBot")
+logger.setLevel(logging.INFO)
 
 WAITING_FOR_DATE = 1
 
@@ -177,6 +178,7 @@ async def check_birthdays(context: ContextTypes.DEFAULT_TYPE):
                     logger.error(f"Fehler beim Senden des Geburtstagsgrußes für {b.telegram_user_id}: {e}")
 
 def get_handlers():
+    logger.info("Registering birthday bot handlers...")
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler("geburtstag", start_birthday_registration),
