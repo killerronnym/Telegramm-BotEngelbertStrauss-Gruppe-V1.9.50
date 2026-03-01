@@ -83,7 +83,8 @@ def get_bot_status_simple():
         "invite": {"running": False}, "quiz": {"running": False}, 
         "umfrage": {"running": False}, "outfit": {"running": False}, 
         "id_finder": {"running": False}, "tiktok": {"running": False},
-        "auto_responder": {"running": False}, "profanity_filter": {"running": False}
+        "auto_responder": {"running": False}, "profanity_filter": {"running": False},
+        "birthday": {"running": False}
     }
     
     # ID Finder (Master Bot) ist der einzige echte Prozess
@@ -1429,3 +1430,84 @@ def profanity_filter_import_google():
         flash(f'Fehler beim Importieren: {e}', 'danger')
         
     return redirect(url_for('dashboard.profanity_filter'))
+
+# --- BIRTHDAY BOT ---
+@bp.route('/birthday-settings', methods=['GET', 'POST'])
+@login_required
+def birthday_settings():
+    from ..models import Birthday, BotSettings, IDFinderUser
+    
+    s = BotSettings.query.filter_by(bot_name='birthday').first()
+    if not s:
+        cfg = {
+            'registration_text': 'Dein Geburtstag ({day}.{month}.) wurde erfolgreich eingetragen!',
+            'congratulation_text': 'Herzlichen Glückwunsch zum Geburtstag, {user}!',
+            'announce_time': '00:01'
+        }
+        s = BotSettings(bot_name='birthday', config_json=json.dumps(cfg))
+        db.session.add(s)
+        db.session.commit()
+        
+    cfg = json.loads(s.config_json)
+    
+    if request.method == 'POST':
+        action = request.form.get('action')
+        
+        if action == 'update_settings':
+            cfg['registration_text'] = request.form.get('registration_text')
+            cfg['congratulation_text'] = request.form.get('congratulation_text')
+            cfg['announce_time'] = request.form.get('announce_time')
+            s.config_json = json.dumps(cfg)
+            db.session.commit()
+            flash('Geburtstags-Einstellungen gespeichert.', 'success')
+            
+        elif action == 'add_birthday':
+            uid = request.form.get('telegram_user_id')
+            day = request.form.get('day')
+            month = request.form.get('month')
+            if uid and day and month:
+                existing = Birthday.query.filter_by(telegram_user_id=int(uid)).first()
+                if not existing:
+                    u = IDFinderUser.query.filter_by(telegram_id=int(uid)).first()
+                    name = u.first_name if u else "Unbekannt"
+                    username = u.username if u else ""
+                    b = Birthday(telegram_user_id=int(uid), day=int(day), month=int(month), first_name=name, username=username)
+                    db.session.add(b)
+                    db.session.commit()
+                    flash('Geburtstag hinzugefügt.', 'success')
+                else:
+                    flash('User hat bereits einen Geburtstag eingetragen.', 'warning')
+                    
+        elif action == 'update_birthday':
+            bid = request.form.get('birthday_id')
+            day = request.form.get('day')
+            month = request.form.get('month')
+            if bid and day and month:
+                b = Birthday.query.get(int(bid))
+                if b:
+                    b.day = int(day)
+                    b.month = int(month)
+                    db.session.commit()
+                    flash('Geburtstag aktualisiert.', 'success')
+                    
+        elif action == 'delete_birthday':
+            bid = request.form.get('birthday_id')
+            if bid:
+                b = Birthday.query.get(int(bid))
+                if b:
+                    db.session.delete(b)
+                    db.session.commit()
+                    flash('Geburtstag gelöscht.', 'success')
+                    
+        return redirect(url_for('dashboard.birthday_settings'))
+        
+    birthdays = Birthday.query.order_by(Birthday.month, Birthday.day).all()
+    
+    # Load avatars
+    user_avatars = {}
+    for b in birthdays:
+        u = IDFinderUser.query.filter_by(telegram_id=b.telegram_user_id).first()
+        if u:
+            user_avatars[b.telegram_user_id] = u
+            
+    return render_template('birthday.html', settings=cfg, birthdays=birthdays, user_avatars=user_avatars)

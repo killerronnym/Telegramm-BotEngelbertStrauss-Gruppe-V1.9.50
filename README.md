@@ -1,4 +1,4 @@
-# 🤖 Bot Engine V2 - Engelbert Strauss Gruppe (v1.8.7)
+# 🤖 Bot Engine V2 - Engelbert Strauss Gruppe (v1.9.0)
 
 Ein leistungsstarker Telegram-Bot mit einem modernen Web-Dashboard zur Verwaltung von Einladungen, ID-Suche, Moderation, Quiz, Umfragen und KI-Chat-Integration. Optimiert für Windows und Linux (Docker/Synology).
 
@@ -28,6 +28,7 @@ Hier ein kleiner Einblick in das moderne Web-Dashboard:
 - **Beleidigungsfilter:** Eine anpassbare Blacklist (inkl. Google-Profanity-Import), die Nachrichten automatisch löscht und den Nutzer verwarnt.
 - **KI-Chat-Monitoring:** Intelligente Überwachung und Beantwortung von Chat-Nachrichten durch integrierte KI-Modelle.
 - **Quiz Bot:** Planbare Quiz-Runden in der Telegram-Gruppe.
+- **Geburtstags Bot:** Automatisierte Gratulationen für Gruppenmitglieder mit konfigurierbaren Texten und Uhrzeiten über das Web-Dashboard.
 - **Umfrage Bot:** Automatisierte und wiederkehrende Umfragen.
 - **TikTok Monitor:** Benachrichtigung in Telegram, sobald hinterlegte User auf TikTok live gehen.
 

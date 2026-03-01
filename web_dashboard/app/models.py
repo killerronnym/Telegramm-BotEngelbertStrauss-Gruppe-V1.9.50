@@ -130,6 +130,17 @@ class AutoCleanupTask(db.Model):
     cleanup_at = db.Column(db.DateTime, nullable=False)
     status = db.Column(db.String(20), default='pending') # pending, done
 
+# --- Birthday Bot Models ---
+class Birthday(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_user_id = db.Column(db.BigInteger, unique=True, nullable=False)
+    chat_id = db.Column(db.BigInteger) # The group where it was registered
+    username = db.Column(db.String(100))
+    first_name = db.Column(db.String(100))
+    day = db.Column(db.Integer, nullable=False)
+    month = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 # --- Invite Bot Models ---
 
 class InviteApplication(db.Model):

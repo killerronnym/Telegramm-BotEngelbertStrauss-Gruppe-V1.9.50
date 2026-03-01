@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2 class="h3 mb-2 text-gray-800"><i class="fas fa-birthday-cake text-primary"></i> Geburtstags-Bot</h2>
+        <p class="mb-4">Verwalte die Einstellungen für den Geburtstags-Bot und die eingetragenen Geburtstage der User.
+        </p>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Settings Card -->
+    <div class="col-lg-12 mb-4">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-cogs"></i> Allgemeine Einstellungen</h6>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('dashboard.birthday_settings') }}" method="POST">
+                    <input type="hidden" name="action" value="update_settings">
+
+                    <div class="form-group row">
+                        <label class="col-sm-3 col-form-label">Registrierungs-Text</label>
+                        <div class="col-sm-9">
+                            <input type="text" class="form-control" name="registration_text"
+                                value="{{ settings.get('registration_text', 'Dein Geburtstag ({day}.{month}.) wurde erfolgreich eingetragen!') }}"
+                                required>
+                            <small class="form-text text-muted">Variablen: {day}, {month}</small>
+                        </div>
+                    </div>
+
+                    <div class="form-group row">
+                        <label class="col-sm-3 col-form-label">Glückwunsch-Text</label>
+                        <div class="col-sm-9">
+                            <input type="text" class="form-control" name="congratulation_text"
+                                value="{{ settings.get('congratulation_text', 'Herzlichen Glückwunsch zum Geburtstag, {user}!') }}"
+                                required>
+                            <small class="form-text text-muted">Variablen: {user}</small>
+                        </div>
+                    </div>
+
+                    <div class="form-group row">
+                        <label class="col-sm-3 col-form-label">Gratulations-Uhrzeit</label>
+                        <div class="col-sm-9">
+                            <input type="time" class="form-control" name="announce_time"
+                                value="{{ settings.get('announce_time', '00:01') }}" required>
+                            <small class="form-text text-muted">Um wie viel Uhr soll der Bot jeden Tag
+                                gratulieren?</small>
+                        </div>
+                    </div>
+
+                    <div class="form-group row">
+                        <div class="col-sm-12 text-right">
+                            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Speichern</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- User List Card -->
+    <div class="col-lg-12">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-users"></i> Eingetragene Geburtstage</h6>
+                <button class="btn btn-sm btn-success" data-toggle="modal" data-target="#addBirthdayModal"><i
+                        class="fas fa-plus"></i> Hinzufügen</button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-bordered" id="dataTable" width="100%" cellspacing="0">
+                        <thead>
+                            <tr>
+                                <th>Avatar</th>
+                                <th>User</th>
+                                <th>Telegram ID</th>
+                                <th>Geburtstag</th>
+                                <th>Chat ID</th>
+                                <th>Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for b in birthdays %}
+                            <tr>
+                                <td class="text-center">
+                                    {% set user_info = user_avatars.get(b.telegram_user_id) %}
+                                    {% if user_info and user_info.avatar_file_id %}
+                                    <img src="{{ url_for('dashboard.get_telegram_file', file_id=user_info.avatar_file_id) }}"
+                                        class="rounded-circle" width="40" height="40" style="object-fit: cover;">
+                                    {% else %}
+                                    <div class="bg-secondary text-white rounded-circle d-inline-flex align-items-center justify-content-center"
+                                        style="width: 40px; height: 40px;">
+                                        <i class="fas fa-user"></i>
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                <td>{{ b.first_name }} <small class="text-muted">(@{{ b.username }})</small></td>
+                                <td>{{ b.telegram_user_id }}</td>
+                                <td>{{ b.day }}.{{ b.month }}.</td>
+                                <td>{{ b.chat_id or '-' }}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-info" data-toggle="modal"
+                                        data-target="#editBirthdayModal{{ b.id }}" title="Bearbeiten"><i
+                                            class="fas fa-edit"></i></button>
+                                    <form action="{{ url_for('dashboard.birthday_settings') }}" method="POST"
+                                        class="d-inline" onsubmit="return confirm('Geburtstag wirklich löschen?');">
+                                        <input type="hidden" name="action" value="delete_birthday">
+                                        <input type="hidden" name="birthday_id" value="{{ b.id }}">
+                                        <button type="submit" class="btn btn-sm btn-danger" title="Löschen"><i
+                                                class="fas fa-trash"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+
+                            <!-- Edit Modal -->
+                            <div class="modal fade" id="editBirthdayModal{{ b.id }}" tabindex="-1" role="dialog"
+                                aria-hidden="true">
+                                <div class="modal-dialog" role="document">
+                                    <div class="modal-content">
+                                        <form action="{{ url_for('dashboard.birthday_settings') }}" method="POST">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">Geburtstag bearbeiten</h5>
+                                                <button type="button" class="close" data-dismiss="modal"
+                                                    aria-label="Close">
+                                                    <span aria-hidden="true">&times;</span>
+                                                </button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <input type="hidden" name="action" value="update_birthday">
+                                                <input type="hidden" name="birthday_id" value="{{ b.id }}">
+                                                <div class="form-row">
+                                                    <div class="form-group col-md-6">
+                                                        <label>Tag</label>
+                                                        <input type="number" class="form-control" name="day"
+                                                            value="{{ b.day }}" min="1" max="31" required>
+                                                    </div>
+                                                    <div class="form-group col-md-6">
+                                                        <label>Monat</label>
+                                                        <input type="number" class="form-control" name="month"
+                                                            value="{{ b.month }}" min="1" max="12" required>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary"
+                                                    data-dismiss="modal">Abbrechen</button>
+                                                <button type="submit" class="btn btn-primary">Speichern</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="text-center">Noch keine Geburtstage eingetragen.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Modal -->
+<div class="modal fade" id="addBirthdayModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form action="{{ url_for('dashboard.birthday_settings') }}" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">Geburtstag hinzufügen</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="action" value="add_birthday">
+                    <div class="form-group">
+                        <label>Telegram User ID</label>
+                        <input type="number" class="form-control" name="telegram_user_id" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label>Tag</label>
+                            <input type="number" class="form-control" name="day" min="1" max="31" required>
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label>Monat</label>
+                            <input type="number" class="form-control" name="month" min="1" max="12" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Abbrechen</button>
+                    <button type="submit" class="btn btn-primary">Hinzufügen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

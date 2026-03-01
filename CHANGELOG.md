@@ -2,6 +2,11 @@
 
 Alle signifikanten Änderungen an diesem Projekt werden hier dokumentiert.
 
+## [1.9.0] - 2026-03-01
+
+### ✨ Neu
+- **Geburtstags-Bot**: Gruppenmitglieder können ihren Geburtstag über `/gb DD MM` oder `/geburtstag DD.MM.` eintragen. Der Bot gratuliert automatisch zur konfigurierten Zeit (z.B. um 00:01). Inklusive Dashboard-Integration zur Verwaltung der Geburtstage, Texte und Uhrzeiten.
+
 ## [1.8.13] - 2026-02-28
 
 ### 🛠️ Behobene Fehler (Fixes)
