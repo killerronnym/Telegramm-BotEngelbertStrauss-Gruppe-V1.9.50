@@ -232,9 +232,8 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                     await update.callback_query.edit_message_text("✅ Super! Bitte gib deinen Geburtstag ein.")
                     await context.bot.send_message(
                         chat_id=update.effective_chat.id,
-                        text="📅 Schreibe deinen Geburtstag in folgendem Format:\n\n"
-                             "<b>TT.MM.</b>  →  z.B. <code>15.08.</code>\n"
-                             "<b>TT.MM.JJJJ</b>  →  z.B. <code>15.08.1990</code> (mit Jahrgang)",
+                        text="📅 Bitte schreibe deinen Geburtstag mit Jahrgang:\n\n"
+                             "<b>TT.MM.JJJJ</b>  →  z.B. <code>15.08.1990</code>",
                         parse_mode="HTML"
                     )
                     return ASKING_QUESTIONS
@@ -280,19 +279,20 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                 "Bitte nutze die Buttons ✅ JA / ❌ NEIN um zu antworten."
             )
             return ASKING_QUESTIONS
-        # Bestätigt: Datum validieren
+        # Bestätigt: Datum mit Jahrgang validieren (Jahrgang ist Pflicht)
         context.user_data.pop('birthday_confirmed', None)
-        date_pattern = re.compile(r'^(\d{1,2})[\s\.]+(\d{1,2})(?:[\s\.]+(\d{4}))?\.?$')
-        match = date_pattern.match(answer_text)
+        date_pattern = re.compile(r'^(\d{1,2})[\s\.](\d{1,2})[\s\.](\d{4})\.?$')
+        match = date_pattern.match(answer_text.strip())
         if not match:
             await update.message.reply_text(
-                "❌ Das Format stimmt leider nicht.\n\n"
-                "Bitte schreibe z.B.: <code>15.08.</code> oder <code>15.08.1990</code>",
+                "❌ Das Format stimmt nicht oder der Jahrgang fehlt.\n\n"
+                "Bitte schreibe: <b>TT.MM.JJJJ</b>\n"
+                "Beispiel: <code>15.08.1990</code>",
                 parse_mode="HTML"
             )
             context.user_data['birthday_confirmed'] = True  # Nochmals warten
             return ASKING_QUESTIONS
-        day, month = int(match.group(1)), int(match.group(2))
+        day, month, year = int(match.group(1)), int(match.group(2)), int(match.group(3))
         if not (1 <= month <= 12) or not (1 <= day <= 31):
             await update.message.reply_text("❌ Das ist kein gültiges Datum. Bitte erneut eingeben.")
             context.user_data['birthday_confirmed'] = True  # Nochmals warten
