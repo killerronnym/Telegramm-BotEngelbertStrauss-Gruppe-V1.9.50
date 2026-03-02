@@ -63,6 +63,20 @@ def create_app(test_config=None):
         if os.path.exists(INSTALL_LOCK):
             try:
                 db.create_all()
+                # Migration: Neue Spalten hinzufügen falls nicht vorhanden
+                # (db.create_all() erstellt nur neue Tabellen, keine neuen Spalten!)
+                try:
+                    db.session.execute(db.text("ALTER TABLE invite_application ADD COLUMN profile_message_id BIGINT"))
+                    db.session.commit()
+                    print("Migration: profile_message_id hinzugefügt.")
+                except Exception:
+                    db.session.rollback()  # Spalte existiert bereits
+                try:
+                    db.session.execute(db.text("ALTER TABLE invite_application ADD COLUMN profile_chat_id BIGINT"))
+                    db.session.commit()
+                    print("Migration: profile_chat_id hinzugefügt.")
+                except Exception:
+                    db.session.rollback()  # Spalte existiert bereits
                 if not User.query.filter_by(username='admin').first():
                     admin = User(username='admin', role='admin')
                     admin.set_password('admin') 
