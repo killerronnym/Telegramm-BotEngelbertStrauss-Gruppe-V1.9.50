@@ -2,7 +2,10 @@ import sqlite3
 import json
 import os
 
-db_path = 'instance/app.db'
+# Add project root to path
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+db_path = os.path.join(PROJECT_ROOT, 'instance', 'app.db')
+
 if not os.path.exists(db_path):
     print(f"ERROR: {db_path} not found")
     exit(1)
