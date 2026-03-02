@@ -700,22 +700,28 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
             photo_file_id = answer
         elif field['type'] == 'birthday':
             # Geburtstag: NUR Alter im Steckbrief anzeigen, KEIN Datum
-            # Das Datum selbst wird separat in der Birthday-DB gespeichert (für Geburtstagsgratulationen)
-            date_pattern = re.compile(r'^(\d{1,2})[\s\.](\d{1,2})(?:[\s\.](\d{4}))?\.*$')
-            match = date_pattern.match(str(answer))
-            if match and match.group(3):
-                # Jahrgang vorhanden → Alter berechnen
-                birth_year = int(match.group(3))
-                birth_month = int(match.group(2))
-                birth_day = int(match.group(1))
-                today = datetime.today()
-                age = today.year - birth_year - (
-                    (today.month, today.day) < (birth_month, birth_day)
-                )
-                emoji = field.get('emoji', '🎂')
-                name = field.get('display_name', 'Alter')
-                steckbrief_lines.append(f"{emoji} {name}: {age} Jahre")
-            # Kein Jahrgang → kein Alter-Eintrag im Steckbrief (nur DB-Eintrag für Geburtstag)
+            emoji = field.get('emoji', '🎂')
+            name_label = field.get('display_name', 'Alter')
+            answer_str = str(answer).strip()
+
+            # Fall 1: Schon als Alter gespeichert (nach NEIN-Fallback, z.B. '25 Jahre')
+            if 'jahre' in answer_str.lower() or answer_str.isdigit():
+                alter_str = answer_str if 'jahre' in answer_str.lower() else f"{answer_str} Jahre"
+                steckbrief_lines.append(f"{emoji} {name_label}: {alter_str}")
+
+            # Fall 2: Als Datum gespeichert (TT.MM.JJJJ) -> Alter berechnen
+            else:
+                date_pattern = re.compile(r'^(\d{1,2})[\s\.](\d{1,2})[\s\.](\d{4})\.?$')
+                match = date_pattern.match(answer_str)
+                if match:
+                    birth_year = int(match.group(3))
+                    birth_month = int(match.group(2))
+                    birth_day = int(match.group(1))
+                    today = datetime.today()
+                    age = today.year - birth_year - (
+                        (today.month, today.day) < (birth_month, birth_day)
+                    )
+                    steckbrief_lines.append(f"{emoji} {name_label}: {age} Jahre")
 
         else:
             emoji = field.get('emoji', '🔹')
@@ -736,9 +742,11 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
             
             steckbrief_lines.append(f"{emoji} {name}: {answer}")
     
-    # Username oben einfügen wenn gewünscht (Spezial-Typ: header_name oder ID: share_username)
+    # Header + optionaler Telegram-Username
     if share_username_choice == "Ja" and user.username:
-        header = f"👤 <b>Steckbrief von @{user.username}</b>\n"
+        header = f"<b>NEUER STECKBRIEF</b>\n"
+        # Telegram-Name als erste Zeile im Steckbrief-Body (über dem Namen)
+        steckbrief_lines.insert(0, f"📱 <b>Telegram:</b> @{user.username}")
     else:
         header = "<b>NEUER STECKBRIEF</b>\n"
     final_text = header + "\n".join(steckbrief_lines)
