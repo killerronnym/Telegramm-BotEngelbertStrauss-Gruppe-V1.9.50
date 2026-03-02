@@ -6,70 +6,152 @@
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        var el = document.getElementById('fields-sortable');
-
-        function updatePositions() {
-            var order = [];
-            var rows = el.querySelectorAll('tr[data-id]');
-            rows.forEach(function (row, index) {
-                var id = row.getAttribute('data-id');
-                if (id) order.push(id);
-                var input = row.querySelector('.pos-input');
-                if (input) input.value = index + 1;
-            });
-            return order;
+        console.log("Bot Settings JS Initializing...");
+        const tableBody = document.getElementById('fields-sortable');
+        if (!tableBody) {
+            console.error("ERROR: #fields-sortable not found!");
+            return;
         }
+        console.log("Found #fields-sortable with", tableBody.rows.length, "rows.");
 
-        function saveReorder(order) {
-            return fetch("{{ url_for('dashboard.invite_bot_reorder_fields') }}", {
+        function updateAllPositionsAndSave() {
+            const rows = Array.from(tableBody.querySelectorAll('tr[data-id]'));
+            const fieldIds = rows.map(r => r.getAttribute('data-id')).filter(id => !!id);
+
+            console.log("Updating positions for ids:", fieldIds);
+            rows.forEach((row, idx) => {
+                const input = row.querySelector('.pos-input');
+                if (input) {
+                    input.value = idx + 1;
+                    // Reset validity/style if needed
+                    input.style.borderColor = "rgba(255,255,255,0.1)";
+                }
+            });
+
+            console.log("Saving new field order to backend:", fieldIds);
+            fetch("{{ url_for('dashboard.invite_bot_reorder_fields') }}", {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ field_ids: order })
+                body: JSON.stringify({ field_ids: fieldIds })
             })
-                .then(response => response.json())
+                .then(res => res.json())
                 .then(data => {
-                    if (!data.success) alert('Fehler beim Speichern: ' + data.error);
-                });
+                    if (!data.success) {
+                        console.error("Backend Save Failed:", data.error);
+                        alert("Speichern fehlgeschlagen: " + data.error);
+                    } else {
+                        console.log("Backend Save Success.");
+                    }
+                })
+                .catch(err => console.error("Fetch Error:", err));
         }
 
-        if (el) {
-            Sortable.create(el, {
+        // Initialize SortableJS
+        if (typeof Sortable !== 'undefined') {
+            console.log("Initializing SortableJS...");
+            Sortable.create(tableBody, {
                 animation: 150,
                 handle: '.move-arrow',
                 ghostClass: 'sortable-ghost',
                 onEnd: function () {
-                    var order = updatePositions();
-                    saveReorder(order);
+                    console.log("Sortable Drag End detected.");
+                    updateAllPositionsAndSave();
                 }
             });
-
-            // Numeric Input Fallback
-            el.addEventListener('change', function (e) {
-                if (e.target.classList.contains('pos-input')) {
-                    var newPos = parseInt(e.target.value);
-                    var row = e.target.closest('tr');
-                    var rows = Array.from(el.querySelectorAll('tr[data-id]'));
-                    var oldIdx = rows.indexOf(row);
-                    var newIdx = newPos - 1;
-
-                    if (newIdx < 0) newIdx = 0;
-                    if (newIdx >= rows.length) newIdx = rows.length - 1;
-
-                    if (newIdx !== oldIdx) {
-                        if (newIdx > oldIdx) {
-                            row.parentNode.insertBefore(row, rows[newIdx].nextSibling);
-                        } else {
-                            row.parentNode.insertBefore(row, rows[newIdx]);
-                        }
-                        var order = updatePositions();
-                        saveReorder(order);
-                    }
-                }
-            });
+        } else {
+            console.error("ERROR: Sortable library not loaded!");
         }
+
+        // Handle numeric input change (manual reordering)
+        tableBody.addEventListener('change', function (e) {
+            if (e.target.classList.contains('pos-input')) {
+                console.log("POS input change detected:", e.target.value);
+                const row = e.target.closest('tr');
+                const rows = Array.from(tableBody.querySelectorAll('tr[data-id]'));
+                const oldIdx = rows.indexOf(row);
+                const newPos = parseInt(e.target.value);
+                const newIdx = newPos - 1;
+
+                // Validate input
+                if (isNaN(newPos) || newIdx === oldIdx || newIdx < 0 || newIdx >= rows.length) {
+                    console.warn("Invalid position requested:", newPos, "Resetting to", oldIdx + 1);
+                    e.target.value = oldIdx + 1;
+                    return;
+                }
+
+                console.log("Moving row from", oldIdx, "to", newIdx);
+                // Visual move in DOM
+                if (newIdx > oldIdx) {
+                    // Moving down: insert after the target sibling
+                    tableBody.insertBefore(row, rows[newIdx].nextSibling);
+                } else {
+                    // Moving up: insert before the target row
+                    tableBody.insertBefore(row, rows[newIdx]);
+                }
+
+                // Sync all numbers and save to DB
+                updateAllPositionsAndSave();
+            }
+        });
+
+        // --- Other UI Helpers ---
+        function toggleWhitelistSection() {
+            const cb = document.getElementById('whitelist_enabled');
+            const sec = document.getElementById('whitelist_section');
+            if (cb && sec) sec.style.display = cb.checked ? 'block' : 'none';
+        }
+
+        function toggleAgeFields(prefix) {
+            const sel = document.getElementById(prefix + '_type');
+            const sec = document.getElementById(prefix + '_age_section');
+            if (sel && sec) {
+                const show = (sel.value === 'number' || sel.value === 'puppy_age');
+                sec.style.display = show ? 'block' : 'none';
+            }
+        }
+
+        // Whitelist Toggle
+        const wlCb = document.getElementById('whitelist_enabled');
+        if (wlCb) {
+            toggleWhitelistSection();
+            wlCb.addEventListener('change', toggleWhitelistSection);
+        }
+
+        // Add Field Modal
+        const addSel = document.querySelector('#addFieldModal select[name="type"]');
+        if (addSel) {
+            addSel.id = 'add_type';
+            addSel.addEventListener('change', () => toggleAgeFields('add'));
+            toggleAgeFields('add');
+        }
+
+        // Edit Field Modal
+        const editSel = document.getElementById('edit_type');
+        if (editSel) {
+            editSel.addEventListener('change', () => toggleAgeFields('edit'));
+        }
+
+        document.querySelectorAll('.edit-field-btn').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const d = this.dataset;
+                document.getElementById('edit_field_id').value = d.id;
+                document.getElementById('edit_label').value = d.label;
+                document.getElementById('edit_type').value = d.type;
+                document.getElementById('edit_required').checked = d.required === 'true';
+                document.getElementById('edit_enabled').checked = d.enabled === 'true';
+                document.getElementById('edit_emoji').value = d.emoji;
+                document.getElementById('edit_display_name').value = d.display_name;
+                document.getElementById('edit_min_age').value = d.min_age || '';
+                document.getElementById('edit_min_age_error').value = d.min_age_error || '';
+                toggleAgeFields('edit');
+                new bootstrap.Modal(document.getElementById('editFieldModal')).show();
+            });
+        });
     });
 </script>
 {% endblock %}
+
+{% block content %}
 <style>
     .dashboard-container {
         padding: 2.5rem;
@@ -118,22 +200,39 @@
     }
 
     .move-arrow {
-        color: var(--text-dim);
+        color: rgba(255, 255, 255, 0.4);
         cursor: grab;
-        padding: 2px;
+        padding: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: color 0.2s;
     }
 
     .move-arrow:active {
         cursor: grabbing;
     }
 
-    .sortable-ghost {
-        opacity: 0.4;
-        background: rgba(59, 130, 246, 0.1) !important;
+    .move-arrow:hover {
+        color: #3b82f6;
     }
 
-    .move-arrow:hover {
-        color: var(--blue-accent);
+    .pos-input {
+        width: 42px !important;
+        height: 28px !important;
+        background: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        color: #fff !important;
+        font-size: 0.85rem !important;
+        font-weight: 700 !important;
+        text-align: center;
+        padding: 0 !important;
+        border-radius: 4px !important;
+    }
+
+    .sortable-ghost {
+        opacity: 0.3;
+        background: rgba(59, 130, 246, 0.2) !important;
     }
 
     .badge-id {
@@ -395,13 +494,11 @@
                                             style="border-bottom: 1px solid rgba(255,255,255,0.03) !important;">
                                             <td class="text-center">
                                                 <div class="d-flex align-items-center justify-content-center gap-1">
-                                                    <div class="move-arrow fs-5 opacity-50"><i
-                                                            class="bi bi-grip-vertical"></i></div>
+                                                    <div class="move-arrow fs-5"><i class="bi bi-list"></i></div>
                                                     <input type="number"
                                                         class="form-control form-control-sm pos-input text-center p-0"
                                                         value="{{ loop.index }}" min="1"
-                                                        max="{{ config.get('form_fields', [])|length }}"
-                                                        style="width: 38px; height: 26px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; font-size: 0.8rem; font-weight: bold;">
+                                                        max="{{ config.get('form_fields', [])|length }}">
                                                 </div>
                                             </td>
                                             <td><span
@@ -584,61 +681,6 @@
 </div>
 </div>
 
-<script>
-    function toggleWhitelistSection() {
-        const checkbox = document.getElementById('whitelist_enabled');
-        const section = document.getElementById('whitelist_section');
-        if (checkbox && section) {
-            section.style.display = checkbox.checked ? 'block' : 'none';
-        }
-    }
-
-    function toggleAgeFields(prefix) {
-        const typeSelect = document.getElementById(prefix + '_type');
-        const ageSection = document.getElementById(prefix + '_age_section');
-        if (typeSelect && ageSection) {
-            // Zeige Alters-Sektion für "number" ODER "puppy_age"
-            const show = (typeSelect.value === 'number' || typeSelect.value === 'puppy_age');
-            ageSection.style.display = show ? 'block' : 'none';
-        }
-    }
-
-    document.addEventListener('DOMContentLoaded', function () {
-        toggleWhitelistSection();
-
-        // Modal Type Toggle Listeners
-        const addType = document.querySelector('#addFieldModal select[name="type"]');
-        if (addType) {
-            addType.id = 'add_type';
-            addType.addEventListener('change', () => toggleAgeFields('add'));
-        }
-        const editType = document.getElementById('edit_type');
-        if (editType) {
-            editType.addEventListener('change', () => toggleAgeFields('edit'));
-        }
-
-        document.querySelectorAll('.edit-field-btn').forEach(btn => {
-            btn.addEventListener('click', function () {
-                const d = this.dataset;
-                document.getElementById('edit_field_id').value = d.id;
-                document.getElementById('edit_label').value = d.label;
-                document.getElementById('edit_type').value = d.type;
-                document.getElementById('edit_required').checked = d.required === 'true';
-                document.getElementById('edit_enabled').checked = d.enabled === 'true';
-                document.getElementById('edit_emoji').value = d.emoji;
-                document.getElementById('edit_display_name').value = d.display_name;
-
-                // Neue Felder
-                document.getElementById('edit_min_age').value = d.min_age || '';
-                document.getElementById('edit_min_age_error').value = d.min_age_error || '';
-
-                toggleAgeFields('edit');
-
-                const modal = new bootstrap.Modal(document.getElementById('editFieldModal'));
-                modal.show();
-            });
-        });
-    });
 </script>
 
 <!-- Add Field Modal -->
