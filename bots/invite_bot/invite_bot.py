@@ -186,7 +186,7 @@ async def letsgo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     label = first_field.get('label', 'Frage?').replace('{username}', f"@{username}")
     
     keyboard = None
-    if first_field['type'] in ['boolean_buttons', 'header_name', 'pm_contact']:
+    if first_field['type'] in ['boolean_buttons', 'header_name', 'pm_contact', 'birthday']:
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ JA", callback_data="bool_ans_yes"),
              InlineKeyboardButton("❌ NEIN", callback_data="bool_ans_no")]
@@ -216,6 +216,30 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         cb_data = update.callback_query.data
         if cb_data.startswith("bool_ans_"):
             answer_val = cb_data.replace("bool_ans_", "")
+
+            # Spezialbehandlung für Geburtstags-Felder: zweistufig
+            if field['type'] == 'birthday':
+                await update.callback_query.answer()
+                if answer_val == 'no':
+                    # NEIN -> Feld überspringen
+                    context.user_data['answers'][field['id']] = 'n/a'
+                    await update.callback_query.edit_message_text("❌ Geburtstag wird nicht eingetragen.")
+                    logger.info(f"handle_answer: Birthday Feld '{field['id']}' übersprungen.")
+                    return await next_question(update, context)
+                else:
+                    # JA -> Formathinweis senden und auf Datum warten
+                    context.user_data['birthday_confirmed'] = True
+                    await update.callback_query.edit_message_text("✅ Super! Bitte gib deinen Geburtstag ein.")
+                    await context.bot.send_message(
+                        chat_id=update.effective_chat.id,
+                        text="📅 Schreibe deinen Geburtstag in folgendem Format:\n\n"
+                             "<b>TT.MM.</b>  →  z.B. <code>15.08.</code>\n"
+                             "<b>TT.MM.JJJJ</b>  →  z.B. <code>15.08.1990</code> (mit Jahrgang)",
+                        parse_mode="HTML"
+                    )
+                    return ASKING_QUESTIONS
+
+            # Standard JA/NEIN für alle anderen Felder
             user_answer = "Ja" if answer_val == "yes" else "Nein"
             context.user_data['answers'][field['id']] = user_answer
             await update.callback_query.answer()
@@ -250,17 +274,30 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return await next_question(update, context)
 
     if field['type'] == 'birthday':
-        # Validierung wie im birthday_bot
+        # Noch nicht bestätigt? Erwarte JA/NEIN über Buttons
+        if not context.user_data.get('birthday_confirmed'):
+            await update.message.reply_text(
+                "Bitte nutze die Buttons ✅ JA / ❌ NEIN um zu antworten."
+            )
+            return ASKING_QUESTIONS
+        # Bestätigt: Datum validieren
+        context.user_data.pop('birthday_confirmed', None)
         date_pattern = re.compile(r'^(\d{1,2})[\s\.]+(\d{1,2})(?:[\s\.]+(\d{4}))?\.?$')
         match = date_pattern.match(answer_text)
         if not match:
-            await update.message.reply_text("Das war leider das falsche Format. Beispiele: `15.08.` oder `15.08.1990`.")
+            await update.message.reply_text(
+                "❌ Das Format stimmt leider nicht.\n\n"
+                "Bitte schreibe z.B.: <code>15.08.</code> oder <code>15.08.1990</code>",
+                parse_mode="HTML"
+            )
+            context.user_data['birthday_confirmed'] = True  # Nochmals warten
             return ASKING_QUESTIONS
         day, month = int(match.group(1)), int(match.group(2))
         if not (1 <= month <= 12) or not (1 <= day <= 31):
-            await update.message.reply_text("Das ist leider kein echtes Kalenderdatum. Bitte korrigiere es.")
+            await update.message.reply_text("❌ Das ist kein gültiges Datum. Bitte erneut eingeben.")
+            context.user_data['birthday_confirmed'] = True  # Nochmals warten
             return ASKING_QUESTIONS
-        answer = answer_text # Wir speichern den Text
+        answer = answer_text  # Datum speichern
 
     if field['type'] == 'photo':
         if not update.message.photo:
@@ -378,7 +415,7 @@ async def next_question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         next_label = next_label.replace('{username}', f"@{username}")
         
         keyboard = None
-        if next_field['type'] in ['boolean_buttons', 'header_name', 'pm_contact']:
+        if next_field['type'] in ['boolean_buttons', 'header_name', 'pm_contact', 'birthday']:
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("✅ JA", callback_data="bool_ans_yes"),
                  InlineKeyboardButton("❌ NEIN", callback_data="bool_ans_no")]
