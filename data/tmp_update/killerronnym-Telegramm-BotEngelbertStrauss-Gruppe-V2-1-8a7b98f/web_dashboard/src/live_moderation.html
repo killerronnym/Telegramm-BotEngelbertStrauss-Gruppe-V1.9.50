@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+
+{% block title %}Live Moderation{% endblock %}
+
+{% block content %}
+<style>
+    :root {
+        --moderation-bg: #0F172A;
+        --sidebar-bg: #1E293B;
+        --chat-bg: #0F172A;
+        --message-bubble-bg: #1E293B;
+        --message-hover-bg: #334155;
+        --text-bright: #F1F5F9;
+        --text-muted: #94A3B8;
+        --border-color: #334155;
+        --accent-color: #38BDF8;
+        --info-color: #60A5FA;
+        --deleted-bg: rgba(239, 68, 68, 0.15);
+        --deleted-border: #ef4444;
+    }
+    .moderation-layout { display: flex; height: calc(100vh - 70px); gap: 1rem; padding: 1rem; background-color: var(--moderation-bg); }
+    .sidebar { flex: 0 0 320px; background-color: var(--sidebar-bg); border-radius: 12px; padding: 1rem; overflow-y: auto; border: 1px solid var(--border-color); }
+    .sidebar h5 { color: var(--text-bright); padding-bottom: 0.75rem; border-bottom: 1px solid var(--border-color); margin-bottom: 1rem; }
+    .topic-list .list-group-item { background-color: transparent; border: none; color: var(--text-muted); padding: 0.6rem 1rem; border-radius: 8px; font-weight: 500; cursor: pointer; display: block; text-decoration: none; margin-bottom: 2px; text-align: left; width: 100%; }
+    .topic-list .list-group-item:hover { background-color: var(--message-hover-bg); color: var(--text-bright); }
+    .topic-list .list-group-item.active { background-color: var(--accent-color); color: #0F172A; font-weight: 700; }
+    .chat-container { flex-grow: 1; background-color: var(--chat-bg); border-radius: 12px; display: flex; flex-direction: column; border: 1px solid var(--border-color); }
+    .chat-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+    .chat-header h4 { margin: 0; color: var(--text-bright); }
+    .message-feed { flex-grow: 1; overflow-y: auto; padding: 1.5rem; }
+    .message-bubble { display: flex; gap: 1rem; margin-bottom: 0.5rem; padding: 0.75rem; border-radius: 12px; transition: background-color 0.2s; position: relative; border: 1px solid transparent; }
+    .message-bubble:hover { background-color: var(--message-bubble-bg); }
+    .message-bubble.is-deleted { background-color: var(--deleted-bg); border-color: var(--deleted-border); opacity: 0.8; }
+    .message-bubble .avatar { width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0; object-fit: cover; background: #2d3748; }
+    .message-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.3rem; }
+    .message-header .user-name { font-weight: 700; }
+    .message-header .timestamp { font-size: 0.75rem; color: var(--accent-color); }
+    .message-header .topic-badge { font-size: 0.65rem; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; color: var(--text-muted); }
+    .message-header .warning-badge { font-size: 0.65rem; background: rgba(245, 158, 11, 0.1); border: 1px solid #f59e0b; color: #f59e0b; padding: 2px 6px; border-radius: 4px; cursor: pointer; }
+    .message-text { color: var(--text-muted); white-space: pre-wrap; word-break: break-word; }
+    .deletion-info { font-size: 0.7rem; color: #ef4444; font-weight: bold; margin-top: 0.2rem; text-transform: uppercase; }
+    .message-actions { opacity: 0; margin-left: auto; transition: opacity 0.2s; display: flex; gap: 0.5rem; }
+    .message-bubble:not(.is-deleted):hover .message-actions { opacity: 1; }
+    .message-actions .btn { background: #ef4444; border: none; color: white; padding: 4px 10px; font-size: 0.75rem; border-radius: 6px; }
+    .loading-spinner { text-align: center; padding: 3rem; }
+</style>
+
+<div class="moderation-layout">
+    <aside class="sidebar">
+        <h5 class="fw-bold"><i class="bi bi-hash me-2"></i>Topics</h5>
+        <div class="topic-list" id="topic-list">
+            <button class="list-group-item active" data-topic-id="all">
+                <i class="bi bi-chat-dots-fill me-2"></i>Alle Nachrichten
+            </button>
+        </div>
+    </aside>
+
+    <main class="chat-container">
+        <header class="chat-header">
+            <div class="d-flex align-items-center gap-3">
+                <h4>Live Bot Interaktionen</h4>
+                <button class="btn btn-outline-info btn-sm" data-bs-toggle="modal" data-bs-target="#settingsModal">
+                    <i class="bi bi-gear-fill"></i> Einstellungen
+                </button>
+            </div>
+            <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> Zurück
+            </a>
+        </header>
+        <div class="message-feed" id="message-feed">
+            <div class="loading-spinner">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Lade Nachrichten...</span>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal fade" id="settingsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark text-white border-secondary">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title">⚙️ Moderations-Einstellungen</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label small text-muted">MAX. VERWARNUNGEN BIS AKTION</label>
+                    <input type="number" id="setMaxWarnings" class="form-control bg-dark text-white border-secondary" value="3">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small text-muted">AKTION BEI LIMIT-ERREICHUNG</label>
+                    <select id="setPunishmentType" class="form-select bg-dark text-white border-secondary">
+                        <option value="none">Nichts tun (Nur zählen)</option>
+                        <option value="mute">Stummschalten (Mute)</option>
+                        <option value="kick">Kicken (Rauswerfen)</option>
+                        <option value="ban">Bannen (Permanent)</option>
+                    </select>
+                </div>
+                <div class="mb-3" id="muteDurationContainer">
+                    <label class="form-label small text-muted">MUTE DAUER (STUNDEN)</label>
+                    <input type="number" id="setMuteDuration" class="form-control bg-dark text-white border-secondary" value="24">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small text-muted">LÖSCH-TIMER FÜR MELDUNGEN (SEKUNDEN)</label>
+                    <input type="number" id="setCleanupSeconds" class="form-control bg-dark text-white border-secondary" value="60">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small text-muted">BOT FÜR PRIVATNACHRICHTEN</label>
+                    <select id="setWarningBot" class="form-select bg-dark text-white border-secondary">
+                        <option value="invite">Invite Bot (Standard)</option>
+                        <option value="id_finder">ID-Finder Bot</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-primary" id="saveSettingsBtn">Speichern</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Moderation Modal -->
+<div class="modal fade" id="moderationModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark text-white border-secondary">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title">🚫 Nachricht moderieren</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="modMsgId">
+                <div class="mb-3">
+                    <label class="form-label small text-muted">GRUND FÜR LÖSCHUNG</label>
+                    <select class="form-select bg-dark text-white border-secondary" id="modReasonSelect">
+                        <option value="Beleidigung / Unhöflichkeit">Beleidigung / Unhöflichkeit</option>
+                        <option value="Spam / Werbung">Spam / Werbung</option>
+                        <option value="Falsches Topic / Offtopic">Falsches Topic / Offtopic</option>
+                        <option value="NSFW / Unangemessener Inhalt">NSFW / Unangemessener Inhalt</option>
+                        <option value="Sonstiges">Sonstiges (Manueller Grund)</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <input type="text" class="form-control bg-dark text-white border-secondary" id="modReasonCustom" placeholder="Manueller Grund..." style="display:none;">
+                </div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="modSendPublic" checked>
+                    <label class="form-check-label">Öffentliche Löschmeldung im Topic</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="modSendPrivate" checked>
+                    <label class="form-check-label">Private Nachricht an Nutzer senden</label>
+                </div>
+            </div>
+            <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-danger" id="confirmModBtn">Nachricht löschen</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Utility functions defined at the top scope
+    function escapeHTML(str) { 
+        if (!str) return '';
+        return str.toString().replace(/[&<>"']/g, m => ({
+            '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+        }[m])); 
+    }
+
+    function formatTimestamp(ts_str) { 
+        if (!ts_str) return '—';
+        const d = new Date(ts_str); 
+        return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); 
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        const messageFeed = document.getElementById('message-feed');
+        const topicList = document.getElementById('topic-list');
+        const moderationModal = new bootstrap.Modal(document.getElementById('moderationModal'));
+        const settingsModal = new bootstrap.Modal(document.getElementById('settingsModal'));
+        let currentTopic = 'all';
+        let intervalId;
+
+        document.getElementById('modReasonSelect').addEventListener('change', function() {
+            document.getElementById('modReasonCustom').style.display = (this.value === 'Sonstiges') ? 'block' : 'none';
+        });
+
+        document.getElementById('setPunishmentType').addEventListener('change', function() {
+            document.getElementById('muteDurationContainer').style.display = (this.value === 'mute') ? 'block' : 'none';
+        });
+
+        async function fetchTopics() {
+            try {
+                const response = await fetch('/api/topics');
+                const topics = await response.json();
+                let html = `<button class="list-group-item ${currentTopic === 'all' ? 'active' : ''}" data-topic-id="all"><i class="bi bi-chat-dots-fill me-2"></i>Alle Nachrichten</button>`;
+                topics.forEach(t => {
+                    html += `<button class="list-group-item ${currentTopic == t.id ? 'active' : ''}" data-topic-id="${t.id}"><i class="bi bi-hash me-2"></i>${escapeHTML(t.name)}</button>`;
+                });
+                topicList.innerHTML = html;
+                document.querySelectorAll('.topic-list .list-group-item').forEach(btn => {
+                    btn.onclick = () => {
+                        currentTopic = btn.dataset.topicId;
+                        document.querySelectorAll('.topic-list .list-group-item').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                        fetchMessages();
+                    };
+                });
+            } catch (e) { console.error("Error fetching topics:", e); }
+        }
+
+        async function fetchMessages() {
+            try {
+                const response = await fetch(`/api/live-messages?topic_id=${currentTopic}`);
+                if (!response.ok) throw new Error("Network response was not ok");
+                const messages = await response.json();
+                renderMessages(messages);
+            } catch (error) { 
+                console.error("Error fetching messages:", error);
+                messageFeed.innerHTML = '<p class="text-danger text-center">Fehler beim Laden der Nachrichten.</p>';
+            }
+        }
+
+        function renderMessages(messages) {
+            if (!messages || messages.length === 0) {
+                messageFeed.innerHTML = '<p class="text-muted text-center">Keine Nachrichten gefunden.</p>';
+                return;
+            }
+            let html = '';
+            messages.forEach(msg => {
+                html += `
+                    <div class="message-bubble ${msg.is_deleted ? 'is-deleted' : ''}">
+                        <img src="${msg.avatar_url}" class="avatar" onerror="this.src='https://ui-avatars.com/api/?name=${msg.username}&background=random&color=fff'">
+                        <div class="message-content flex-grow-1">
+                            <div class="message-header">
+                                <span class="user-name text-white">${escapeHTML(msg.full_name || msg.username)}</span>
+                                <span class="warning-badge" onclick="clearWarnings(${msg.user_id})"><i class="bi bi-exclamation-triangle"></i> ${msg.warning_count}</span>
+                                <span class="timestamp">${formatTimestamp(msg.ts_str)}</span>
+                                <span class="topic-badge">${escapeHTML(msg.topic_name)}</span>
+                                ${!msg.is_deleted ? `
+                                <div class="message-actions">
+                                    <button class="btn" onclick="openModModal(${msg.id})">Löschen</button>
+                                </div>` : ''}
+                            </div>
+                            <div class="message-text">${escapeHTML(msg.text)}</div>
+                            ${msg.is_deleted ? `<div class="deletion-info">🗑️ GESTRICHEN: ${escapeHTML(msg.deletion_reason)}</div>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+            messageFeed.innerHTML = html;
+        }
+
+        window.openModModal = (id) => {
+            document.getElementById('modMsgId').value = id;
+            moderationModal.show();
+        };
+
+        window.clearWarnings = async (uid) => {
+            if(confirm("Alle Verwarnungen für diesen Nutzer löschen?")) {
+                const res = await fetch(`/api/moderation/warnings/clear/${uid}`, {method: 'POST'});
+                if(res.ok) fetchMessages();
+            }
+        };
+
+        document.getElementById('confirmModBtn').onclick = async () => {
+            const id = document.getElementById('modMsgId').value;
+            const selectReason = document.getElementById('modReasonSelect').value;
+            const reason = selectReason === 'Sonstiges' ? document.getElementById('modReasonCustom').value : selectReason;
+            const res = await fetch('/api/moderation/delete', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ id, reason, send_public: document.getElementById('modSendPublic').checked, send_private: document.getElementById('modSendPrivate').checked })
+            });
+            if (res.ok) { moderationModal.hide(); fetchMessages(); }
+        };
+
+        document.getElementById('saveSettingsBtn').onclick = async () => {
+            const res = await fetch('/api/moderation/settings', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    max_warnings: document.getElementById('setMaxWarnings').value,
+                    cleanup_notification_seconds: document.getElementById('setCleanupSeconds').value,
+                    warning_bot_name: document.getElementById('setWarningBot').value,
+                    punishment_type: document.getElementById('setPunishmentType').value,
+                    mute_duration: document.getElementById('setMuteDuration').value
+                })
+            });
+            if (res.ok) { 
+                settingsModal.hide(); 
+                alert("Einstellungen gespeichert!"); 
+            }
+        };
+
+        // Initial Load
+        fetchTopics();
+        fetchMessages();
+        
+        // Settings Load
+        async function loadSettings() {
+            try {
+                const res = await fetch('/api/moderation/get-settings');
+                const s = await res.json();
+                if (s.max_warnings) {
+                    document.getElementById('setMaxWarnings').value = s.max_warnings;
+                    document.getElementById('setCleanupSeconds').value = s.cleanup_notification_seconds;
+                    document.getElementById('setWarningBot').value = s.warning_bot_name;
+                    document.getElementById('setPunishmentType').value = s.punishment_type;
+                    document.getElementById('setMuteDuration').value = s.mute_duration;
+                    document.getElementById('muteDurationContainer').style.display = (s.punishment_type === 'mute') ? 'block' : 'none';
+                }
+            } catch(e) {}
+        }
+        loadSettings();
+
+        intervalId = setInterval(() => { fetchMessages(); fetchTopics(); }, 5000);
+        window.addEventListener('beforeunload', () => clearInterval(intervalId));
+    });
+</script>
+{% endblock %}

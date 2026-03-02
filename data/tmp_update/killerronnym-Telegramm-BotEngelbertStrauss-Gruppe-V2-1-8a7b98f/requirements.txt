@@ -1,0 +1,23 @@
+# Dev environment
+pip
+autopep8
+python-dotenv
+
+# App
+flask
+flask-sqlalchemy
+flask-login
+python-telegram-bot
+APScheduler
+flask-apscheduler
+pytz
+pyTelegramBotAPI
+schedule
+mcstatus
+gunicorn
+TikTokLive
+requests
+websockets
+pymysql
+cryptography
+waitress

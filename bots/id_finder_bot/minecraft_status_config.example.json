@@ -1,0 +1,20 @@
+{
+  "name": "Minecraft Server",
+  "mc_host": "127.0.0.1",
+  "mc_port": 25565,
+  "host": "127.0.0.1",
+  "port": 25565,
+  "timeout_seconds": 5,
+  "display_host": "example.com",
+  "display_port": 25565,
+  "chat_id": "YOUR_CHAT_ID_HERE",
+  "topic_id": "YOUR_TOPIC_ID_HERE",
+  "update_seconds": 30,
+  "delete_player_seconds": 8,
+  "status_message_id": null,
+  "status_message_created_at": null,
+  "bot_token": "YOUR_BOT_TOKEN_HERE",
+  "pi_host": "",
+  "pi_ssh_port": 22,
+  "pi_ssh_user": ""
+}

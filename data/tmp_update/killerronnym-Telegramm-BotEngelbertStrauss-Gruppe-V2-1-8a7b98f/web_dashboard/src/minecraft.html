@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}Minecraft Server Status{% endblock %}
+
+{% block content %}
+<style>
+    .dashboard-container { padding: 2.5rem; }
+    .btn-back { background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-muted); color: var(--text-secondary); font-weight: 500; border-radius: 8px; padding: 0.6rem 1.25rem; transition: all 0.2s ease; text-decoration: none; display: inline-flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; }
+    .btn-back:hover { background: rgba(255, 255, 255, 0.05); color: #fff; border-color: var(--blue-accent); }
+    .status-badge-container { background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-muted); padding: 0.4rem 1.2rem; border-radius: 30px; display: inline-flex; align-items: center; gap: 0.6rem; }
+    .log-display { background: #000; color: #a5b4fc; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; padding: 1rem; border-radius: 8px; border: 1px solid #1e293b; line-height: 1.5; }
+    .stat-card { background: rgba(255, 255, 255, 0.01); border: 1px solid rgba(255, 255, 255, 0.05); padding: 1.25rem; border-radius: 10px; }
+    .stat-label { font-size: 0.7rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem; }
+    .stat-value { font-size: 1.1rem; font-weight: 600; color: var(--text-primary); }
+</style>
+
+<div class="dashboard-container">
+    <div class="d-flex justify-content-between align-items-start mb-5">
+        <div>
+            <a href="/" class="btn-back mb-4"><i class="bi bi-chevron-left"></i> ZURÜCK ZUR ÜBERSICHT</a>
+            <h1 class="fw-bold mb-1 h3 text-white">Minecraft <span class="text-blue">Status</span></h1>
+            <p class="text-secondary small">Live-Monitoring & System-Metriken</p>
+        </div>
+        <div class="status-badge-container mt-2">
+            {% if is_running %}
+                <span class="rounded-circle bg-success" style="width: 8px; height: 8px; box-shadow: 0 0 8px #10b981;"></span>
+                <span class="small fw-bold text-success tracking-wider">AKTIV</span>
+            {% else %}
+                <span class="rounded-circle bg-danger" style="width: 8px; height: 8px;"></span>
+                <span class="small fw-bold text-danger tracking-wider">OFFLINE</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header"><h6>Steuerung</h6></div>
+                <div class="card-body">
+                    <div class="d-flex gap-2 mb-2">
+                        <form method="post" action="{{ url_for('minecraft_status_start') }}" class="flex-grow-1"><button class="btn btn-success w-100 fw-bold" type="submit" {% if is_running %}disabled{% endif %}>▶ START</button></form>
+                        <form method="post" action="{{ url_for('minecraft_status_stop') }}" class="flex-grow-1"><button class="btn btn-danger w-100 fw-bold" type="submit" {% if not is_running %}disabled{% endif %}>■ STOP</button></form>
+                    </div>
+                    <form method="get" action="{{ url_for('dashboard.minecraft_status_page') }}" class="m-0"><button class="btn btn-outline-light w-100" type="submit">🔄 REFRESH</button></form>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center"><h6>🟩 Minecraft Server</h6> <small class="text-dim">{{ status.last_update or '—' }}</small></div>
+                <div class="card-body">
+                    <div class="stat-card mb-2">
+                        <div class="stat-label">Server</div>
+                        <div class="stat-value small">{{ cfg.display_host or cfg.mc_host or '—' }}:{{ cfg.display_port or cfg.mc_port or '—' }}</div>
+                        <div class="mt-2"><span class="badge p-2 {{ 'bg-success' if server_online else 'bg-danger' }}">{{ '● Online' if server_online else '● Offline' }}</span></div>
+                    </div>
+                    <div class="stat-card mb-2">
+                        <div class="stat-label">Spieler</div>
+                        <div class="stat-value">{{ status.players or '—' }}{% if status.max_players %} <span class="text-dim small">/ {{ status.max_players }}</span>{% endif %}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Version</div>
+                        <div class="stat-value small">{{ status.version or '—' }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header"><h6>🍓 Raspberry Pi Metriken</h6></div>
+                <div class="card-body p-4">
+                    <div class="row g-3">
+                        <div class="col-md-3"><div class="stat-card text-center"><div class="stat-label">CPU</div><div class="stat-value">{{ pi.cpu_percent or '—' }}%</div></div></div>
+                        <div class="col-md-3"><div class="stat-card text-center"><div class="stat-label">RAM</div><div class="stat-value small">{{ pi.ram_used_mb or '—' }} MB</div></div></div>
+                        <div class="col-md-3"><div class="stat-card text-center"><div class="stat-label">TEMP</div><div class="stat-value">{{ pi.temp_c or '—' }}°C</div></div></div>
+                        <div class="col-md-3"><div class="stat-card text-center"><div class="stat-label">DISK</div><div class="stat-value small">{{ pi.disk_percent or '—' }}%</div></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><h6>⚙️ Konfiguration</h6></div>
+                <div class="card-body">
+                    <form method="post" action="{{ url_for('minecraft_status_save') }}">
+                        <div class="row g-3">
+                            <div class="col-md-8"><label class="small text-secondary fw-bold mb-1">Interne IP / Host</label><input class="form-control" name="mc_host" value="{{ cfg.mc_host or '' }}" required></div>
+                            <div class="col-md-4"><label class="small text-secondary fw-bold mb-1">Port</label><input class="form-control" name="mc_port" value="{{ cfg.mc_port or 25565 }}" type="number" required></div>
+                            <div class="col-md-8"><label class="small text-secondary fw-bold mb-1">Anzeige Host (Telegram)</label><input class="form-control" name="display_host" value="{{ cfg.display_host or '' }}"></div>
+                            <div class="col-md-4"><label class="small text-secondary fw-bold mb-1">Anzeige Port</label><input class="form-control" name="display_port" value="{{ cfg.display_port or cfg.mc_port or 25565 }}" type="number"></div>
+                            <div class="col-md-8"><label class="small text-secondary fw-bold mb-1">Gruppenchat ID</label><input class="form-control" name="chat_id" value="{{ cfg.chat_id or '' }}" required></div>
+                            <div class="col-md-4"><label class="small text-secondary fw-bold mb-1">Topic ID</label><input class="form-control" name="topic_id" value="{{ cfg.topic_id or '' }}"></div>
+                        </div>
+                        <hr class="my-4 border-white border-opacity-10">
+                        <div class="d-flex gap-2">
+                            <button class="btn-blue-action flex-grow-1" type="submit">EINSTELLUNGEN SPEICHERN</button>
+                            <button class="btn btn-outline-warning" type="submit" formaction="{{ url_for('minecraft_status_reset_message') }}" formmethod="post">RESET MESSAGE</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card bg-black border-0">
+                <div class="card-header border-0 pb-0"><h6 class="text-secondary small font-monospace">System Console</h6></div>
+                <div class="card-body p-0">
+                    <pre class="log-display mb-0" style="height: 160px; overflow-y: auto;">{% if log_tail %}{% for line in log_tail.split('\n') %}{{ line }}
+{% endfor %}{% else %}—{% endif %}</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

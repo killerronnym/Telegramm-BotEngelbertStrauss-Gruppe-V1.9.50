@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+
+{% block title %}ID-Finder | Dashboard{% endblock %}
+
+{% block content %}
+<style>
+    .dashboard-container { padding: 2.5rem; }
+    .btn-back { background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-muted); color: var(--text-secondary); font-weight: 500; border-radius: 8px; padding: 0.6rem 1.25rem; transition: all 0.2s ease; text-decoration: none; display: inline-flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; }
+    .btn-back:hover { background: rgba(255, 255, 255, 0.05); color: #fff; border-color: var(--blue-accent); }
+    
+    .card { background: var(--card-base); border: 1px solid var(--border-muted); border-radius: 12px; margin-bottom: 1.5rem; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3); }
+    .card-header { background: rgba(0, 0, 0, 0.1); border-bottom: 1px solid var(--border-muted); padding: 1rem 1.5rem; }
+    .card-header h6 { margin-bottom: 0; font-weight: 600; font-size: 0.85rem; letter-spacing: 0.02em; color: var(--text-primary); display: flex; align-items: center; gap: 0.75rem; }
+    
+    .status-badge-container { background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-muted); padding: 0.4rem 1.2rem; border-radius: 30px; display: inline-flex; align-items: center; gap: 0.6rem; }
+    
+    .form-label-small { font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.03em; }
+    
+    .table { color: var(--text-primary); --bs-table-bg: transparent; --bs-table-border-color: rgba(255, 255, 255, 0.04); font-size: 0.85rem; }
+    .table thead th { background: rgba(0, 0, 0, 0.15); color: var(--text-dim); font-weight: 600; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.08em; padding: 0.8rem 1.2rem; border-bottom: 1px solid var(--border-muted); }
+    
+    /* Action Buttons Style */
+    .btn-quick-action { font-weight: 600; border: none; padding: 0.6rem 1.25rem; border-radius: 8px; color: white; display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none; transition: all 0.2s; font-size: 0.85rem; cursor: pointer; }
+    .btn-quick-action:hover { transform: translateY(-2px); color: white; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+    .btn-cyan { background-color: #06b6d4; }
+    .btn-cyan:hover { background-color: #0891b2; }
+    .btn-amber { background-color: #f59e0b; color: #111; }
+    .btn-amber:hover { background-color: #d97706; color: #000; }
+    .btn-rose { background-color: #e11d48; }
+    .btn-rose:hover { background-color: #be123c; }
+    .btn-indigo { background-color: #6366f1; }
+    .btn-indigo:hover { background-color: #4f46e5; }
+
+    .form-check-input { width: 3em; height: 1.5em; background-color: var(--input-field-bg); border-color: var(--border-muted); }
+    .form-check-input:checked { background-color: var(--blue-accent); border-color: var(--blue-accent); }
+
+    .btn-save-only { background-color: #3b82f6; border: none; }
+    .btn-stop-bot { background-color: #ef4444; border: none; }
+    .btn-start-bot { background-color: #10b981; border: none; }
+
+    /* Registry Row Style */
+    .registry-row:hover { background: rgba(255,255,255,0.02); }
+    .btn-outline-info { border-color: #0dcaf0; color: #0dcaf0; }
+    .btn-outline-info:hover { background-color: #0dcaf0; color: #000; }
+    .btn-outline-danger { border-color: #dc3545; color: #dc3545; }
+    .btn-outline-danger:hover { background-color: #dc3545; color: #fff; }
+</style>
+
+<div class="dashboard-container">
+    <a href="{{ url_for('dashboard.index') }}" class="btn btn-secondary mb-3">
+        <i class="bi bi-arrow-left"></i> Zurück zum Dashboard
+    </a>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex align-items-center gap-3">
+            <div class="bg-primary bg-opacity-10 p-2 rounded-3">
+                <i class="bi bi-person-badge text-primary h4 mb-0"></i>
+            </div>
+            <div>
+                <h1 class="fw-bold mb-0 h3 text-white">ID-Finder & Moderations-Bot</h1>
+            </div>
+        </div>
+        <div class="status-badge-container">
+            {% if is_running %}
+                <span class="badge bg-success py-2 px-3">Läuft</span>
+            {% else %}
+                <span class="badge bg-danger py-2 px-3">Gestoppt</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <form action="/id-finder/save-config" method="POST">
+    <div class="card mb-4">
+        <div class="card-header">
+            <h6><i class="bi bi-gear-fill"></i> Konfiguration & Steuerung</h6>
+        </div>
+        <div class="card-body">
+            <!-- Token & IDs -->
+            <div class="row g-3 mb-4">
+                <div class="col-12">
+                    <label class="form-label-small">Bot Token</label>
+                    <input type="password" class="form-control" name="bot_token" value="{{ config.bot_token or '' }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label-small">Admin-Gruppen-ID</label>
+                    <input type="text" class="form-control" name="admin_group_id" value="{{ config.admin_group_id or '' }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label-small">Haupt-Gruppen-ID</label>
+                    <input type="text" class="form-control" name="main_group_id" value="{{ config.main_group_id or '' }}">
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label-small">Log-Topic-ID (Optional)</label>
+                    <input type="text" class="form-control" name="admin_log_topic_id" value="{{ config.admin_log_topic_id or '' }}" placeholder="z.B. 123">
+                </div>
+            </div>
+
+            <hr class="border-white border-opacity-10 my-4">
+
+            <!-- Bereinigung -->
+            <h6 class="mb-3 text-white d-flex align-items-center gap-2">
+                <i class="bi bi-brush text-warning"></i> Automatische Bereinigung
+            </h6>
+            <div class="row g-4 mb-4">
+                <div class="col-md-6">
+                    <div class="form-check form-switch d-flex align-items-center gap-3 mb-3">
+                        <input class="form-check-input" type="checkbox" name="delete_commands" {% if config.delete_commands %}checked{% endif %}>
+                        <div>
+                            <label class="fw-bold text-white mb-0">Admin-Befehle automatisch löschen</label>
+                            <div class="small text-secondary">Löscht Nachrichten wie <code class="text-info">/warn</code> sofort.</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label-small">Bot-Antworten löschen nach (Sekunden)</label>
+                    <input type="number" class="form-control" name="bot_message_cleanup_seconds" value="{{ config.bot_message_cleanup_seconds or 0 }}">
+                </div>
+            </div>
+
+            <hr class="border-white border-opacity-10 my-4">
+
+            <!-- Logging -->
+            <h6 class="mb-3 text-white d-flex align-items-center gap-2">
+                <i class="bi bi-file-earmark-text text-info"></i> Message-Logging
+            </h6>
+            <div class="row g-4 mb-4">
+                <div class="col-md-6">
+                    <div class="form-check form-switch d-flex align-items-center gap-3 mb-3">
+                        <input class="form-check-input" type="checkbox" name="message_logging_enabled" {% if config.message_logging_enabled %}checked{% endif %}>
+                        <label class="fw-bold text-white mb-0">Message-Logging aktiv</label>
+                    </div>
+                    <div class="form-check form-switch d-flex align-items-center gap-3">
+                        <input class="form-check-input" type="checkbox" name="message_logging_ignore_commands" {% if config.message_logging_ignore_commands %}checked{% endif %}>
+                        <label class="fw-bold text-white mb-0">Commands ignorieren</label>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-check form-switch d-flex align-items-center gap-3">
+                        <input class="form-check-input" type="checkbox" name="message_logging_groups_only" {% if config.message_logging_groups_only %}checked{% endif %}>
+                        <label class="fw-bold text-white mb-0">Nur Gruppen loggen</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                <button type="submit" class="btn btn-primary px-4 py-2 fw-bold btn-quick-action" style="background-color: #3b82f6;">
+                    <i class="bi bi-save"></i> Konfiguration speichern
+                </button>
+                {% if is_running %}
+                    <button type="submit" form="botActionFormStop" class="btn btn-danger px-4 py-2 fw-bold btn-quick-action" style="background-color: #ef4444;">
+                        <i class="bi bi-stop-circle"></i> Stoppen
+                    </button>
+                {% else %}
+                    <button type="submit" form="botActionFormStart" class="btn btn-success px-4 py-2 fw-bold btn-quick-action" style="background-color: #10b981;">
+                        <i class="bi bi-play-circle"></i> Starten
+                    </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- ⚡ Schnellzugriff-Leiste -->
+    <div class="d-flex flex-wrap gap-2 mb-5">
+        <a href="{{ url_for('dashboard.id_finder_commands') }}" class="btn-quick-action btn-cyan">
+            <i class="bi bi-terminal"></i> Befehls-Dokumentation
+        </a>
+        <a href="{{ url_for('dashboard.id_finder_admin_panel') }}" class="btn-quick-action btn-amber">
+            <i class="bi bi-shield-lock-fill"></i> Admin Panel
+        </a>
+        <a href="{{ url_for('dashboard.id_finder_analytics') }}" class="btn-quick-action btn-rose">
+            <i class="bi bi-bar-chart-line-fill"></i> Analytics
+        </a>
+        <button type="button" class="btn-quick-action btn-indigo" data-bs-toggle="modal" data-bs-target="#moderationSettingsModal">
+            <i class="bi bi-shield-shaded"></i> Moderation Einstellungen
+        </button>
+    </div>
+
+    <!-- Moderation Settings Modal -->
+    <div class="modal fade" id="moderationSettingsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content bg-dark text-white border-secondary">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title">⚙️ Moderations-System Konfiguration</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label-small">Max. Verwarnungen bis Aktion</label>
+                        <input type="number" class="form-control bg-dark text-white border-secondary" name="max_warnings" value="{{ config.max_warnings or 3 }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label-small">Aktion bei Limit-Erreichung</label>
+                        <select name="punishment_type" class="form-select bg-dark text-white border-secondary">
+                            <option value="none" {% if config.punishment_type == 'none' %}selected{% endif %}>Nichts tun</option>
+                            <option value="mute" {% if config.punishment_type == 'mute' %}selected{% endif %}>Stummschalten (Mute)</option>
+                            <option value="kick" {% if config.punishment_type == 'kick' %}selected{% endif %}>Kicken (Rauswerfen)</option>
+                            <option value="ban" {% if config.punishment_type == 'ban' %}selected{% endif %}>Bannen (Permanent)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label-small">Mute Dauer (Stunden)</label>
+                        <input type="number" class="form-control bg-dark text-white border-secondary" name="mute_duration" value="{{ config.mute_duration or 24 }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label-small">Lösch-Timer Meldungen (Sek.)</label>
+                        <input type="number" class="form-control bg-dark text-white border-secondary" name="cleanup_notification_seconds" value="{{ config.cleanup_notification_seconds or 60 }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label-small">Bot für Privatnachrichten</label>
+                        <select name="warning_bot_name" class="form-select bg-dark text-white border-secondary">
+                            <option value="invite" {% if config.warning_bot_name == 'invite' %}selected{% endif %}>Invite Bot</option>
+                            <option value="id_finder" {% if config.warning_bot_name == 'id_finder' %}selected{% endif %}>ID-Finder Bot</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="submit" class="btn btn-primary">Einstellungen speichern</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    </form>
+
+    <!-- Hidden Action Forms -->
+    <form id="botActionFormStart" action="/bot-action/id_finder/start" method="POST" style="display:none;"></form>
+    <form id="botActionFormStop" action="/bot-action/id_finder/stop" method="POST" style="display:none;"></form>
+
+    <!-- Registry -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6><i class="bi bi-people-fill text-primary"></i> User Registry</h6>
+            <span class="badge bg-dark border border-white border-opacity-10 px-3">{{ user_registry|length }} Users</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table align-middle mb-0" id="registryTable">
+                    <thead>
+                        <tr>
+                            <th class="ps-4">User-ID</th>
+                            <th>Username</th>
+                            <th>Name</th>
+                            <th>Last Seen</th>
+                            <th class="text-end pe-4">Aktion</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if user_registry %}
+                            {% for u in user_registry %}
+                            {% set uid = u.telegram_id %}
+                            <tr class="registry-row">
+                                <td class="ps-4">
+                                    <a href="{{ url_for('dashboard.id_finder_user_detail', user_id=uid) }}" class="text-info text-decoration-none fw-mono">{{ uid }}</a>
+                                </td>
+                                <td>
+                                    {% if u.username %}
+                                        <span class="text-info">@{{ u.username }}</span>
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="fw-bold text-white">{{ u.first_name or '' }} {{ u.last_name or '' }}</td>
+                                <td>
+                                    <div class="small text-rose-300">{{ u.last_contact.strftime('%d.%m.%Y %H:%M') if u.last_contact else '—' }}</div>
+                                </td>
+                                <td class="text-end pe-4">
+                                    <div class="d-flex justify-content-end gap-1">
+                                        <a href="{{ url_for('dashboard.id_finder_user_detail', user_id=uid) }}" class="btn btn-success btn-sm px-2"><i class="bi bi-file-earmark-text"></i> Verlauf & Moderation</a>
+                                        <form action="{{ url_for('dashboard.id_finder_delete_user', user_id=uid) }}" method="POST" class="m-0" onsubmit="return confirm('User wirklich aus der Registry löschen?')">
+                                            <button type="submit" class="btn btn-outline-danger btn-sm px-2"><i class="bi bi-trash"></i></button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr><td colspan="5" class="text-center py-5 text-muted">Keine Benutzerdaten vorhanden.</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
