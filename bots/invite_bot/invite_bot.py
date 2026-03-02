@@ -210,8 +210,25 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return ASKING_QUESTIONS
         
     field = fields[idx]
+
+    # --- CALLBACK (JA/NEIN Buttons) wird ZUERST geprüft ---
+    if update.callback_query:
+        cb_data = update.callback_query.data
+        if cb_data.startswith("bool_ans_"):
+            answer_val = cb_data.replace("bool_ans_", "")
+            user_answer = "Ja" if answer_val == "yes" else "Nein"
+            context.user_data['answers'][field['id']] = user_answer
+            await update.callback_query.answer()
+            await update.callback_query.edit_message_text(f"✅ Gespeichert: {user_answer}")
+            logger.info(f"handle_answer: Callback '{cb_data}' für Feld '{field['id']}' -> {user_answer}")
+            return await next_question(update, context)
+        # Unbekannter Callback in diesem State - ignorieren
+        await update.callback_query.answer()
+        return ASKING_QUESTIONS
+
+    # --- TEXT / FOTO Antwort ---
     answer = None
-    answer_text = update.message.text.strip() if update.message.text else ""
+    answer_text = update.message.text.strip() if update.message and update.message.text else ""
 
     # Falls optional: "nein" Text als skip akzeptieren
     is_optional = not field.get('required')
@@ -221,24 +238,16 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return await next_question(update, context)
 
     if field['type'] in ['boolean_buttons', 'header_name', 'pm_contact']:
-        if update.callback_query:
-            answer = update.callback_query.data.replace("bool_ans_", "")
-            user_answer = "Ja" if answer == "yes" else "Nein"
-            context.user_data['answers'][field['id']] = user_answer
-            await update.callback_query.answer()
-            await update.callback_query.edit_message_text(f"Auswahl gespeichert: {user_answer}")
-            return await next_question(update, context)
+        # Text-Fallback für boolean-Typen (falls User tippt statt Button klickt)
+        txt = answer_text.lower()
+        if txt in ['ja', 'yes', 'ok', '✅']:
+            context.user_data['answers'][field['id']] = "Ja"
+        elif txt in ['nein', 'no', 'skip', '❌']:
+            context.user_data['answers'][field['id']] = "Nein"
         else:
-            # Wenn Text kommt statt Button
-            txt = answer_text.lower()
-            if txt in ['ja', 'yes', 'ok', '✅']: 
-                context.user_data['answers'][field['id']] = "Ja"
-            elif txt in ['nein', 'no', 'skip', '❌']: 
-                context.user_data['answers'][field['id']] = "Nein"
-            else:
-                await update.message.reply_text("Bitte nutze die Buttons oder antworte mit 'Ja' oder 'Nein'.")
-                return ASKING_QUESTIONS
-            return await next_question(update, context)
+            await update.message.reply_text("Bitte nutze die Buttons ✅ JA / ❌ NEIN.")
+            return ASKING_QUESTIONS
+        return await next_question(update, context)
 
     if field['type'] == 'birthday':
         # Validierung wie im birthday_bot
@@ -965,12 +974,12 @@ def get_handlers():
         states={
             ASKING_QUESTIONS: [
                 CommandHandler("datenschutz", datenschutz),
+                CallbackQueryHandler(handle_skip, pattern=r'^skip_field$'),
                 CallbackQueryHandler(handle_answer, pattern=r'^bool_ans_'),
                 MessageHandler(filters.PHOTO | (filters.TEXT & filters.ChatType.PRIVATE & ~filters.COMMAND), handle_answer)
             ],
             CONFIRMING_RULES: [
                 CommandHandler("datenschutz", datenschutz),
-                CallbackQueryHandler(handle_answer, pattern=r'^bool_ans_'), # Backwards compatibility/safety
                 MessageHandler(filters.TEXT & filters.ChatType.PRIVATE & ~filters.COMMAND, handle_rules_confirmation)
             ],
             WAITING_FOR_SOCIAL_DECISION: [
@@ -983,10 +992,9 @@ def get_handlers():
             ]
         },
         fallbacks=[
-            CommandHandler("cancel", cancel), 
-            CommandHandler("start", start), 
+            CommandHandler("cancel", cancel),
+            CommandHandler("start", start),
             CommandHandler("datenschutz", datenschutz),
-            CallbackQueryHandler(handle_skip, pattern=r'^skip_field$')
         ],
         persistent=True,
         name="invite_conversation",
