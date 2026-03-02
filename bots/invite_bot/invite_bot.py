@@ -535,19 +535,7 @@ async def handle_social_decision_callback(update: Update, context: ContextTypes.
         return ASKING_QUESTIONS
     else:
         await query.edit_message_text("✅ Keine weiteren Links.")
-        # Weiter zur nächsten Frage
-        idx += 1
-        context.user_data['current_field_index'] = idx
-        
-        if idx < len(fields):
-            next_label = fields[idx].get('label', 'Nächste Frage?')
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=next_label)
-            return ASKING_QUESTIONS
-        else:
-            config = get_bot_config('invite')
-            rules = config.get('rules_message', 'Danke!')
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"{rules}\n\nSchreibe 'ok' zum Bestätigen.")
-            return CONFIRMING_RULES
+        return await next_question(update, context)
 
 async def handle_social_decision(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = update.message.text.lower().strip() if update.message.text else ""
@@ -559,19 +547,7 @@ async def handle_social_decision(update: Update, context: ContextTypes.DEFAULT_T
         await update.message.reply_text(fields[idx].get('label', 'Noch ein Link?'))
         return ASKING_QUESTIONS
     else:
-        # Weiter zur nächsten Frage
-        idx += 1
-        context.user_data['current_field_index'] = idx
-        
-        if idx < len(fields):
-            next_label = fields[idx].get('label', 'Nächste Frage?')
-            await update.message.reply_text(next_label)
-            return ASKING_QUESTIONS
-        else:
-            config = get_bot_config('invite')
-            rules = config.get('rules_message', 'Danke!')
-            await update.message.reply_text(f"{rules}\n\nSchreibe 'ok' zum Bestätigen.")
-            return CONFIRMING_RULES
+        return await next_question(update, context)
 
 def save_birthday_from_answers(user, answers, fields, chat_id, topic_id=None):
     """Sucht nach einem Birthday-Feld in den Antworten und speichert es in der Birthday-Tabelle."""
