@@ -91,17 +91,32 @@ def detect_social_platform(text: str) -> Optional[Dict[str, str]]:
     """Erkennt Plattform aus URL oder Domain. Gibt {name, url} zurück oder None."""
     t = text.lower().strip()
     
-    # URL-Check (darf keine Leerzeichen haben und muss Punkt enthalten oder mit http starten)
+    # Leerzeichen -> kein Link
     if ' ' in t:
         return None
-        
-    has_dot = '.' in t
-    is_url = t.startswith("http") or has_dot
+
+    # Anerkannte TLDs (verhindert, dass Usernamen wie 'photographer.cgn' als Domain erkannt werden)
+    KNOWN_TLDS = {
+        'com', 'de', 'net', 'org', 'io', 'info', 'at', 'ch', 'eu', 'uk', 'fr',
+        'nl', 'be', 'es', 'it', 'pl', 'ru', 'us', 'ca', 'au', 'jp', 'cn',
+        'app', 'dev', 'social', 'link', 'me', 'co', 'tv', 'fm', 'gg', 'xyz',
+        'online', 'site', 'web', 'blog', 'photos', 'photo', 'media', 'store',
+        'shop', 'club', 'live', 'stream', 'news', 'art', 'fit', 'bio'
+    }
+
+    # URL-Check: nur wenn http vorkommt ODER Punkt + bekannte TLD
+    starts_with_http = t.startswith("http")
+    has_known_tld = False
+    if '.' in t:
+        suffix = t.rsplit('.', 1)[-1].split('/')[0].split('?')[0]
+        has_known_tld = suffix in KNOWN_TLDS
+    
+    is_url = starts_with_http or has_known_tld
     
     if not is_url:
         return None
 
-    # Falls http fehlt, ergänzen für die finale URL
+    # URL aufbereiten
     final_url = text.strip()
     if not t.startswith("http"):
         final_url = f"https://{final_url}"
@@ -113,15 +128,11 @@ def detect_social_platform(text: str) -> Optional[Dict[str, str]]:
 
     # Unbekannte URL: Domain extrahieren (z.B. romeo.com -> Romeo)
     try:
-        # Hostname extrahieren
         clean_t = t.replace("https://", "").replace("http://", "").split("/")[0]
-        # www. entfernen
         if clean_t.startswith("www."):
             clean_t = clean_t[4:]
-            
         parts = clean_t.split(".")
         if len(parts) >= 2:
-            # Den Namen vor der TLD nehmen
             domain_name = parts[-2].capitalize()
             return {"name": domain_name, "url": final_url}
     except Exception as e:
@@ -764,6 +775,13 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
         'topic_id': config.get('topic_id'),
         'whitelist_approval_topic_id': config.get('whitelist_approval_topic_id')
     }
+
+    # Geburtstag sofort in der DB speichern (unabhängig von Whitelist-Status)
+    try:
+        with flask_app.app_context():
+            save_birthday_from_answers(user, answers, ordered_fields, target_chat_id, config.get('topic_id'))
+    except Exception as e:
+        logger.error(f"Fehler beim automatischen Speichern des Geburtstags: {e}")
 
     if is_already_member:
         approval_chat_id_str = fix_chat_id(config.get('whitelist_approval_chat_id', ''))
