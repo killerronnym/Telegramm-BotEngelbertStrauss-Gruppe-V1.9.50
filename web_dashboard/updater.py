@@ -64,6 +64,33 @@ class Updater:
             log.error(f"Error checking GitHub for updates: {e}")
         return {"update_available": False}
 
+    def get_recent_releases(self, limit=10):
+        url = f"https://api.github.com/repos/{self.repo_owner}/{self.repo_name}/releases?per_page={limit}"
+        try:
+            response = requests.get(url, headers=self._get_headers(), timeout=10)
+            if response.status_code == 200:
+                releases = response.json()
+                local_data = self.get_local_version()
+                local_version = local_data["version"].lstrip("v")
+                
+                formatted_releases = []
+                for r in releases:
+                    version = r["tag_name"].lstrip("v")
+                    formatted_releases.append({
+                        "version": version,
+                        "name": r.get("name"),
+                        "published_at": r.get("published_at"),
+                        "zipball_url": r.get("zipball_url"),
+                        "changelog": r.get("body"),
+                        "is_current": version == local_version
+                    })
+                return formatted_releases
+            else:
+                log.error(f"GitHub API returned status {response.status_code}")
+        except Exception as e:
+            log.error(f"Error fetching GitHub releases: {e}")
+        return []
+
     def install_update(self, zipball_url, new_version, published_at):
         def _run():
             try:

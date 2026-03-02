@@ -335,6 +335,21 @@
                             <button id="btnInstallNow" class="btn btn-success w-100 mt-3 fw-bold btn-action-sm">JETZT
                                 INSTALLIEREN</button>
                         </div>
+
+                        <!-- Downgrade / Version History -->
+                        <div class="mt-3 text-center">
+                            <button class="btn btn-link text-info small p-0 text-decoration-none"
+                                onclick="toggleVersionHistory()" style="font-size: 0.75rem;">
+                                <i class="bi bi-clock-history me-1"></i> Versionen-Verlauf / Downgrade
+                            </button>
+                        </div>
+                        <div id="versionHistoryBox" class="update-info-box mt-2"
+                            style="max-height: 200px; overflow-y: auto; display: none;">
+                            <div id="versionList" class="small">
+                                <div class="text-center py-2"><i class="bi bi-arrow-repeat spin"></i> Lade...</div>
+                            </div>
+                        </div>
+
                         <div class="progress mt-3" id="updateProgress" style="display:none; height: 8px;">
                             <div class="progress-bar progress-bar-striped progress-bar-animated bg-success"
                                 style="width: 0%"></div>
@@ -603,6 +618,55 @@
         };
     }
 
+    // --- VERSION HISTORY & DOWNGRADE LOGIC ---
+    function toggleVersionHistory() {
+        const box = document.getElementById('versionHistoryBox');
+        if (box.style.display === 'none') {
+            box.style.display = 'block';
+            loadVersionHistory();
+        } else {
+            box.style.display = 'none';
+        }
+    }
+
+    async function loadVersionHistory() {
+        const list = document.getElementById('versionList');
+        try {
+            const res = await fetch('/api/update/releases');
+            const releases = await res.json();
+
+            if (releases.length === 0) {
+                list.innerHTML = '<div class="text-center py-2 text-dim">Keine Versionen gefunden.</div>';
+                return;
+            }
+
+            let html = '';
+            releases.forEach(r => {
+                const date = new Date(r.published_at).toLocaleDateString();
+                const isCurrent = r.is_current;
+                html += `
+                    <div class="d-flex justify-content-between align-items-center p-2 border-bottom border-light border-opacity-10">
+                        <div>
+                            <span class="fw-bold text-white">v${r.version}</span>
+                            ${isCurrent ? '<span class="badge bg-success ms-1" style="font-size: 0.6rem;">AKTUELL</span>' : ''}
+                            <div class="text-dim" style="font-size: 0.7rem;">${date}</div>
+                        </div>
+                        <div>
+                            <button class="btn btn-outline-info btn-sm py-0 px-2" style="font-size: 0.7rem;" 
+                                onclick="triggerUpdate('${r.zipball_url}', '${r.version}', '${r.published_at}')"
+                                ${isCurrent ? 'disabled' : ''}>
+                                ${isCurrent ? 'Installiert' : 'Installieren'}
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            list.innerHTML = html;
+        } catch (e) {
+            list.innerHTML = '<div class="text-center py-2 text-danger">Fehler beim Laden.</div>';
+        }
+    }
+
     // --- BACKUP UPLOAD LOGIC ---
     async function handleBackupUpload(input) {
         if (!input.files || input.files.length === 0) return;
@@ -644,6 +708,64 @@
             notify.innerText = 'Fehler: ' + e.message;
             alert('Wiederherstellung fehlgeschlagen: ' + e.message);
             input.value = '';
+        }
+    }
+
+    async function triggerUpdate(url, version, published_at) {
+        if (!confirm(`Möchtest du Version v${version} wirklich installieren? Der Server wird neu gestartet.`)) return;
+
+        const infoBox = document.getElementById('updateInfoBox');
+        const notify = document.getElementById('updateNotify');
+        const versionBox = document.getElementById('versionHistoryBox');
+
+        document.getElementById('updateProgress').style.display = 'block';
+        infoBox.style.display = 'none';
+        versionBox.style.display = 'none';
+        notify.style.display = 'block';
+        notify.innerText = 'Installation wird vorbereitet...';
+
+        try {
+            const res = await fetch('/api/update/install', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    url: url,
+                    version: version,
+                    published_at: published_at
+                })
+            });
+
+            if (res.ok) {
+                const statusInterval = setInterval(async () => {
+                    try {
+                        const sRes = await fetch('/api/update/status');
+                        const s = await sRes.json();
+
+                        document.querySelector('#updateProgress .progress-bar').style.width = s.progress + '%';
+
+                        if (s.status === 'downloading') notify.innerText = 'Lade Version herunter... (' + s.progress + '%)';
+                        else if (s.status === 'extracting') notify.innerText = 'Entpacke Dateien... (' + s.progress + '%)';
+                        else if (s.status === 'applying') notify.innerText = 'Installiere Version... (' + s.progress + '%)';
+                        else if (s.status === 'finished') {
+                            clearInterval(statusInterval);
+                            notify.innerText = 'Installation fertig! Server startet neu...';
+                            document.querySelector('#updateProgress .progress-bar').classList.remove('progress-bar-animated');
+                            safeReload();
+                        } else if (s.status === 'error') {
+                            clearInterval(statusInterval);
+                            notify.style.background = 'rgba(239, 68, 68, 0.2)';
+                            notify.style.color = '#ef4444';
+                            notify.innerText = 'Fehler: ' + (s.error || 'Unbekannter Fehler');
+                            alert('Fehlgeschlagen: ' + s.error);
+                        }
+                    } catch (err) {
+                        console.log("Status fetch failed, assuming restart...");
+                    }
+                }, 1000);
+            }
+        } catch (e) {
+            notify.innerText = 'Fehler beim Starten.';
+            alert('Konnte Installation nicht starten: ' + e);
         }
     }
 </script>

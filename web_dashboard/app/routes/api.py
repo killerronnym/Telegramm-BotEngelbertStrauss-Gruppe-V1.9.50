@@ -47,6 +47,11 @@ def update_install():
 def update_status():
     return jsonify(updater.get_status())
 
+@bp.route('/update/releases')
+def update_releases():
+    releases = updater.get_recent_releases()
+    return jsonify(releases)
+
 @bp.route('/bots')
 def bots_list():
     try:
