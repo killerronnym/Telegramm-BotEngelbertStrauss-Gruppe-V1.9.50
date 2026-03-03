@@ -14,7 +14,13 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Bot Settings
-    BOT_TOKEN = os.environ.get('BOT_TOKEN')
+    BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN') or os.environ.get('BOT_TOKEN')
+    OWNER_ID = os.environ.get('OWNER_ID')
+    GROUP_ID = os.environ.get('GROUP_ID')
+    TOPIC_ID = os.environ.get('TOPIC_ID')
     
     # Dashboard Settings
     TITLE = "Bot Dashboard"
+    
+    # File Upload - allow up to 100MB for database restore
+    MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100 MB

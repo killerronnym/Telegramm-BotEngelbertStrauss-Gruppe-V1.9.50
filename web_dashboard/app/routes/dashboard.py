@@ -1624,12 +1624,8 @@ def upload_backup():
         
         def restart_server():
             time.sleep(2)
-            print("Backup Restore Complete! Triggering container restart...")
-            try:
-                os.kill(os.getppid(), signal.SIGTERM)
-            except:
-                pass
-            os.kill(os.getpid(), signal.SIGTERM)
+            print("Backup Restore Complete! Restarting server process...")
+            os._exit(0)  # Cross-platform restart (devserver.ps1 will auto-restart)
             
         threading.Thread(target=restart_server, daemon=True).start()
         

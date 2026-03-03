@@ -10,70 +10,73 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-bg: #0f172a;
-            --card-bg: rgba(30, 41, 59, 0.9);
+            --primary-bg: #0b0c0d;
+            --card-bg: #151719;
             --accent-blue: #3b82f6;
-            --accent-purple: #8b5cf6;
-            --text-main: #ffffff;
-            --text-muted: #94a3b8;
-            --input-bg: rgba(255, 255, 255, 0.1);
+            --accent-purple: #818cf8;
+            --text-main: #f8fafc;
+            --text-muted: #cbd5e1;
+            --input-bg: rgba(255, 255, 255, 0.05);
+            --border-color: rgba(255, 255, 255, 0.12);
         }
 
         body {
-            background: radial-gradient(circle at top right, #0f172a, #1e1b4b);
+            background: var(--primary-bg);
             color: var(--text-main);
             font-family: 'Outfit', sans-serif;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            padding: 2rem;
+            font-size: 1.1rem;
         }
 
         .install-card {
             background: var(--card-bg);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--border-color);
             border-radius: 24px;
             width: 100%;
-            max-width: 600px;
+            max-width: 650px;
             padding: 3rem;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 40px 100px rgba(0, 0, 0, 0.8);
         }
 
         .step-indicator {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 3rem;
+            margin-bottom: 2.5rem;
+            position: relative;
         }
 
         .step-dot {
-            width: 15px;
-            height: 15px;
+            width: 12px;
+            height: 12px;
             border-radius: 50%;
             background: rgba(255, 255, 255, 0.1);
-            transition: all 0.3s ease;
+            transition: all 0.3s;
+            z-index: 2;
         }
 
         .step-dot.active {
             background: var(--accent-blue);
-            box-shadow: 0 0 15px var(--accent-blue);
-            transform: scale(1.2);
+            box-shadow: 0 0 10px var(--accent-blue);
+            transform: scale(1.3);
         }
 
         .step-content {
             display: none;
+            animation: slideUp 0.4s ease-out;
         }
 
         .step-content.active {
             display: block;
-            animation: fadeIn 0.4s ease;
         }
 
-        @keyframes fadeIn {
+        @keyframes slideUp {
             from {
                 opacity: 0;
-                transform: translateY(10px);
+                transform: translateY(20px);
             }
 
             to {
@@ -82,83 +85,97 @@
             }
         }
 
-        .form-label {
-            color: #fff;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-            font-size: 0.9rem;
-        }
-
-        .form-control {
-            background: var(--input-bg);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: #fff !important;
-            padding: 0.8rem 1rem;
-            border-radius: 12px;
-            font-size: 1rem;
-        }
-
-        .form-control:focus {
-            background: rgba(255, 255, 255, 0.15);
-            border-color: var(--accent-blue);
-            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
-        }
-
-        .form-control::placeholder {
-            color: rgba(255, 255, 255, 0.4);
-        }
-
         .btn-install {
-            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            background: var(--accent-blue);
             border: none;
             color: white;
-            font-weight: 700;
-            padding: 1rem 2rem;
+            font-weight: 600;
+            padding: 0.8rem 2rem;
             border-radius: 14px;
-            transition: all 0.3s ease;
+            transition: 0.2s;
         }
 
         .btn-install:hover:not(:disabled) {
             transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(59, 130, 246, 0.4);
+            box-shadow: 0 10px 20px -5px rgba(59, 130, 246, 0.4);
+            background: #2563eb;
         }
 
-        .btn-install:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
+        .form-control {
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            color: white !important;
+            border-radius: 12px;
+            padding: 0.8rem 1rem;
         }
 
-        .db-option {
+        .form-control:focus {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        .form-control::placeholder {
+            color: rgba(255, 255, 255, 0.3) !important;
+        }
+
+        .mode-option {
             background: rgba(255, 255, 255, 0.03);
-            border: 2px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--border-color);
             border-radius: 16px;
             padding: 1.5rem;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: 0.2s;
             text-align: center;
         }
 
-        .db-option:hover {
-            background: rgba(255, 255, 255, 0.08);
+        .mode-option:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--accent-blue);
         }
 
-        .db-option.active {
-            border-color: var(--accent-blue);
+        .mode-option.active {
             background: rgba(59, 130, 246, 0.1);
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
         }
 
         .spinner-border {
             width: 1.2rem;
             height: 1.2rem;
-            display: none;
-            margin-right: 8px;
         }
 
-        /* Password Strength Meter */
+        .form-label {
+            color: #f8fafc !important;
+            font-weight: 600;
+        }
+
+        #overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 10000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            text-align: center;
+        }
+
+        /* Autofill Fix */
+        input:-webkit-autofill,
+        input:-webkit-autofill:hover,
+        input:-webkit-autofill:focus,
+        input:-webkit-autofill:active {
+            -webkit-box-shadow: 0 0 0 30px var(--card-bg) inset !important;
+            -webkit-text-fill-color: var(--text-main) !important;
+            transition: background-color 5000s ease-in-out 0s;
+        }
+
         .strength-meter {
-            height: 6px;
+            height: 4px;
             background: rgba(255, 255, 255, 0.1);
-            border-radius: 3px;
+            border-radius: 2px;
             margin-top: 8px;
             overflow: hidden;
             display: none;
@@ -166,54 +183,72 @@
 
         .strength-bar {
             height: 100%;
-            width: 0%;
-            transition: all 0.3s ease;
+            width: 0;
+            transition: all 0.3s;
         }
 
-        .strength-text {
-            font-size: 0.75rem;
-            margin-top: 4px;
-            display: block;
-            font-weight: 600;
-        }
-
-        .requirement-list {
-            list-style: none;
-            padding: 0;
-            margin: 10px 0 0 0;
-            font-size: 0.8rem;
-        }
-
-        .requirement-item {
-            color: var(--text-muted);
-            margin-bottom: 4px;
-            display: flex;
-            align-items: center;
-        }
-
-        .requirement-item i {
-            margin-right: 6px;
+        .info-icon {
+            cursor: help;
+            color: var(--accent-blue);
             font-size: 0.9rem;
+            margin-left: 5px;
+            opacity: 0.8;
+            transition: 0.2s;
         }
 
-        .requirement-item.met {
-            color: #10b981;
+        .info-icon:hover {
+            opacity: 1;
+            transform: scale(1.1);
         }
 
-        .requirement-item.met i::before {
-            content: "\F26B";
+        /* Modal Custom Styles */
+        .modal-content {
+            background: #151719 !important;
+            border: 1px solid #2d3339 !important;
+            border-radius: 20px;
+            color: #f8fafc !important;
         }
 
-        /* bi-check-circle-fill */
+        .modal-header {
+            border-bottom: 1px solid #2d3339 !important;
+        }
+
+        .modal-footer {
+            border-top: 1px solid #2d3339 !important;
+        }
+
+        .help-step {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+            border-left: 3px solid var(--accent-blue);
+        }
+
+        .help-step h6 {
+            color: #f8fafc !important;
+            font-weight: 700 !important;
+        }
+
+        .help-step p {
+            color: #cbd5e1 !important;
+            line-height: 1.5;
+        }
+
+        .help-step img {
+            border: 1px solid #2d3339;
+            margin-top: 10px;
+            border-radius: 8px;
+        }
     </style>
 </head>
 
 <body>
 
     <div class="install-card">
-        <div class="text-center mb-5">
-            <h2 class="fw-bold mb-1">Bot Engine <span class="text-info">v2</span></h2>
-            <p class="text-muted">Installation & Konfiguration</p>
+        <div class="text-center mb-4">
+            <h3 class="fw-bold mb-0">Bot Engine <span class="text-info">v2</span></h3>
+            <p style="color: #f8fafc; font-size: 0.9rem; opacity: 0.7;">Installation-Wizard</p>
         </div>
 
         <div class="step-indicator">
@@ -221,193 +256,512 @@
             <div class="step-dot" data-step="2"></div>
             <div class="step-dot" data-step="3"></div>
             <div class="step-dot" data-step="4"></div>
+            <div class="step-dot" data-step="5"></div>
+            <div class="step-dot" data-step="6"></div>
         </div>
 
-        <!-- STEP 1: DB TYPE -->
+        <!-- 1. Intro -->
         <div class="step-content active" id="step1">
-            <h4 class="mb-4">1. Datenbank-Typ wählen</h4>
-            <div class="row g-3">
-                <div class="col-6">
-                    <div class="db-option active" id="opt-sqlite" onclick="selectDB('sqlite')">
-                        <i class="bi bi-database-fill h2 text-info"></i>
-                        <p class="mb-0 mt-2 fw-bold">SQLite</p>
-                        <small class="text-muted">Lokal (Empfohlen)</small>
-                    </div>
-                </div>
-                <div class="col-6">
-                    <div class="db-option" id="opt-mysql" onclick="selectDB('mysql')">
-                        <i class="bi bi-hdd-network-fill h2 text-primary"></i>
-                        <p class="mb-0 mt-2 fw-bold">MySQL</p>
-                        <small class="text-muted">Remote / Docker</small>
-                    </div>
-                </div>
+            <h5 class="mb-3">Willkommen!</h5>
+            <p class="mb-4" style="color: #f8fafc; line-height: 1.6; opacity: 0.95;">Dieser Wizard hilft dir, deinen Bot
+                und
+                das Dashboard in wenigen Minuten
+                einzurichten.</p>
+            <div class="alert alert-info py-3 px-4 mb-4 small bg-opacity-10 border-0 text-white"
+                style="background: rgba(59, 130, 246, 0.15); color: #93c5fd !important; border-radius: 12px;">
+                <i class="bi bi-shield-lock me-2"></i> Deine Daten werden lokal und sicher gespeichert.
             </div>
-            <div class="mt-5 d-flex justify-content-end">
-                <button class="btn btn-install" onclick="goToStep(2)">Weiter <i
-                        class="bi bi-arrow-right ms-2"></i></button>
-            </div>
-
-            <div class="mt-4 text-center border-top pt-4" style="border-color: rgba(255,255,255,0.05) !important;">
-                <p class="small text-muted mb-3">Oder bestehende Daten verwenden?</p>
-                <button class="btn btn-outline-info btn-sm px-4"
-                    onclick="document.getElementById('inputRestoreFile').click()">
-                    <i class="bi bi-upload me-2"></i> BACKUP WIEDERHERSTELLEN (.db)
-                </button>
-                <input type="file" id="inputRestoreFile" style="display:none" accept=".db"
-                    onchange="handleRestore(this)">
+            <div class="text-end mt-5">
+                <button class="btn btn-install" onclick="goToStep(2)">Lass uns anfangen!</button>
             </div>
         </div>
 
-        <!-- STEP 2: DB CREDENTIALS -->
+        <!-- 2. Admin Account -->
         <div class="step-content" id="step2">
-            <h4 class="mb-4">2. Datenbank-Zugang</h4>
-            <div id="sqliteInfo" class="alert alert-info bg-info bg-opacity-10 border-info text-white small mb-4">
-                <i class="bi bi-info-circle me-2"></i> SQLite benötigt keine weiteren Angaben.
-            </div>
-            <div id="mysqlFields" style="display:none;">
-                <div class="mb-3">
-                    <label class="form-label">Host</label>
-                    <input type="text" id="dbHost" class="form-control" placeholder="localhost">
-                </div>
-                <div class="row mb-3">
-                    <div class="col-8">
-                        <label class="form-label">Benutzername</label>
-                        <input type="text" id="dbUser" class="form-control" placeholder="root">
-                    </div>
-                    <div class="col-4">
-                        <label class="form-label">Port</label>
-                        <input type="number" id="dbPort" class="form-control" value="3306">
-                    </div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Passwort</label>
-                    <input type="password" id="dbPass" class="form-control" placeholder="Passwort">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Datenbank Name</label>
-                    <input type="text" id="dbName" class="form-control" placeholder="bot_engine">
-                </div>
-            </div>
-
-            <div id="dbStatus" class="alert py-2 small" style="display:none;"></div>
-
-            <div class="mt-5 d-flex justify-content-between align-items-center">
-                <button class="btn btn-link text-white text-decoration-none" onclick="goToStep(1)">
-                    <i class="bi bi-arrow-left me-2"></i> Zurück
-                </button>
-                <div class="d-flex gap-2">
-                    <button class="btn btn-outline-light px-4" id="btnTestDB" onclick="testDB()">
-                        <span class="spinner-border spinner-border-sm" id="testSpinner"></span>
-                        Testen
-                    </button>
-                    <button class="btn btn-install" id="btnStep2Next" onclick="proceedToStep3()"
-                        disabled>Weiter</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- STEP 3: ADMIN ACCOUNT -->
-        <div class="step-content" id="step3">
-            <h4 class="mb-4">3. Admin-Registrierung</h4>
+            <h5 class="mb-3">Admin-Account erstellen</h5>
+            <p style="color: #f8fafc; opacity: 0.8;" class="small mb-4">Wähle deine Zugangsdaten für das Dashboard.</p>
             <div class="mb-3">
-                <label class="form-label">Nutzername</label>
-                <input type="text" id="adminUser" class="form-control" value="admin">
+                <label class="form-label small fw-bold">Nutzername</label>
+                <input type="text" id="adminUser" class="form-control" value="admin" autocomplete="off">
             </div>
             <div class="mb-3">
-                <label class="form-label">Passwort</label>
+                <label class="form-label small fw-bold">Passwort</label>
                 <input type="password" id="adminPass" class="form-control" placeholder="Passwort"
-                    oninput="checkPasswordStrength(this.value)">
+                    oninput="checkStrength()">
                 <div class="strength-meter" id="strengthMeter">
                     <div class="strength-bar" id="strengthBar"></div>
                 </div>
-                <small id="strengthDesc" class="strength-text"></small>
-
-                <ul class="requirement-list">
-                    <li class="requirement-item" id="req-length"><i class="bi bi-circle"></i> Mind. 6 Zeichen</li>
-                    <li class="requirement-item" id="req-upper"><i class="bi bi-circle"></i> Mind. 1 Großbuchstabe</li>
-                    <li class="requirement-item" id="req-special"><i class="bi bi-circle"></i> Mind. 1 Sonderzeichen (@,
-                        #, !, %, etc.)</li>
-                </ul>
+                <div id="complexityHint" class="small mt-2" style="font-size: 0.75rem; opacity: 0.7;">
+                    Min. 6 Zeichen, 1 Großbuchstabe, 1 Sonderzeichen.
+                </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Passwort wiederholen</label>
-                <input type="password" id="adminPass2" class="form-control" placeholder="Passwort">
+                <label class="form-label small fw-bold">Passwort bestätigen</label>
+                <input type="password" id="adminPassConfirm" class="form-control" placeholder="Passwort wiederholen">
             </div>
-            <div id="adminError" class="alert alert-danger py-2 small" style="display:none;"></div>
-
-            <div class="mt-5 d-flex justify-content-between">
-                <button class="btn btn-link text-white text-decoration-none" onclick="goToStep(2)">
-                    <i class="bi bi-arrow-left me-2"></i> Zurück
-                </button>
+            <div id="adminError" class="text-danger small mb-3" style="font-size: 0.85rem; display:none"></div>
+            <div class="text-end mt-4">
                 <button class="btn btn-install" onclick="validateAdmin()">Weiter</button>
             </div>
         </div>
 
-        <!-- STEP 4: FINISH -->
-        <div class="step-content" id="step4">
-            <h4 class="mb-4 text-center">4. Einrichtung bereit</h4>
-            <div class="bg-white bg-opacity-5 p-4 rounded-3 mb-4">
-                <div class="d-flex justify-content-between mb-2">
-                    <span class="text-muted">Datenbank:</span>
-                    <span id="sumDB" class="fw-bold">SQLite</span>
-                </div>
-                <div class="d-flex justify-content-between">
-                    <span class="text-muted">Administrator:</span>
-                    <span id="sumAdmin" class="fw-bold">admin</span>
+        <!-- 3. Telegram -->
+        <div class="step-content" id="step3">
+            <h5 class="mb-2">Telegram Setup</h5>
+            <p style="color: #f8fafc; opacity: 0.8;" class="small mb-4">Verknüpfe deinen Bot mit Telegram.</p>
+            <div class="mb-3">
+                <label class="form-label small fw-bold">
+                    Bot Token
+                    <a href="javascript:void(0)" class="info-icon" data-bs-toggle="modal"
+                        data-bs-target="#tokenHelpModal">
+                        <i class="bi bi-question-circle"></i>
+                    </a>
+                </label>
+                <div class="input-group">
+                    <input type="text" id="botToken" class="form-control" placeholder="12345:ABCDE...">
+                    <button class="btn btn-outline-info" onclick="testToken()" id="btnTestToken">Testen</button>
                 </div>
             </div>
-            <button class="btn btn-install w-100 py-3" id="btnFinish" onclick="finishInstall()">
-                <span class="spinner-border spinner-border-sm" id="finishSpinner"></span>
-                JETZT INSTALLIEREN 🚀
-            </button>
-            <div class="text-center mt-3">
-                <button class="btn btn-link text-white text-decoration-none small" onclick="goToStep(3)">Nochmals
-                    prüfen</button>
+            <div id="botNamePrompt" class="alert alert-success py-2 small mb-3" style="display:none"></div>
+
+            <div class="alert alert-secondary py-3 px-4 mb-4 small border-0 text-white"
+                style="background: rgba(255, 255, 255, 0.05); border-radius: 12px;">
+                <h6 class="fw-bold mb-2"><i class="bi bi-info-circle me-2"></i>Wichtige Gruppen-Vorbereitung:</h6>
+                <ul class="ps-3 mb-3 list-unstyled" style="opacity: 0.95; line-height: 1.5; font-size: 0.8rem;">
+                    <li class="mb-2"><b>1. Haupt-Gruppe:</b> Erstelle eine Gruppe für deine Community und füge den Bot
+                        als <b>Administrator</b> hinzu.</li>
+                    <li><b>2. Admin-Gruppe:</b> Erstelle eine separate Gruppe nur für Moderatoren/Admins und lade den
+                        Bot ebenfalls ein. Hier landen wichtige interne System-Meldungen.</li>
+                </ul>
+                <h6 class="fw-bold mb-2 small"><i class="bi bi-magic me-2"></i>So findest du die IDs:</h6>
+                <ol class="ps-3 mb-0" style="opacity: 0.9; line-height: 1.5; font-size: 0.8rem;">
+                    <li>Sende <code>/id</code> in die jeweilige Gruppe.</li>
+                    <li>Klicke unten auf <i class="bi bi-magic"></i>, um die ID automatisch zu übernehmen.</li>
+                </ol>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-12">
+                    <label class="form-label small fw-bold">
+                        Haupt-Gruppe ID
+                        <i class="bi bi-question-circle info-icon" data-bs-toggle="tooltip"
+                            title="Die ID deiner primären Telegram-Gruppe, in der der Bot aktiv sein soll."></i>
+                    </label>
+                    <div class="input-group">
+                        <input type="text" id="mainGroupId" class="form-control" placeholder="-100...">
+                        <button class="btn btn-outline-info" onclick="detectGroupId('mainGroupId')"
+                            title="ID automatisch erkennen">
+                            <i class="bi bi-magic"></i>
+                        </button>
+                        <button class="btn btn-outline-success" onclick="sendTestMessage('mainGroupId')"
+                            title="Testnachricht senden">
+                            <i class="bi bi-send"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <label class="form-label small fw-bold">
+                        Admin-Gruppe ID (Optional)
+                        <i class="bi bi-question-circle info-icon" data-bs-toggle="tooltip"
+                            title="Sinnvoll für Benachrichtigungen (z.B. neue Steckbriefe/Profile) und Whitelisting-Prozesse."></i>
+                    </label>
+                    <div class="input-group">
+                        <input type="text" id="adminGroupId" class="form-control" placeholder="-100...">
+                        <button class="btn btn-outline-info" onclick="detectGroupId('adminGroupId')"
+                            title="ID automatisch erkennen">
+                            <i class="bi bi-magic"></i>
+                        </button>
+                        <button class="btn btn-outline-success" onclick="sendTestMessage('adminGroupId')"
+                            title="Testnachricht senden">
+                            <i class="bi bi-send"></i>
+                        </button>
+                    </div>
+                    <p class="small text-muted mt-2" style="font-size: 0.75rem; opacity: 0.8;">
+                        <i class="bi bi-info-circle me-1"></i> Hier landen wichtige Infos wie User-Steckbriefe.
+                    </p>
+                </div>
+            </div>
+            <div class="text-end d-flex justify-content-between mt-4">
+                <button class="btn btn-link text-white opacity-50 px-0" onclick="goToStep(2)">Zurück</button>
+                <button class="btn btn-install" onclick="goToStep(4)">Weiter</button>
+            </div>
+        </div>
+
+        <!-- 4. Install Path -->
+        <div class="step-content" id="step4">
+            <h5 class="mb-4">Installations-Modus</h5>
+            <div class="row g-3">
+                <div class="col-6">
+                    <div class="mode-option active" id="mode-fresh" onclick="setMode('fresh')">
+                        <i class="bi bi-plus-circle h3 text-success"></i>
+                        <h6 class="mt-2 mb-1">Neuinstallation</h6>
+                        <p class="small text-muted mb-0">Frische Datenbank</p>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="mode-option" id="mode-restore" onclick="setMode('restore')">
+                        <i class="bi bi-cloud-upload h3 text-primary"></i>
+                        <h6 class="mt-2 mb-1">Backup Restore</h6>
+                        <p class="small text-muted mb-0">Importiere .db Datei</p>
+                    </div>
+                </div>
+            </div>
+            <div class="text-end d-flex justify-content-between mt-5">
+                <button class="btn btn-link text-white opacity-50 px-0" onclick="goToStep(3)">Zurück</button>
+                <button class="btn btn-install" onclick="goToStep(5)">Weiter</button>
+            </div>
+        </div>
+
+        <!-- 5. Final Configuration -->
+        <div class="step-content" id="step5">
+            <div id="config-fresh">
+                <h5 class="mb-3">Datenbank wählen</h5>
+                <div class="d-flex gap-2 mb-4">
+                    <button class="btn btn-outline-info flex-grow-1 active" id="btn-sq" onclick="setDB('sqlite')">SQLite
+                        (Lokal)</button>
+                    <button class="btn btn-outline-primary flex-grow-1" id="btn-my" onclick="setDB('mysql')">MySQL
+                        (Server)</button>
+                </div>
+                <div id="mysql-fields" style="display:none">
+                    <div class="row g-2 mb-2">
+                        <div class="col-8"><input type="text" id="dbHost" class="form-control" placeholder="Host"></div>
+                        <div class="col-4"><input type="text" id="dbPort" class="form-control" placeholder="3306"></div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6"><input type="text" id="dbUser" class="form-control" placeholder="User"></div>
+                        <div class="col-6"><input type="password" id="dbPass" class="form-control" placeholder="Pass">
+                        </div>
+                    </div>
+                    <input type="text" id="dbName" class="form-control mb-3" placeholder="Database Name">
+                </div>
+                <div id="dbStatus" class="alert small mb-3 text-center" style="display:none; border-radius: 10px;">
+                </div>
+                <button class="btn btn-outline-light w-100 mb-3" onclick="checkDB()" id="btnCheckDB">
+                    <span id="dbLoader" class="spinner-border spinner-border-sm me-2" style="display:none"></span>
+                    Verbindung testen
+                </button>
+            </div>
+
+            <div id="config-restore" style="display:none" class="text-center">
+                <h5 class="mb-3">Backup hochladen</h5>
+                <p class="text-muted small mb-4">Wähle deine `.db` Datei aus einem früheren Backup.</p>
+                <input type="file" id="restoreFile" class="form-control mb-4" accept=".db" onchange="validateBackup()">
+                <div id="restoreStatus" class="alert small text-start"
+                    style="display:none; border-radius: 10px; background: rgba(255, 255, 255, 0.05);">
+                    <div id="restoreLoader" class="text-center py-2">
+                        <span class="spinner-border spinner-border-sm text-info me-2"></span> Validierung läuft...
+                    </div>
+                    <div id="restoreInfo" style="display:none">
+                        <h6 class="fw-bold mb-2 small"><i class="bi bi-file-earmark-check me-2"></i>Backup Inhalt:</h6>
+                        <ul class="list-unstyled mb-0 ps-1" style="font-size: 0.8rem; opacity: 0.9;">
+                            <li><i class="bi bi-people me-2"></i> Benutzer: <span id="stat-users">0</span></li>
+                            <li><i class="bi bi-robot me-2"></i> Bot-Setups: <span id="stat-bots">0</span></li>
+                            <li><i class="bi bi-person-badge me-2"></i> Profile: <span id="stat-profiles">0</span></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div id="finalError" class="text-danger small mb-3 text-center"></div>
+
+            <div class="text-end d-flex justify-content-between mt-4">
+                <button class="btn btn-link text-white opacity-50 px-0" onclick="goToStep(4)">Zurück</button>
+                <button class="btn btn-install" onclick="finalAction()" id="btnFinal">Abschließen 🚀</button>
+            </div>
+        </div>
+
+        <!-- 6. Success / Redirect -->
+        <div class="step-content text-center" id="step6">
+            <div class="py-5">
+                <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
+                <h4 class="mt-4 fw-bold">Installation abgeschlossen!</h4>
+                <p class="text-muted">Das System wird vorbereitet. Du wirst gleich zum Login weitergeleitet.</p>
             </div>
         </div>
     </div>
 
+    <div id="overlay">
+        <div class="spinner-border text-info mb-3" style="width: 3rem; height: 3rem;"></div>
+        <h5 class="text-white fw-bold" id="overlayText">Verarbeite...</h5>
+        <p class="text-muted small">Bitte die Seite nicht schließen.</p>
+    </div>
+
+    <!-- Token Help Modal -->
+    <div class="modal fade" id="tokenHelpModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content shadow-lg">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-robot me-2"></i>Bot Token erstellen</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="help-step">
+                        <h6 class="fw-bold"><i class="bi bi-1-circle me-2"></i>BotFather finden</h6>
+                        <p class="small mb-2">Suche in Telegram nach dem offiziellen <b>@BotFather</b> Account und
+                            klicke unten auf den <b>Start</b> Button, um den Bot zu aktivieren.</p>
+                        <img src="/static/img/bf_step1.png" class="img-fluid rounded" alt="BotFather Suche">
+                    </div>
+                    <div class="help-step">
+                        <h6 class="fw-bold"><i class="bi bi-2-circle me-2"></i>Web-App öffnen</h6>
+                        <p class="small mb-2">Klicke unten links im Chat auf das lila Viereck-Icon (Menü), um das
+                            moderne Web-Interface von BotFather zu öffnen.</p>
+                        <img src="/static/img/bf_step2.png" class="img-fluid rounded" alt="Web-App Icon öffnen">
+                    </div>
+                    <div class="help-step">
+                        <h6 class="fw-bold"><i class="bi bi-3-circle me-2"></i>Bot erstellen</h6>
+                        <p class="small mb-2">Wähle in der Übersicht den großen Button <b>"+ Create a New Bot"</b> aus,
+                            um den Erstellungsprozess zu starten.</p>
+                        <img src="/static/img/bf_step3.png" class="img-fluid rounded" alt="Neuen Bot erstellen">
+                    </div>
+                    <div class="help-step">
+                        <h6 class="fw-bold"><i class="bi bi-4-circle me-2"></i>Details ausfüllen</h6>
+                        <p class="small mb-2">Gib deinem Bot einen Anzeigenamen und einen eindeutigen Nutzernamen
+                            (dieser <b>muss</b> auf <code>_bot</code> enden). Wenn du fertig bist, klicke unten auf den
+                            blauen <b>CREATE BOT</b> Button.</p>
+                        <img src="/static/img/bf_step4.png" class="img-fluid rounded" alt="Bot Details ausfüllen">
+                    </div>
+                    <div class="help-step">
+                        <h6 class="fw-bold"><i class="bi bi-5-circle me-2"></i>Token speichern</h6>
+                        <p class="small mb-2">Dein Bot wurde erfolgreich erstellt! Kopiere dir den langen <b>HTTP API
+                                Token</b> (siehe Bild) und füge ihn hier im Installations-Setup ein. Bewahre diesen
+                            Token gut auf!</p>
+                        <img src="/static/img/bf_step5.png" class="img-fluid rounded"
+                            alt="Token kopieren und speichern">
+                    </div>
+                    <div class="alert alert-info small bg-opacity-10 border-0 text-white mt-3"
+                        style="background: rgba(59, 130, 246, 0.15); color: #93c5fd !important;">
+                        <i class="bi bi-lightbulb me-2"></i><b>Sicherheitshinweis:</b> Dein Token ist wie ein Passwort!
+                        Gib ihn niemals an Fremde weiter, da man damit volle Kontrolle über deinen Bot hat.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary rounded-pill"
+                        data-bs-dismiss="modal">Verstanden</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        let config = { db_type: 'sqlite', db_url: '', is_tested: false };
-
-        function selectDB(type) {
-            config.db_type = type;
-            config.is_tested = (type === 'sqlite');
-            document.querySelectorAll('.db-option').forEach(el => el.classList.remove('active'));
-            document.getElementById('opt-' + type).classList.add('active');
-
-            document.getElementById('sqliteInfo').style.display = type === 'sqlite' ? 'block' : 'none';
-            document.getElementById('mysqlFields').style.display = type === 'mysql' ? 'block' : 'none';
-            document.getElementById('btnStep2Next').disabled = !config.is_tested;
-            document.getElementById('sumDB').innerText = type.toUpperCase();
-        }
+        // Initialize tooltips
+        document.addEventListener('DOMContentLoaded', function () {
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+            var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl)
+            })
+        });
+        let config = {
+            admin_user: '', admin_pass: '',
+            token: '', main_id: '', admin_id: '',
+            mode: 'fresh', db_type: 'sqlite',
+            is_tested: false
+        };
 
         function goToStep(n) {
             document.querySelectorAll('.step-content').forEach(el => el.classList.remove('active'));
             document.getElementById('step' + n).classList.add('active');
-            document.querySelectorAll('.step-dot').forEach(el => {
-                if (parseInt(el.dataset.step) <= n) el.classList.add('active');
-                else el.classList.remove('active');
+            document.querySelectorAll('.step-dot').forEach((dot, idx) => {
+                dot.classList.toggle('active', (idx + 1) <= n);
             });
         }
 
-        async function testDB() {
-            const btn = document.getElementById('btnTestDB');
-            const spinner = document.getElementById('testSpinner');
-            const status = document.getElementById('dbStatus');
-            const nextBtn = document.getElementById('btnStep2Next');
+        function validateAdmin() {
+            const u = document.getElementById('adminUser').value.trim();
+            const p = document.getElementById('adminPass').value.trim();
+            const pc = document.getElementById('adminPassConfirm').value.trim();
+            const err = document.getElementById('adminError');
 
-            status.style.display = 'none';
+            err.style.display = 'none';
+
+            if (u.length < 3) {
+                err.innerText = "Nutzername muss mindestens 3 Zeichen lang sein.";
+                err.style.display = 'block';
+                return;
+            }
+
+            // Complexity check
+            const hasUpper = /[A-Z]/.test(p);
+            const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(p);
+
+            if (p.length < 6) {
+                err.innerText = "Passwort muss mindestens 6 Zeichen lang sein.";
+                err.style.display = 'block';
+                return;
+            }
+            if (!hasUpper) {
+                err.innerText = "Passwort muss mindestens einen Großbuchstaben enthalten.";
+                err.style.display = 'block';
+                return;
+            }
+            if (!hasSpecial) {
+                err.innerText = "Passwort muss mindestens ein Sonderzeichen enthalten.";
+                err.style.display = 'block';
+                return;
+            }
+
+            if (p !== pc) {
+                err.innerText = "Passwörter stimmen nicht überein.";
+                err.style.display = 'block';
+                return;
+            }
+
+            config.admin_user = u; config.admin_pass = p;
+            goToStep(3);
+        }
+
+        function checkStrength() {
+            const p = document.getElementById('adminPass').value;
+            const meter = document.getElementById('strengthMeter');
+            const bar = document.getElementById('strengthBar');
+
+            if (!p) {
+                meter.style.display = 'none';
+                return;
+            }
+
+            meter.style.display = 'block';
+            let strength = 0;
+
+            if (p.length >= 6) strength += 25;
+            if (/[A-Z]/.test(p)) strength += 25;
+            if (/[a-z]/.test(p)) strength += 25;
+            if (/[!@#$%^&*(),.?":{}|<>]/.test(p)) strength += 25;
+
+            bar.style.width = strength + '%';
+
+            if (strength <= 25) bar.style.backgroundColor = '#ef4444';
+            else if (strength <= 50) bar.style.backgroundColor = '#f59e0b';
+            else if (strength <= 75) bar.style.backgroundColor = '#3b82f6';
+            else bar.style.backgroundColor = '#10b981';
+        }
+
+        async function testToken() {
+            const t = document.getElementById('botToken').value.trim();
+            const btn = document.getElementById('btnTestToken');
+            const prompt = document.getElementById('botNamePrompt');
+            if (!t) return;
+            btn.disabled = true; btn.innerText = "...";
+            try {
+                const res = await fetch('/install/test-token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: t })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    config.token = t;
+                    prompt.innerText = "Bot erkannt: " + data.bot_name;
+                    prompt.style.display = 'block';
+                } else {
+                    alert("Token ungültig: " + data.error);
+                }
+            } catch (e) { alert("Verbindungsfehler"); }
+            btn.disabled = false; btn.innerText = "Testen";
+        }
+
+        async function detectGroupId(fieldId) {
+            const t = document.getElementById('botToken').value.trim();
+            if (!t) { alert("Bitte zuerst Bot-Token eingeben!"); return; }
+
+            const btn = event.currentTarget;
+            const originalHtml = btn.innerHTML;
             btn.disabled = true;
-            spinner.style.display = 'inline-block';
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+            try {
+                const res = await fetch('/install/get-group-id', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: t })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById(fieldId).value = data.chat_id;
+                    alert("ID erkannt für Gruppe: " + data.chat_name);
+                } else {
+                    alert("Fehler: " + data.error);
+                }
+            } catch (e) { alert("Serverfehler"); }
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        }
+
+        async function sendTestMessage(fieldId) {
+            const t = document.getElementById('botToken').value.trim();
+            const cid = document.getElementById(fieldId).value.trim();
+            if (!t || !cid) { alert("Token und Chat ID erforderlich!"); return; }
+
+            const btn = event.currentTarget;
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+            try {
+                const res = await fetch('/install/send-test-message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: t, chat_id: cid })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert("Testnachricht wurde gesendet! Bitte prüfe Telegram.");
+                } else {
+                    alert("Fehler beim Senden: " + data.error);
+                }
+            } catch (e) { alert("Übertragungsfehler"); }
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        }
+
+        function setMode(m) {
+            config.mode = m;
+            document.getElementById('mode-fresh').classList.toggle('active', m === 'fresh');
+            document.getElementById('mode-restore').classList.toggle('active', m === 'restore');
+            document.getElementById('config-fresh').style.display = m === 'fresh' ? 'block' : 'none';
+            document.getElementById('config-restore').style.display = m === 'restore' ? 'block' : 'none';
+            document.getElementById('btnFinal').innerText = m === 'fresh' ? 'Installieren 🚀' : 'Wiederherstellen ⬆️';
+
+            // Manage button state on mode switch
+            const finalBtn = document.getElementById('btnFinal');
+            if (m === 'fresh') {
+                finalBtn.disabled = !config.is_tested;
+                finalBtn.style.opacity = config.is_tested ? '1' : '0.5';
+            } else {
+                // Restore mode starts disabled until valid backup
+                finalBtn.disabled = true;
+                finalBtn.style.opacity = '0.5';
+                document.getElementById('restoreStatus').style.display = 'none';
+            }
+        }
+
+        function setDB(t) {
+            config.db_type = t;
+            config.is_tested = (t === 'sqlite');
+            document.getElementById('btn-sq').classList.toggle('active', t === 'sqlite');
+            document.getElementById('btn-my').classList.toggle('active', t === 'mysql');
+            document.getElementById('mysql-fields').style.display = t === 'mysql' ? 'block' : 'none';
+        }
+
+        async function checkDB() {
+            const btn = document.getElementById('btnCheckDB');
+            const loader = document.getElementById('dbLoader');
+            const statusBox = document.getElementById('dbStatus');
+            const finalBtn = document.getElementById('btnFinal');
+
+            btn.disabled = true;
+            loader.style.display = 'inline-block';
+            statusBox.style.display = 'none';
+            statusBox.classList.remove('alert-success', 'alert-danger');
 
             const payload = {
                 db_type: config.db_type,
-                host: document.getElementById('dbHost').value,
-                port: document.getElementById('dbPort').value,
+                host: document.getElementById('dbHost').value || 'localhost',
+                port: document.getElementById('dbPort').value || '3306',
                 user: document.getElementById('dbUser').value,
                 password: document.getElementById('dbPass').value,
-                dbname: document.getElementById('dbName').value
+                dbname: document.getElementById('dbName').value || 'bot_engine'
             };
 
             try {
@@ -417,172 +771,153 @@
                     body: JSON.stringify(payload)
                 });
                 const data = await res.json();
+
+                statusBox.style.display = 'block';
                 if (data.success) {
-                    config.db_url = data.db_url;
                     config.is_tested = true;
-                    status.className = 'alert alert-success py-2 small';
-                    status.innerHTML = '<i class="bi bi-check-circle me-2"></i> Verbindung erfolgreich!';
-                    status.style.display = 'block';
-                    nextBtn.disabled = false;
+                    statusBox.classList.add('alert-success');
+                    statusBox.innerHTML = '<i class="bi bi-check-circle me-2"></i>Verbindung erfolgreich hergestellt!';
+                    statusBox.style.background = 'rgba(16, 185, 129, 0.15)';
+                    statusBox.style.color = '#10b981';
+                    finalBtn.disabled = false;
+                    finalBtn.style.opacity = '1';
                 } else {
-                    status.className = 'alert alert-danger py-2 small';
-                    status.innerHTML = '<i class="bi bi-x-circle me-2"></i> Fehler: ' + data.error;
-                    status.style.display = 'block';
-                    nextBtn.disabled = true;
+                    config.is_tested = false;
+                    statusBox.classList.add('alert-danger');
+                    statusBox.innerHTML = '<i class="bi bi-exclamation-triangle me-2"></i>' + data.error;
+                    statusBox.style.background = 'rgba(239, 68, 68, 0.15)';
+                    statusBox.style.color = '#ef4444';
+                    finalBtn.disabled = true;
+                    finalBtn.style.opacity = '0.5';
                 }
             } catch (e) {
-                status.className = 'alert alert-danger py-2 small';
-                status.innerText = 'Netzwerkfehler';
-                status.style.display = 'block';
+                statusBox.style.display = 'block';
+                statusBox.classList.add('alert-danger');
+                statusBox.innerText = "Netzwerkfehler beim Verbindungstest.";
             }
             btn.disabled = false;
-            spinner.style.display = 'none';
+            loader.style.display = 'none';
         }
 
-        function proceedToStep3() {
-            if (config.is_tested) goToStep(3);
-        }
+        async function validateBackup() {
+            const input = document.getElementById('restoreFile');
+            const statusBox = document.getElementById('restoreStatus');
+            const loader = document.getElementById('restoreLoader');
+            const info = document.getElementById('restoreInfo');
+            const finalBtn = document.getElementById('btnFinal');
 
-        function validateAdmin() {
-            const u = document.getElementById('adminUser').value;
-            const p1 = document.getElementById('adminPass').value;
-            const p2 = document.getElementById('adminPass2').value;
-            const err = document.getElementById('adminError');
-            err.style.display = 'none';
+            if (!input.files.length) return;
 
-            if (u.length < 3) { err.innerText = "Nutzername zu kurz (min. 3)"; err.style.display = 'block'; return; }
-
-            // Strict Validation
-            const hasUpper = /[A-Z]/.test(p1);
-            const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(p1);
-
-            if (p1.length < 6) { err.innerText = "Das Passwort muss mindestens 6 Zeichen lang sein."; err.style.display = 'block'; return; }
-            if (!hasUpper) { err.innerText = "Das Passwort muss mindestens einen Großbuchstaben enthalten."; err.style.display = 'block'; return; }
-            if (!hasSpecial) { err.innerText = "Das Passwort muss mindestens ein Sonderzeichen enthalten."; err.style.display = 'block'; return; }
-
-            if (p1 !== p2) { err.innerText = "Die Passwörter stimmen nicht überein."; err.style.display = 'block'; return; }
-
-            config.admin_user = u;
-            config.admin_pass = p1;
-            document.getElementById('sumAdmin').innerText = u;
-            goToStep(4);
-        }
-
-        function checkPasswordStrength(p) {
-            const meter = document.getElementById('strengthMeter');
-            const bar = document.getElementById('strengthBar');
-            const desc = document.getElementById('strengthDesc');
-
-            if (!p) {
-                meter.style.display = 'none';
-                desc.innerText = '';
-                return;
-            }
-
-            meter.style.display = 'block';
-            let strength = 0;
-
-            // Requirements
-            const reqs = {
-                length: p.length >= 6,
-                upper: /[A-Z]/.test(p),
-                special: /[!@#$%^&*(),.?":{}|<>]/.test(p)
-            };
-
-            // Update UI requirements
-            Object.keys(reqs).forEach(r => {
-                const el = document.getElementById('req-' + r);
-                if (reqs[r]) el.classList.add('met');
-                else el.classList.remove('met');
-            });
-
-            if (reqs.length) strength += 33;
-            if (reqs.upper) strength += 33;
-            if (reqs.special) strength += 34;
-
-            bar.style.width = strength + '%';
-
-            if (strength <= 33) {
-                bar.style.backgroundColor = '#ef4444'; // Red
-                desc.innerText = 'Schwach';
-                desc.style.color = '#ef4444';
-            } else if (strength <= 66) {
-                bar.style.backgroundColor = '#f59e0b'; // Yellow
-                desc.innerText = 'Mittel';
-                desc.style.color = '#f59e0b';
-            } else {
-                bar.style.backgroundColor = '#10b981'; // Green
-                desc.innerText = 'Sicher';
-                desc.style.color = '#10b981';
-            }
-        }
-
-        async function finishInstall() {
-            const btn = document.getElementById('btnFinish');
-            const spinner = document.getElementById('finishSpinner');
-            btn.disabled = true;
-            spinner.style.display = 'inline-block';
-
-            try {
-                const res = await fetch('/install/setup', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(config)
-                });
-                const data = await res.json();
-                if (data.success) {
-                    btn.className = "btn btn-success w-100 py-3";
-                    btn.innerHTML = "FERTIG! Container startet neu... 🔄";
-                    // Docker needs a few seconds to restart the container, so we wait 5s instead of 1.5s
-                    setTimeout(() => window.location.href = "/auth/login", 5000);
-                } else {
-                    alert("Installation fehlgeschlagen: " + data.error);
-                    btn.disabled = false;
-                    spinner.style.display = 'none';
-                }
-            } catch (e) {
-                alert("Verbindungsfehler");
-                btn.disabled = false;
-                spinner.style.display = 'none';
-            }
-        }
-
-        async function handleRestore(input) {
-            if (!input.files || input.files.length === 0) return;
-            const file = input.files[0];
-
-            if (!confirm(`Möchtest du das Backup "${file.name}" wirklich wiederherstellen? Dies überschreibt alle Daten und schließt die Installation ab!`)) {
-                input.value = '';
-                return;
-            }
+            statusBox.style.display = 'block';
+            loader.style.display = 'block';
+            info.style.display = 'none';
+            statusBox.classList.remove('alert-danger', 'alert-success');
+            statusBox.style.background = 'rgba(255, 255, 255, 0.05)';
+            statusBox.style.color = '#fff';
+            finalBtn.disabled = true;
+            finalBtn.style.opacity = '0.5';
 
             const formData = new FormData();
-            formData.append('backup_file', file);
-
-            const btn = input.previousElementSibling;
-            const originalText = btn.innerHTML;
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm d-inline-block"></span> Wiederherstellen...';
+            formData.append('backup_file', input.files[0]);
 
             try {
-                const res = await fetch('/install/restore', {
+                const res = await fetch('/install/validate-backup', {
                     method: 'POST',
                     body: formData
                 });
                 const data = await res.json();
 
+                loader.style.display = 'none';
                 if (data.success) {
-                    btn.className = "btn btn-success btn-sm px-4";
-                    btn.innerHTML = "ERFOLGREICH! Neustart... 🔄";
-                    setTimeout(() => window.location.href = "/auth/login", 5000);
+                    statusBox.classList.add('alert-success');
+                    statusBox.style.background = 'rgba(16, 185, 129, 0.1)';
+                    statusBox.style.color = '#10b981';
+                    info.style.display = 'block';
+
+                    document.getElementById('stat-users').innerText = data.stats.users;
+                    document.getElementById('stat-bots').innerText = data.stats.bots;
+                    document.getElementById('stat-profiles').innerText = data.stats.profiles;
+
+                    finalBtn.disabled = false;
+                    finalBtn.style.opacity = '1';
                 } else {
-                    throw new Error(data.error || 'Fehler beim Wiederherstellen');
+                    statusBox.classList.add('alert-danger');
+                    statusBox.style.background = 'rgba(239, 68, 68, 0.15)';
+                    statusBox.style.color = '#ef4444';
+                    statusBox.innerHTML = '<i class="bi bi-x-circle me-2"></i>' + data.error;
                 }
             } catch (e) {
-                alert(e.message);
-                btn.disabled = false;
-                btn.innerHTML = originalText;
-                input.value = '';
+                loader.style.display = 'none';
+                statusBox.classList.add('alert-danger');
+                statusBox.innerText = "Fehler bei der Verbindung zum Server.";
+            }
+        }
+
+        async function finalAction() {
+            // Update config from step 3 fields (incase user didn't 'test' or 'scan')
+            config.token = document.getElementById('botToken').value.trim();
+            config.main_id = document.getElementById('mainGroupId').value.trim();
+            config.admin_id = document.getElementById('adminGroupId').value.trim();
+
+            if (config.mode === 'fresh') {
+                if (!config.is_tested) { alert("Bitte Datenbank-Verbindung testen!"); return; }
+                const overlay = document.getElementById('overlay');
+                overlay.style.display = 'flex';
+
+                const payload = {
+                    admin_user: config.admin_user, admin_pass: config.admin_pass,
+                    telegram_token: config.token,
+                    main_group_id: config.main_id,
+                    admin_group_id: config.admin_id,
+                    db_type: config.db_type,
+                    db_url: '', // will be built by backend if mysql
+                    host: document.getElementById('dbHost').value,
+                    port: document.getElementById('dbPort').value,
+                    user: document.getElementById('dbUser').value,
+                    password: document.getElementById('dbPass').value,
+                    dbname: document.getElementById('dbName').value
+                };
+
+                try {
+                    const res = await fetch('/install/setup', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        goToStep(6);
+                        setTimeout(() => window.location.href = "/auth/login", 2000);
+                    } else alert("Fehler: " + data.error);
+                } catch (e) { alert("Serverfehler"); }
+                overlay.style.display = 'none';
+            } else {
+                // Restore
+                const fileInput = document.getElementById('restoreFile');
+                if (!fileInput.files.length) { alert("Bitte Backup-Datei wählen!"); return; }
+
+                const overlay = document.getElementById('overlay');
+                const overlayText = document.getElementById('overlayText');
+                overlayText.innerText = "Backup wird eingespielt...";
+                overlay.style.display = 'flex';
+
+                const formData = new FormData();
+                formData.append('backup_file', fileInput.files[0]);
+                formData.append('telegram_token', config.token);
+                formData.append('main_group_id', config.main_id);
+                formData.append('admin_group_id', config.admin_id);
+                formData.append('admin_user', config.admin_user);
+                formData.append('admin_pass', config.admin_pass);
+
+                try {
+                    const res = await fetch('/install/restore', { method: 'POST', body: formData });
+                    const data = await res.json();
+                    if (data.success) {
+                        goToStep(6);
+                        setTimeout(() => window.location.href = "/auth/login", 2500);
+                    } else alert("Fehler: " + data.error);
+                } catch (e) { alert("Übertragungsfehler"); }
+                overlay.style.display = 'none';
             }
         }
     </script>
