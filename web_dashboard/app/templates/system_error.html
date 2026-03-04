@@ -80,14 +80,14 @@
 <body>
     <div class="frozen-card">
         <div class="icon-box">
-            {% if sync_state and sync_state.get('trial_expiry') and sync_state.get('mode') == 'HALT' %}
+            {% if sync_state and sync_state.get('mode') == 'HALT' %}
             <i class="bi bi-clock-history"></i>
             {% else %}
             <i class="bi bi-hdd-network-fill"></i>
             {% endif %}
         </div>
 
-        {% if sync_state and sync_state.get('trial_expiry') and sync_state.get('mode') == 'HALT' %}
+        {% if sync_state and sync_state.get('mode') == 'HALT' %}
         <h1>System abgelaufen</h1>
         <p>Die 3-tägige Testversion ist abgelaufen. Das System wurde angehalten.</p>
         <p class="text-danger fw-bold">Bitte wende dich an den Administrator (@pub_Rinno_cgn), um dich per Activation
