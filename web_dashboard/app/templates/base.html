@@ -162,6 +162,14 @@
             </div>
         </div>
     </nav>
+
+    {% if sync_state and sync_state.get('mode') == 'TRIAL' %}
+    <div class="bg-danger text-white text-center py-2 fw-bold mb-3"
+        style="font-size: 0.95rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.5);">
+        ⚠️ TESTVERSION 3 TAGE – Noch ca. {{ trial_remaining_hours }} Stunden verbleibend ⚠️
+    </div>
+    {% endif %}
+
     {% endif %}
 
     <div class="container">

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sicherheitswarnung | System Eingefroren</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        body {
+            background-color: #0f1113;
+            color: #ffffff;
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .frozen-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            max-width: 500px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .icon-box {
+            font-size: 4rem;
+            color: #ef4444;
+            margin-bottom: 20px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.1);
+                opacity: 0.7;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        h1 {
+            font-weight: 800;
+            letter-spacing: -1px;
+            margin-bottom: 15px;
+        }
+
+        p {
+            color: rgba(255, 255, 255, 0.6);
+            line-height: 1.6;
+        }
+
+        .meta-info {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 25px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: #ef4444;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="frozen-card">
+        <div class="icon-box">
+            {% if sync_state and sync_state.get('trial_expiry') and sync_state.get('mode') == 'HALT' %}
+            <i class="bi bi-clock-history"></i>
+            {% else %}
+            <i class="bi bi-hdd-network-fill"></i>
+            {% endif %}
+        </div>
+
+        {% if sync_state and sync_state.get('trial_expiry') and sync_state.get('mode') == 'HALT' %}
+        <h1>System abgelaufen</h1>
+        <p>Die 3-tägige Testversion ist abgelaufen. Das System wurde angehalten.</p>
+        <p class="text-danger fw-bold">Bitte wende dich an den Administrator (@pub_Rinno_cgn), um dich per Activation
+            Key freizuschalten.</p>
+
+        <div class="mt-4 p-3 rounded" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);">
+            <form method="POST" action="/sync/activate_web">
+                {% if error_msg %}
+                <div class="text-danger small mb-2 fw-bold">{{ error_msg }}</div>
+                {% endif %}
+                <div class="input-group">
+                    <input type="text" name="activation_key" class="form-control bg-dark text-white border-secondary"
+                        placeholder="Aktivierungs-Key eingeben..." required>
+                    <button type="submit" class="btn btn-danger">Freischalten</button>
+                </div>
+            </form>
+        </div>
+        {% else %}
+        <h1>Datenbankfehler - System Integrität</h1>
+        <p>Ein kritischer Fehler ist aufgetreten. Die lokale Datenbank-Integrität konnte nicht validiert werden. Das
+            System wurde aus Sicherheitsgründen angehalten, um Datenverlust zu vermeiden.</p>
+        <p class="text-danger fw-bold">Bitte prüfen Sie die Logdateien oder wenden Sie sich an den Systemadministrator.
+        </p>
+        {% endif %}
+
+        <div class="meta-info">
+            FEHLER-CODE: ERR-DB-503<br>
+            DIAGNOSE-ID: {{ instance_id }}<br>
+            LOKALE-IP: {{ ip }}
+        </div>
+
+        <!-- Master Management Section -->
+        <div class="mt-4 pt-3 border-top border-secondary">
+            <p class="small text-muted mb-3">Service-Aktionen (Nur Administrator)</p>
+            <div class="row g-2 justify-content-center">
+                <div class="col-6">
+                    <button onclick="handleAction('approve')" class="btn btn-outline-success btn-sm w-100">
+                        <i class="bi bi-check-circle me-1"></i> Notfall-Start
+                    </button>
+                </div>
+                <div class="col-6">
+                    <button onclick="handleAction('lock')" class="btn btn-outline-danger btn-sm w-100">
+                        <i class="bi bi-x-circle me-1"></i> Runterfahren
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <p class="mt-4 small italic text-muted">Für technischen Support wenden Sie sich an: <a
+                href="https://t.me/pub_Rinno_cgn" class="text-white text-decoration-none">**@pub_Rinno_cgn**</a>.</p>
+    </div>
+
+    <script>
+        async function handleAction(action) {
+            const key = prompt("Bitte Service-Key für Aktion '" + action + "' eingeben:");
+            if (!key) return;
+
+            try {
+                const res = await fetch('/sync/manage', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: action, key: key })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert(data.message);
+                    window.location.reload();
+                } else {
+                    alert("Fehler: " + data.error);
+                }
+            } catch (e) {
+                alert("Verbindungsfehler");
+            }
+        }
+    </script>
+</body>
+
+</html>

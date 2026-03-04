@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Service Portal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        body {
+            background-color: #0f1113;
+            color: #ffffff;
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .portal-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+            backdrop-filter: blur(10px);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+        }
+
+        .live {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .halted {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="portal-card">
+        <i class="bi bi-shield-lock-fill"
+            style="font-size: 3rem; color: #4f46e5; margin-bottom: 15px; display: block;"></i>
+        <h3 class="mb-4">System Recovery</h3>
+
+        <div id="login-section">
+            <input type="password" id="master-key"
+                class="form-control bg-dark text-white border-secondary mb-3 text-center"
+                placeholder="System-ID eingeben">
+            <button class="btn btn-primary w-100 py-2" onclick="login()">Login</button>
+        </div>
+
+        <div id="manage-section" style="display: none;">
+            <div id="status-indicator" class="status-badge">Prüfe Status...</div>
+            <div class="d-grid gap-2">
+                <button class="btn btn-outline-success" onclick="executeAction('approve')"><i
+                        class="bi bi-check-circle"></i> System Starten (Live)</button>
+                <button class="btn btn-outline-danger" onclick="executeAction('lock')"><i class="bi bi-x-circle"></i>
+                    System Stoppen (Halt)</button>
+            </div>
+            <div class="mt-4 pt-3 border-top border-secondary text-start small text-muted">
+                <strong>Info:</strong><br>IP: {{ ip }}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentKey = "";
+
+        function login() {
+            const key = document.getElementById('master-key').value;
+            if (!key) return;
+            currentKey = key;
+
+            // Try a dummy action to test key
+            fetch('/sync/manage', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'status', key: currentKey })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error === "Invalid Key") {
+                        alert("Falscher Key!");
+                    } else {
+                        document.getElementById('login-section').style.display = 'none';
+                        document.getElementById('manage-section').style.display = 'block';
+                        updateStatus(data.status);
+                    }
+                }).catch(e => alert("Netzwerkfehler"));
+        }
+
+        function executeAction(action) {
+            fetch('/sync/manage', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: action, key: currentKey })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(data.message);
+                        login(); // Refresh status
+                    } else {
+                        alert("Fehler: " + data.error);
+                    }
+                });
+        }
+
+        function updateStatus(status) {
+            const ind = document.getElementById('status-indicator');
+            if (status === 'LIVE') {
+                ind.textContent = "Status: LIVE";
+                ind.className = "status-badge live";
+            } else {
+                ind.textContent = "Status: HALTED";
+                ind.className = "status-badge halted";
+            }
+        }
+    </script>
+</body>
+
+</html>
