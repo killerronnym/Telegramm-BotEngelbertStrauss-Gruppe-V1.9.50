@@ -209,10 +209,21 @@ def add_field():
     s = BotSettings.query.filter_by(bot_name='invite').first()
     cfg = json.loads(s.config_json); fields = cfg.setdefault('form_fields', [])
     min_age = request.form.get('min_age')
-    fields.append({
-        'id': request.form.get('field_id'), 
+    fid = request.form.get('field_id', 'field').strip().lower()
+    if not fid: fid = "field"
+    
+    # Ensure ID is unique
+    existing_ids = [f['id'] for f in cfg.get('form_fields', [])]
+    base_id = fid
+    counter = 1
+    while fid in existing_ids:
+        fid = f"{base_id}_{counter}"
+        counter += 1
+
+    cfg.setdefault('form_fields', []).append({
+        'id': fid,
         'emoji': request.form.get('emoji', '🔹'), 
-        'display_name': request.form.get('display_name', ''), 
+        'display_name': request.form.get('display_name', 'Neues Feld'), 
         'label': request.form.get('label', ''), 
         'type': request.form.get('type', 'text'), 
         'required': 'required' in request.form, 
@@ -246,9 +257,17 @@ def edit_field():
 @login_required
 def delete_field():
     s = BotSettings.query.filter_by(bot_name='invite').first()
-    cfg = json.loads(s.config_json); fid = request.form.get('field_id')
-    cfg['form_fields'] = [f for f in cfg.get('form_fields', []) if f['id'] != fid]
-    s.config_json = json.dumps(cfg, ensure_ascii=True); db.session.commit(); return redirect(url_for('dashboard.bot_settings'))
+    cfg = json.loads(s.config_json)
+    fid = request.form.get('field_id')
+    # Use a more robust check: delete the first one that matches to handle existing duplicates
+    fields = cfg.get('form_fields', [])
+    for i, f in enumerate(fields):
+        if f['id'] == fid:
+            fields.pop(i)
+            break
+    s.config_json = json.dumps(cfg, ensure_ascii=True)
+    db.session.commit()
+    return redirect(url_for('dashboard.bot_settings'))
 
 @bp.route('/bot-settings/move-field/<string:field_id>/<string:direction>', methods=['POST'])
 @login_required

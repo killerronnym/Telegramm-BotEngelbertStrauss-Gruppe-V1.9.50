@@ -689,22 +689,26 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
     share_username_choice = None
     
     for field in ordered_fields:
+        if not field.get('enabled', True):
+            continue
+            
         fid = field['id']
+        ftype = field.get('type', '').lower()
         answer = answers.get(fid)
         
-        if field['type'] == 'pm_contact' or fid == 'pm_allowed':
+        if ftype == 'pm_contact' or fid == 'pm_allowed':
             pm_allowed_status = answer # "Ja" oder "Nein"
             continue
-        if field['type'] == 'header_name' or fid == 'share_username':
+        if ftype == 'header_name' or fid == 'share_username':
             share_username_choice = answer # "Ja" oder "Nein"
             continue
 
         if answer is None or (isinstance(answer, str) and answer.lower().strip() in ['nein', 'n/a']):
             continue
             
-        if field['type'] == 'photo':
+        if field.get('type', '').lower() == 'photo':
             photo_file_id = answer
-        elif field['type'] == 'birthday':
+        elif field.get('type', '').lower() == 'birthday':
             # Geburtstag: NUR Alter im Steckbrief anzeigen, KEIN Datum
             emoji = field.get('emoji', '🎂')
             name_label = field.get('display_name', 'Alter')

@@ -34,6 +34,7 @@ def create_app(test_config=None):
             return None
     
     app.jinja_env.filters['datetimeformat'] = datetimeformat
+    app.jinja_env.add_extension('jinja2.ext.do')
     
     # Blueprints registrieren
     from .routes import dashboard, auth, api, install, sync

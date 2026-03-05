@@ -522,9 +522,17 @@
                                                         max="{{ config.get('form_fields', [])|length }}">
                                                 </div>
                                             </td>
-                                            <td><span
+                                            <td>
+                                                <span
                                                     class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-2 py-1">{{
-                                                    fid }}</span></td>
+                                                    fid }}</span>
+                                                {% set count = [] %}{% for i in config.get('form_fields', []) %}{% if
+                                                i.id == fid %}{% do count.append(1) %}{% endif %}{% endfor %}
+                                                {% if count|length > 1 %}
+                                                <span class="badge bg-danger ms-1"
+                                                    title="Doppelte ID! Bitte löschen/ändern.">⚠️ DOPPELT</span>
+                                                {% endif %}
+                                            </td>
                                             <td>
                                                 <div class="small text-secondary mb-1 opacity-75">{{ field.get('label',
                                                     '') }}
