@@ -194,11 +194,21 @@ async def letsgo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     
     first_field = fields[0]
     username = update.effective_user.username or "Nutzer"
-    label = first_field.get('label', 'Frage?').replace('{username}', f"@{username}")
+    label = first_field.get('label', 'Frage?')
+    username = update.effective_user.username or "Nutzer"
+    label = label.replace('{username}', f"@{username}")
     
     keyboard = None
     ftype = first_field.get('type', 'text').lower()
     if ftype in ['boolean_buttons', 'header_name', 'pm_contact', 'birthday']:
+        # Benutzerdefinierte Texte für Spezial-Typen
+        if ftype == 'header_name':
+            label = "Soll dein Telegram-Name im Steckbrief angezeigt werden?"
+        elif ftype == 'pm_contact':
+            label = "Darf man dich privat anschreiben?"
+        elif ftype == 'birthday':
+            label = "Möchtest du dein Geburtsdatum hinzufügen? (Für Glückwünsche, nur dein Alter wird im Steckbrief gezeigt)"
+            
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ JA", callback_data="bool_ans_yes"),
              InlineKeyboardButton("❌ NEIN", callback_data="bool_ans_no")]
@@ -236,22 +246,19 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                 if answer_val == 'no':
                     # NEIN -> Alters-Rückfrage stellen (kein Datum, aber Alter mit Mindestalter)
                     context.user_data['birthday_age_fallback'] = True
-                    await update.callback_query.edit_message_text("❌ Kein Geburtstag eingetragen.")
-                    age_label = field.get('age_fallback_label') or "Wie alt bist du? (Bitte nur die Zahl eingeben)"
                     await context.bot.send_message(
                         chat_id=update.effective_chat.id,
-                        text=age_label
+                        text="Alles klar, dann gib bitte nur dein <b>Alter</b> als Zahl ein (z.B. 25).",
+                        parse_mode="HTML"
                     )
-                    logger.info(f"handle_answer: Birthday NEIN -> Alters-Rückfrage gestellt.")
                     return ASKING_QUESTIONS
                 else:
-                    # JA -> Formathinweis senden und auf Datum warten
+                    # JA -> Datum mit Jahrgang abfragen
                     context.user_data['birthday_confirmed'] = True
-                    await update.callback_query.edit_message_text("✅ Super! Bitte gib deinen Geburtstag ein.")
                     await context.bot.send_message(
                         chat_id=update.effective_chat.id,
-                        text="📅 Bitte schreibe deinen Geburtstag mit Jahrgang:\n\n"
-                             "<b>TT.MM.JJJJ</b>  →  z.B. <code>15.08.1990</code>",
+                        text="Super! Bitte schreibe dein Geburtsdatum im Format: <b>TT.MM.JJJJ</b>\n\n"
+                             "<i>Hinweis: Das Datum wird nur für Glückwünsche gespeichert. Im Steckbrief erscheint nur dein Alter.</i>",
                         parse_mode="HTML"
                     )
                     return ASKING_QUESTIONS
@@ -460,6 +467,14 @@ async def next_question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         keyboard = None
         ftype = next_field.get('type', 'text').lower()
         if ftype in ['boolean_buttons', 'header_name', 'pm_contact', 'birthday']:
+            # Benutzerdefinierte Texte für Spezial-Typen
+            if ftype == 'header_name':
+                next_label = "Soll dein Telegram-Name im Steckbrief angezeigt werden?"
+            elif ftype == 'pm_contact':
+                next_label = "Darf man dich privat anschreiben?"
+            elif ftype == 'birthday':
+                next_label = "Möchtest du dein Geburtsdatum hinzufügen? (Für Glückwünsche, nur dein Alter wird im Steckbrief gezeigt)"
+            
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("✅ JA", callback_data="bool_ans_yes"),
                  InlineKeyboardButton("❌ NEIN", callback_data="bool_ans_no")]
@@ -745,7 +760,7 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
     # PM-Banner unten anfügen (Spezial-Typ: pm_contact oder ID: pm_allowed)
     if pm_allowed_status:
         banner_emoji = "📩"
-        banner_text = "Darf privat angeschrieben werden: " + pm_allowed_status.upper()
+        banner_text = f"Mich darf man privat anschreiben: {pm_allowed_status.upper()}"
         final_text += f"\n\n{banner_emoji} <b>{banner_text}</b>"
 
     profile_data = {
