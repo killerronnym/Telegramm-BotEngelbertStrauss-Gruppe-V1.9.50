@@ -1667,6 +1667,20 @@ def create_event_api():
     should_pin = request.form.get('pin') == 'true'
     image = request.files.get('image')
     
+    # Validation & Auto-fix for Chat ID
+    if chat_id:
+        chat_id = chat_id.strip()
+        # If it's a numeric ID (no @) and doesn't start with -100, try to fix it
+        if chat_id.replace('-', '').isdigit():
+            if not chat_id.startswith("-100"):
+                # Special cases: IDs starting with - (but not -100)
+                if chat_id.startswith("-"):
+                    cleaned = chat_id.lstrip("-")
+                    chat_id = f"-100{cleaned}"
+                else:
+                    chat_id = f"-100{chat_id}"
+                logger.info(f"Auto-fixed Chat ID to: {chat_id}")
+    
     if not title or not chat_id:
         return jsonify({"success": False, "error": "Titel und Chat-ID sind erforderlich."}), 400
         
@@ -1684,7 +1698,7 @@ def create_event_api():
         new_event = GroupEvent(
             title=title,
             description=description,
-            chat_id=int(chat_id),
+            chat_id=int(chat_id) if chat_id.replace('-', '').isdigit() else None,
             should_pin=should_pin,
             image_path=image_path
         )
@@ -1701,11 +1715,12 @@ def create_event_api():
                     from telegram import Bot
                     from telegram.constants import ParseMode
                     from bots.event_bot.event_bot import get_event_markup
+                    import html
                     
                     bot = Bot(token)
                     
-                    # Format
-                    text = f"📅 **{title}**\n\n{description}\n\n✅ 0 | 🤔 0 | ❌ 0"
+                    # Format with HTML
+                    text = f"📅 <b>{html.escape(title)}</b>\n\n{html.escape(description)}\n\n✅ 0 | 🤔 0 | ❌ 0"
                     markup = get_event_markup(new_event.id, {})
                     
                     if image_path:
@@ -1716,14 +1731,14 @@ def create_event_api():
                                 chat_id=int(chat_id),
                                 photo=f,
                                 caption=text,
-                                parse_mode=ParseMode.MARKDOWN,
+                                parse_mode=ParseMode.HTML,
                                 reply_markup=markup
                             )
                     else:
                         posted_msg = await bot.send_message(
                             chat_id=int(chat_id),
                             text=text,
-                            parse_mode=ParseMode.MARKDOWN,
+                            parse_mode=ParseMode.HTML,
                             reply_markup=markup
                         )
                         
@@ -1731,7 +1746,6 @@ def create_event_api():
                         await bot.pin_chat_message(chat_id=int(chat_id), message_id=posted_msg.message_id)
                         
                     # Save message_id for later updates
-                    # We need a new session or use the shared flask_app context
                     from shared_bot_utils import get_shared_flask_app
                     f_app = get_shared_flask_app()
                     with f_app.app_context():
@@ -1740,9 +1754,10 @@ def create_event_api():
                         if ev:
                             ev.message_id = posted_msg.message_id
                             db_ctx.session.commit()
+                    logger.info(f"Event '{title}' posted successfully to {chat_id}. MsgID: {posted_msg.message_id}")
                             
                 except Exception as e:
-                    logger.error(f"Error posting event to Telegram: {e}")
+                    logger.error(f"CRITICAL Error posting event to Telegram ({chat_id}): {e}")
 
             def run_async_background(coro):
                 import asyncio
