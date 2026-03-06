@@ -1712,78 +1712,12 @@ def create_event_api():
         db.session.add(new_event)
         db.session.commit()
         
-        # Trigger Bot to post event (Async via background thread)
-        from shared_bot_utils import get_bot_token
-        token = get_bot_token()
-        
-        if token:
-            async def post_event_task():
-                try:
-                    from telegram import Bot
-                    from telegram.constants import ParseMode
-                    from bots.event_bot.event_bot import get_event_markup
-                    import html
-                    
-                    bot = Bot(token)
-                    
-                    # Format with HTML
-                    text = f"📅 <b>{html.escape(title)}</b>\n\n{html.escape(description)}\n\n✅ 0 | 🤔 0 | ❌ 0"
-                    markup = get_event_markup(new_event.id, {})
-                    
-                    if image_path:
-                        # Full absolute path for bot
-                        full_img_path = os.path.abspath(os.path.join(PROJECT_ROOT, 'web_dashboard', 'app', image_path.lstrip('/')))
-                        with open(full_img_path, 'rb') as f:
-                            posted_msg = await bot.send_photo(
-                                chat_id=int(chat_id),
-                                photo=f,
-                                caption=text,
-                                parse_mode=ParseMode.HTML,
-                                reply_markup=markup
-                            )
-                    else:
-                        posted_msg = await bot.send_message(
-                            chat_id=int(chat_id),
-                            text=text,
-                            parse_mode=ParseMode.HTML,
-                            reply_markup=markup
-                        )
-                        
-                    if should_pin:
-                        await bot.pin_chat_message(chat_id=int(chat_id), message_id=posted_msg.message_id)
-                        
-                    # Save message_id for later updates
-                    from shared_bot_utils import get_shared_flask_app
-                    f_app = get_shared_flask_app()
-                    with f_app.app_context():
-                        from web_dashboard.app.models import db as db_ctx, GroupEvent as GE
-                        ev = db_ctx.session.get(GE, new_event.id)
-                        if ev:
-                            ev.message_id = posted_msg.message_id
-                            db_ctx.session.commit()
-                    logger.info(f"Event '{title}' posted successfully to {chat_id}. MsgID: {posted_msg.message_id}")
+        logger.info(f"Event '{title}' created in database for chat {int_chat_id}. Pending post by Bot.")
+        return jsonify({"success": True, "message": "Event wurde gespeichert und wird in Kürze vom Bot gepostet."})
                             
-                except Exception as e:
-                    logger.error(f"CRITICAL Error posting event to Telegram ({chat_id}): {e}")
-
-            def run_async_background(coro):
-                import asyncio
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(coro)
-                loop.close()
-
-            import threading
-            threading.Thread(target=run_async_background, args=(post_event_task(),), daemon=True).start()
-
-        return jsonify({"success": True, "message": "Event wurde erstellt und wird im Hintergrund gepostet."})
-        
     except Exception as e:
-        if 'logger' in globals() or 'logger' in locals():
-            logger.error(f"Error creating event: {e}")
-        else:
-            print(f"Error creating event: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        logger.error(f"Error creating event in database: {e}")
+        return jsonify({"success": False, "error": f"Datenbankfehler: {str(e)}"}), 500
 
 # --- BOT API ROUTES ---
 @bp.route('/api/bot/save-config', methods=['POST'])

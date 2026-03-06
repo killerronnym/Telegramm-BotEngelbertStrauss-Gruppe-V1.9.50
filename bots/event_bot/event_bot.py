@@ -12,6 +12,7 @@ sys.path.append(PROJECT_ROOT)
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler, filters
 from telegram.constants import ParseMode
+import html
 
 from web_dashboard.app.models import db, BotSettings, GroupEvent, EventRSVP
 from shared_bot_utils import get_bot_config, get_shared_flask_app
@@ -87,6 +88,74 @@ async def rsvp_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in rsvp_handler: {e}")
         await query.answer("Ein Fehler ist aufgetreten.", show_alert=True)
+
+async def check_pending_events(context: ContextTypes.DEFAULT_TYPE):
+    """Poll DB for events that haven't been posted yet."""
+    try:
+        with flask_app.app_context():
+            # Get events with no message_id and a chat_id
+            pending = GroupEvent.query.filter(
+                GroupEvent.message_id == None,
+                GroupEvent.chat_id != None
+            ).all()
+            
+            if not pending:
+                return
+
+            for event in pending:
+                logger.info(f"Processing pending event: {event.title} (ID: {event.id}) for chat {event.chat_id}")
+                
+                try:
+                    # Format message
+                    text = f"📅 <b>{html.escape(event.title)}</b>\n\n{html.escape(event.description or '')}\n\n✅ 0 | 🤔 0 | ❌ 0"
+                    markup = get_event_markup(event.id, {})
+                    
+                    posted_msg = None
+                    if event.image_path:
+                        # Full path for Docker/Local consistency
+                        img_path = os.path.join(PROJECT_ROOT, 'web_dashboard', 'app', event.image_path.lstrip('/'))
+                        if os.path.exists(img_path):
+                            with open(img_path, 'rb') as f:
+                                posted_msg = await context.bot.send_photo(
+                                    chat_id=event.chat_id,
+                                    photo=f,
+                                    caption=text,
+                                    parse_mode=ParseMode.HTML,
+                                    reply_markup=markup
+                                )
+                        else:
+                            logger.error(f"Image not found at {img_path}, sending text only.")
+                    
+                    if not posted_msg:
+                        posted_msg = await context.bot.send_message(
+                            chat_id=event.chat_id,
+                            text=text,
+                            parse_mode=ParseMode.HTML,
+                            reply_markup=markup
+                        )
+                    
+                    # Store message ID
+                    event.message_id = posted_msg.message_id
+                    db.session.commit()
+                    logger.info(f"✅ Event '{event.title}' successfully posted. MsgID: {posted_msg.message_id}")
+
+                    # Pin if requested
+                    if event.should_pin:
+                        try:
+                            await context.bot.pin_chat_message(chat_id=event.chat_id, message_id=posted_msg.message_id)
+                        except Exception as e:
+                            logger.warning(f"Could not pin message {posted_msg.message_id}: {e}")
+
+                except Exception as e:
+                    logger.error(f"Failed to post event {event.id}: {e}")
+                    # We don't commit here so it retries or we can see the error
+    except Exception as e:
+        logger.error(f"Error in check_pending_events job: {e}")
+
+def setup_jobs(job_queue):
+    """Register the polling job."""
+    job_queue.run_repeating(check_pending_events, interval=10, first=5)
+    logger.info("✅ Event polling job registered (10s interval).")
 
 def get_handlers():
     return [
