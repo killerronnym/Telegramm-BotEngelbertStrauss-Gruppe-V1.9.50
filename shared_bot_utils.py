@@ -68,10 +68,8 @@ def get_db_url():
             os.makedirs(INSTANCE_DIR, exist_ok=True)
         final_url = f"sqlite:///{DB_PATH}"
 
-    # Log masked URL
-    masked = final_url.split('@')[-1] if '@' in final_url else "SQLite"
-    if "sqlite" in final_url: masked = "SQLite (Local)"
-    print(f"DEBUG: Using Database: {masked}")
+    # Log masked URL (DEBUG: Unmasked for fixing location issue)
+    print(f"DEBUG: Using Database Path: {final_url}")
     
     return final_url
 

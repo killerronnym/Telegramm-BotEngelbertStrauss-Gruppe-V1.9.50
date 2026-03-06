@@ -1,4 +1,4 @@
-# 🤖 Engelbert Strauss Bot - V2.1 (V1.11.6)
+# 🤖 Engelbert Strauss Bot - V2.1 (V1.11.7)
 
 Ein leistungsstarker, modularer Telegram-Bot mit integriertem Web-Dashboard zur Verwaltung von Gruppen, Umfragen, Gewinnspielen und mehr.
 

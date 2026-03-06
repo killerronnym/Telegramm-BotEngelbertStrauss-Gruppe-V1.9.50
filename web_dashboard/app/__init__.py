@@ -111,6 +111,13 @@ def create_app(test_config=None):
                     print("Migration: profile_chat_id hinzugefügt.")
                 except Exception:
                     db.session.rollback()  # Spalte existiert bereits
+                try:
+                    db.session.execute(db.text("ALTER TABLE group_event ADD COLUMN topic_id VARCHAR(50)"))
+                    db.session.commit()
+                    print("Migration: topic_id in group_event hinzugefügt.")
+                except Exception:
+                    db.session.rollback()  # Spalte existiert bereits
+                
                 if not User.query.filter_by(username='admin').first():
                     admin = User(username='admin', role='admin')
                     admin.set_password('admin') 

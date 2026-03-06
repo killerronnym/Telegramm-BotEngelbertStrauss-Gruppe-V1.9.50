@@ -112,6 +112,8 @@ async def check_pending_events(context: ContextTypes.DEFAULT_TYPE):
                     markup = get_event_markup(event.id, {})
                     
                     posted_msg = None
+                    topic_id_int = int(event.topic_id) if event.topic_id and str(event.topic_id).isdigit() else None
+                    
                     if event.image_path:
                         # Full path for Docker/Local consistency
                         img_path = os.path.join(PROJECT_ROOT, 'web_dashboard', 'app', event.image_path.lstrip('/'))
@@ -119,6 +121,7 @@ async def check_pending_events(context: ContextTypes.DEFAULT_TYPE):
                             with open(img_path, 'rb') as f:
                                 posted_msg = await context.bot.send_photo(
                                     chat_id=event.chat_id,
+                                    message_thread_id=topic_id_int,
                                     photo=f,
                                     caption=text,
                                     parse_mode=ParseMode.HTML,
@@ -130,6 +133,7 @@ async def check_pending_events(context: ContextTypes.DEFAULT_TYPE):
                     if not posted_msg:
                         posted_msg = await context.bot.send_message(
                             chat_id=event.chat_id,
+                            message_thread_id=topic_id_int,
                             text=text,
                             parse_mode=ParseMode.HTML,
                             reply_markup=markup

@@ -217,10 +217,11 @@ class GroupEvent(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
-    image_path = db.Column(db.String(255))
+    chat_id = db.Column(db.BigInteger, nullable=False)
+    topic_id = db.Column(db.String(50), nullable=True)  # <-- Added Topic ID support
+    message_id = db.Column(db.BigInteger, nullable=True)  # Setzt der Bot nach dem Posten
     should_pin = db.Column(db.Boolean, default=False)
-    chat_id = db.Column(db.BigInteger)
-    message_id = db.Column(db.BigInteger) # The message ID of the posted event for updating RSVPs
+    image_path = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationship to RSVPs

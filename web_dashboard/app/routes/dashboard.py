@@ -1700,12 +1700,19 @@ def create_event_api():
         image.save(os.path.join(target_dir, filename))
         image_path = f"/static/uploads/events/{filename}"
         
+    topic_id = request.form.get('topic_id')
+    if topic_id:
+        topic_id = topic_id.strip()
+    else:
+        topic_id = None
+        
     try:
         from ..models import GroupEvent
         new_event = GroupEvent(
             title=title,
             description=description,
             chat_id=int_chat_id,
+            topic_id=topic_id,
             should_pin=should_pin,
             image_path=image_path
         )
@@ -1718,6 +1725,20 @@ def create_event_api():
     except Exception as e:
         logger.error(f"Error creating event in database: {e}")
         return jsonify({"success": False, "error": f"Datenbankfehler: {str(e)}"}), 500
+
+@bp.route('/debug/db-path')
+@login_required
+def debug_db_path():
+    from shared_bot_utils import get_db_url
+    from ..models import GroupEvent
+    events = GroupEvent.query.all()
+    ev_list = [{"id": e.id, "title": e.title, "chat": e.chat_id, "msg": e.message_id} for e in events]
+    return jsonify({
+        "db_url": get_db_url(),
+        "event_count": len(events),
+        "events": ev_list,
+        "env_db": os.environ.get('DATABASE_URL')
+    })
 
 # --- BOT API ROUTES ---
 @bp.route('/api/bot/save-config', methods=['POST'])
@@ -1844,4 +1865,9 @@ def event_settings():
             return redirect(url_for('dashboard.event_settings'))
 
     events = GroupEvent.query.order_by(GroupEvent.created_at.desc()).all()
-    return render_template('event_settings.html', config=config, events=events)
+    
+    from ..models import TopicMapping
+    ts = TopicMapping.query.all()
+    known_topics = {str(t.topic_id): t.topic_name for t in ts}
+    
+    return render_template('event_settings.html', config=config, events=events, known_topics=known_topics)

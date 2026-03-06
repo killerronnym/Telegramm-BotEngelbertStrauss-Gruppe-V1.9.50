@@ -85,12 +85,21 @@
                                 accept="image/*" id="eventImage">
                         </div>
                         <div class="row g-2 mb-4">
-                            <div class="col-6">
+                            <div class="col-4">
                                 <label class="small text-secondary fw-bold mb-1">CHAT-ID</label>
                                 <input type="text" class="form-control bg-dark text-white border-secondary"
                                     name="chat_id" required placeholder="-100..." id="eventChatId">
                             </div>
-                            <div class="col-6 d-flex align-items-end ps-3">
+                            <div class="col-4">
+                                <label class="small text-secondary fw-bold mb-1">TOPIC-ID (Optional)</label>
+                                <select class="form-select bg-dark text-white border-secondary" name="topic_id">
+                                    <option value="">-- Haupt-Chat / Generell --</option>
+                                    {% for topic_id, topic_name in known_topics.items() %}
+                                    <option value="{{ topic_id }}">{{ topic_name }} ({{ topic_id }})</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-4 d-flex align-items-end ps-3">
                                 <div class="form-check form-switch mb-1">
                                     <input class="form-check-input" type="checkbox" name="pin" value="true"
                                         id="pinCheck" checked>
@@ -189,7 +198,11 @@
                             </span>
                         </div>
                         <div class="mt-3 small text-muted">
-                            Gepostet in: <code>{{ event.chat_id }}</code> | Msg-ID: <code>{{ event.message_id }}</code>
+                            Gepostet in: <code>{{ event.chat_id }}</code>
+                            {% if event.topic_id %}
+                            | Topic: <code>{{ event.topic_id }}</code>
+                            {% endif %}
+                            | Msg-ID: <code>{{ event.message_id }}</code>
                         </div>
                     </div>
                     {% else %}
