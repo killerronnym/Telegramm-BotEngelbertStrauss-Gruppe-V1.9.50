@@ -687,6 +687,43 @@ async def post_profile(bot, profile_data: Dict[str, Any], is_approval_post: bool
         logger.error(f"post_profile Error in {target_chat_id}: {e}")
         return None
 
+def save_birthday_from_answers(user, answers, ordered_fields, target_chat_id, topic_id):
+    """Sucht nach Geburtstagsfeldern und speichert diese in der Birthday-Tabelle."""
+    try:
+        # Falls user ein PseudoUser ist (aus den Callbacks), brauchen wir trotzdem id und name
+        user_id = user.id
+        username = user.username or "Nutzer"
+        first_name = getattr(user, 'first_name', getattr(user, 'full_name', "Nutzer"))
+        
+        for field in ordered_fields:
+            if field.get('type') == 'birthday':
+                val = answers.get(field['id'])
+                if not val or val == 'n/a': continue
+                
+                # Datum parsen (DD.MM.YYYY)
+                date_pattern = re.compile(r'^(\d{1,2})[\s\.](\d{1,2})[\s\.](\d{4})\.?$')
+                match = date_pattern.match(str(val).strip())
+                if match:
+                    d, m, y = int(match.group(1)), int(match.group(2)), int(match.group(3))
+                    
+                    # In DB speichern/auslesen
+                    existing = Birthday.query.filter_by(telegram_user_id=user_id).first()
+                    if existing:
+                        existing.day, existing.month, existing.year = d, m, y
+                        existing.chat_id, existing.topic_id = target_chat_id, topic_id
+                        existing.username, existing.first_name = username, first_name
+                    else:
+                        new_b = Birthday(
+                            telegram_user_id=user_id, day=d, month=m, year=y,
+                            chat_id=target_chat_id, topic_id=topic_id,
+                            username=username, first_name=first_name
+                        )
+                        db.session.add(new_b)
+                    db.session.commit()
+                    logger.info(f"Geburtstag für {user_id} gespeichert: {d}.{m}.{y}")
+    except Exception as e:
+        logger.error(f"Error in save_birthday_from_answers: {e}")
+
 def generate_profile_text(user: User, answers: Dict[str, Any], ordered_fields: List[Dict[str, Any]]) -> tuple[str, bool]:
     """Generiert den vollständigen Steckbrief-Text. Gibt (Text, hat_daten) zurück."""
     steckbrief_lines = []
@@ -772,237 +809,283 @@ def generate_profile_text(user: User, answers: Dict[str, Any], ordered_fields: L
         
     return final_text, has_actual_data
 
+def save_birthday_from_answers(user, answers, ordered_fields, target_chat_id, topic_id):
+    """Sucht nach Geburtstagsfeldern und speichert diese in der Birthday-Tabelle."""
+    try:
+        user_id = user.id
+        username = getattr(user, 'username', 'Nutzer') or "Nutzer"
+        first_name = getattr(user, 'first_name', getattr(user, 'full_name', "Nutzer"))
+        
+        for field in (ordered_fields or []):
+            if field.get('type') == 'birthday':
+                val = answers.get(field['id'])
+                if not val or val == 'n/a': continue
+                
+                date_pattern = re.compile(r'^(\d{1,2})[\s\.](\d{1,2})[\s\.](\d{4})\.?$')
+                match = date_pattern.match(str(val).strip())
+                if match:
+                    d, m, y = int(match.group(1)), int(match.group(2)), int(match.group(3))
+                    
+                    with flask_app.app_context():
+                        existing = Birthday.query.filter_by(telegram_user_id=user_id).first()
+                        if existing:
+                            existing.day, existing.month, existing.year = d, m, y
+                            existing.chat_id, existing.topic_id = target_chat_id, topic_id
+                            existing.username, existing.first_name = username, first_name
+                        else:
+                            new_b = Birthday(
+                                telegram_user_id=user_id, day=d, month=m, year=y,
+                                chat_id=target_chat_id, topic_id=topic_id,
+                                username=username, first_name=first_name
+                            )
+                            db.session.add(new_b)
+                        db.session.commit()
+                    logger.info(f"Geburtstag für {user_id} gespeichert: {d}.{m}.{y}")
+    except Exception as e:
+        logger.error(f"Error in save_birthday_from_answers: {e}")
+
 async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, force_profile_data=None) -> int:
     """Wird aufgerufen, wenn der User die Regeln akzeptiert hat ODER wenn ein Profil finalisiert wurde."""
-    user = update.effective_user
-    config = get_bot_config('invite')
-    
-    if force_profile_data:
-        profile_data = force_profile_data
-        is_already_member = True
-        answers = profile_data.get('answers', {})
-        ordered_fields = profile_data.get('fields', [])
-        target_chat_id = profile_data.get('target_chat_id')
-        photo_file_id = profile_data.get('photo_id')
-    else:
-        text = update.message.text.lower().strip() if update.message.text else ""
-        logger.info(f"handle_rules_confirmation: Nutzer {user.id} schrieb: '{text}'")
-        
-        if text != 'ok':
-            await update.message.reply_text('Bitte schreibe "ok" zum Bestätigen.')
-            return CONFIRMING_RULES
-
-        log_user_interaction(user.id, user.username, "Regeln mit OK bestätigt")
-
-        chat_id_str = fix_chat_id(config.get('main_chat_id', ''))
-        if not chat_id_str:
-            await update.message.reply_text("Bot nicht konfiguriert (Main Chat ID fehlt).")
-            return ConversationHandler.END
-        
-        try:
-            target_chat_id = int(chat_id_str)
-        except:
-            target_chat_id = chat_id_str
-        
-        is_already_member = False
-        try:
-            member = await context.bot.get_chat_member(chat_id=target_chat_id, user_id=user.id)
-            if member:
-                if member.status == "kicked":
-                    await update.message.reply_text(config.get('blocked_message', 'Du bist gesperrt.'))
-                    return ConversationHandler.END
-                if member.status in ["member", "administrator", "creator"]:
-                    is_already_member = True
-                    logger.info(f"Nutzer {user.id} ist bereits Mitglied (Status: {member.status}).")
-        except BadRequest:
-            pass
-
-    # Steckbrief-Daten vorbereiten
-    answers = context.user_data['answers']
-    ordered_fields = context.user_data.get('fields', [])
-
-    # Steckbrief zusammenbauen (nur wenn nicht erzwungen)
-    if not force_profile_data:
-        final_text, _ = generate_profile_text(user, answers, ordered_fields)
-        
-        # Foto finden
-        photo_file_id = None
-        for f in ordered_fields:
-            if f.get('type') == 'photo' and answers.get(f['id']):
-                photo_file_id = answers[f['id']]
-                if photo_file_id != 'n/a': break
-
-        profile_data = {
-            'text': final_text, 
-            'photo_id': photo_file_id,
-            'target_chat_id': target_chat_id, 
-            'topic_id': config.get('topic_id'),
-            'whitelist_approval_topic_id': config.get('whitelist_approval_topic_id')
-        }
-    else:
-        profile_data = force_profile_data
-    
-    # --- AB HIER: POSTING / WHITELIST LOGIK ---
-
-    # Geburtstag sofort in der DB speichern (unabhängig von Whitelist-Status)
     try:
-        with flask_app.app_context():
-            save_birthday_from_answers(user, answers, ordered_fields, target_chat_id, config.get('topic_id'))
-    except Exception as e:
-        logger.error(f"Fehler beim automatischen Speichern des Geburtstags: {e}")
-
-    # Bestimmen, wo die Antwort hingesendet wird (Nachricht oder Callback)
-    reply_target = update.message if update.message else (update.callback_query.message if update.callback_query else None)
+        user = update.effective_user
+        config = get_bot_config('invite')
     
-    # Check ob Whitelist für Updates aktiv sein soll
-    # Wenn Whitelist generell AUS ist, können Bestandskunden/Edits sofort posten.
-    whitelist_active = config.get('whitelist_enabled', False)
-
-    if (is_already_member or is_editing) and whitelist_active:
-        approval_chat_id_str = fix_chat_id(config.get('whitelist_approval_chat_id', ''))
-        if not approval_chat_id_str:
-            if reply_target: await reply_target.reply_text("Admin-Kanal nicht konfiguriert.")
-            return ConversationHandler.END
+        if force_profile_data:
+            profile_data = force_profile_data
+            is_already_member = True
+            answers = profile_data.get('answers', {})
+            ordered_fields = profile_data.get('fields', [])
+            target_chat_id = profile_data.get('target_chat_id')
+            photo_file_id = profile_data.get('photo_id')
+        else:
+            text = update.message.text.lower().strip() if update.message and update.message.text else ""
+            logger.info(f"handle_rules_confirmation: Nutzer {user.id} schrieb: '{text}'")
             
-        try:
-            approval_chat_id = int(approval_chat_id_str)
-        except:
-            approval_chat_id = approval_chat_id_str
-        
-        # In DB speichern als 'pending_existing'
-        with flask_app.app_context():
-            existing_app = InviteApplication.query.filter_by(telegram_user_id=user.id).first()
-            if existing_app:
-                existing_app.status = 'pending_existing'
-                existing_app.answers_json = json.dumps(profile_data['answers']) # Nur Antworten speichern!
-            else:
-                new_app = InviteApplication(
-                    telegram_user_id=user.id,
-                    username=user.username,
-                    full_name=user.full_name,
-                    answers_json=json.dumps(profile_data['answers']),
-                    status='pending_existing'
-                )
-                db.session.add(new_app)
-            db.session.commit()
+            if text != 'ok':
+                await update.message.reply_text('Bitte schreibe "ok", um die Regeln zu akzeptieren.', parse_mode="HTML")
+                return CONFIRMING_RULES
 
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Steckbrief posten", callback_data=f"existing_accept_{user.id}"),
-            InlineKeyboardButton("❌ Nicht posten", callback_data=f"existing_reject_{user.id}")
-        ]])
-        
-        approval_post_data = profile_data.copy()
-        approval_post_data['target_chat_id'] = approval_chat_id
-        
-        success = await post_profile(context.bot, approval_post_data, is_approval_post=True)
-        if not success:
-            if reply_target: await reply_target.reply_text("❌ Fehler beim Senden an den Admin-Kanal. Bitte Admin kontaktieren.")
-            return ConversationHandler.END
+            log_user_interaction(user.id, user.username, "Regeln mit OK bestätigt")
 
+            chat_id_str = fix_chat_id(config.get('main_chat_id', ''))
+            if not chat_id_str:
+                await update.message.reply_text("Bot nicht konfiguriert (Main Chat ID fehlt).")
+                return ConversationHandler.END
+            
+            try:
+                target_chat_id = int(chat_id_str)
+            except:
+                target_chat_id = chat_id_str
+            
+            is_already_member = False
+            try:
+                member = await context.bot.get_chat_member(chat_id=target_chat_id, user_id=user.id)
+                if member:
+                    if member.status == "kicked":
+                        await update.message.reply_text(config.get('blocked_message', 'Du bist gesperrt.'))
+                        return ConversationHandler.END
+                    if member.status in ["member", "administrator", "creator"]:
+                        is_already_member = True
+                        logger.info(f"Nutzer {user.id} ist bereits Mitglied (Status: {member.status}).")
+            except BadRequest:
+                pass
+
+        # Steckbrief-Daten vorbereiten
+        answers = context.user_data.get('answers', {})
+        ordered_fields = context.user_data.get('fields', [])
+
+        # Steckbrief zusammenbauen (nur wenn nicht erzwungen)
+        if not force_profile_data:
+            final_text, _ = generate_profile_text(user, answers, ordered_fields)
+            
+            # Foto finden
+            photo_file_id = None
+            for f in ordered_fields:
+                if f.get('type') == 'photo' and answers.get(f['id']):
+                    photo_file_id = answers[f['id']]
+                    if photo_file_id != 'n/a': break
+
+            profile_data = {
+                'text': final_text, 
+                'photo_id': photo_file_id, 
+                'target_chat_id': target_chat_id, 
+                'topic_id': config.get('topic_id'),
+                'whitelist_approval_topic_id': config.get('whitelist_approval_topic_id'),
+                'answers': answers # Rohdaten mitsenden
+            }
+        else:
+            profile_data = force_profile_data
+        
+        # --- AB HIER: POSTING / WHITELIST LOGIK ---
+
+        # Geburtstag sofort in der DB speichern (unabhängig von Whitelist-Status)
         try:
-            await context.bot.send_message(
-                approval_chat_id, 
-                f"📝 <b>UPDATE-ANFRAGE:</b> Nutzer {user.full_name} möchte seinen Steckbrief aktualisieren.\nOben siehst du die neue Version.", 
-                reply_markup=keyboard,
-                parse_mode="HTML",
-                message_thread_id=approval_post_data.get('whitelist_approval_topic_id') if str(approval_post_data.get('whitelist_approval_topic_id')).isdigit() else None
-            )
+            with flask_app.app_context():
+                save_birthday_from_answers(user, answers, ordered_fields, target_chat_id, config.get('topic_id'))
         except Exception as e:
-            logger.error(f"Error sending approval button message: {e}")
-            if reply_target: await reply_target.reply_text(f"❌ Fehler bei der Freigabe-Anfrage: {e}")
+            logger.error(f"Fehler beim automatischen Speichern des Geburtstags: {e}")
+
+        # Bestimmen, wo die Antwort hingesendet wird (Nachricht oder Callback)
+        reply_target = update.message if update.message else (update.callback_query.message if update.callback_query else None)
+        
+        # Check ob Whitelist für Updates aktiv sein soll
+        # Wenn Whitelist generell AUS ist, können Bestandskunden/Edits sofort posten.
+        whitelist_active = config.get('whitelist_enabled', False)
+
+        if (is_already_member or is_editing) and whitelist_active:
+            approval_chat_id_str = fix_chat_id(config.get('whitelist_approval_chat_id', ''))
+            if not approval_chat_id_str:
+                if reply_target: await reply_target.reply_text("Admin-Kanal nicht konfiguriert.")
+                return ConversationHandler.END
+                
+            try:
+                approval_chat_id = int(approval_chat_id_str)
+            except:
+                approval_chat_id = approval_chat_id_str
+            
+            # In DB speichern als 'pending_existing'
+            with flask_app.app_context():
+                existing_app = InviteApplication.query.filter_by(telegram_user_id=user.id).first()
+                if existing_app:
+                    existing_app.status = 'pending_existing'
+                    existing_app.answers_json = json.dumps(profile_data['answers']) # Nur Antworten speichern!
+                else:
+                    new_app = InviteApplication(
+                        telegram_user_id=user.id,
+                        username=user.username,
+                        full_name=user.full_name,
+                        answers_json=json.dumps(profile_data['answers']),
+                        status='pending_existing'
+                    )
+                    db.session.add(new_app)
+                db.session.commit()
+
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("✅ Steckbrief posten", callback_data=f"existing_accept_{user.id}"),
+                InlineKeyboardButton("❌ Nicht posten", callback_data=f"existing_reject_{user.id}")
+            ]])
+            
+            approval_post_data = profile_data.copy()
+            approval_post_data['target_chat_id'] = approval_chat_id
+            
+            success = await post_profile(context.bot, approval_post_data, is_approval_post=True)
+            if not success:
+                if reply_target: await reply_target.reply_text("❌ Fehler beim Senden an den Admin-Kanal. Bitte Admin kontaktieren.")
+                return ConversationHandler.END
+
+            try:
+                await context.bot.send_message(
+                    approval_chat_id, 
+                    f"📝 <b>UPDATE-ANFRAGE:</b> Nutzer {user.full_name} möchte seinen Steckbrief aktualisieren.\nOben siehst du die neue Version.", 
+                    reply_markup=keyboard,
+                    parse_mode="HTML",
+                    message_thread_id=approval_post_data.get('whitelist_approval_topic_id') if str(approval_post_data.get('whitelist_approval_topic_id')).isdigit() else None
+                )
+            except Exception as e:
+                logger.error(f"Error sending approval button message: {e}")
+                if reply_target: await reply_target.reply_text(f"❌ Fehler bei der Freigabe-Anfrage: {e}")
+                return ConversationHandler.END
+
+            if reply_target: await reply_target.reply_text(config.get('whitelist_pending_message', 'Deine Änderung wird überprüft, bitte warte.'), parse_mode="HTML")
             return ConversationHandler.END
 
-        if reply_target: await reply_target.reply_text(config.get('whitelist_pending_message', 'Deine Änderung wird überprüft, bitte warte.'))
+        if whitelist_active:
+            # Normaler Whitelist Flow für neue User
+            approval_chat_id_str = fix_chat_id(config.get('whitelist_approval_chat_id', ''))
+            if not approval_chat_id_str:
+                await update.message.reply_text("Whitelist ist aktiv, aber kein Admin-Chat konfiguriert.")
+                return ConversationHandler.END
+            
+            try:
+                approval_chat_id = int(approval_chat_id_str)
+            except:
+                approval_chat_id = approval_chat_id_str
+            
+            # In Datenbank als 'pending' sichern
+            with flask_app.app_context():
+                # Alten Status überschreiben falls vorhanden
+                existing = InviteApplication.query.filter_by(telegram_user_id=user.id).first()
+                if existing:
+                    existing.status = 'pending'
+                    existing.answers_json = json.dumps(profile_data['answers']) # Nur Antworten speichern!
+                    existing.full_name = user.full_name
+                    existing.username = user.username
+                else:
+                    new_app = InviteApplication(
+                        telegram_user_id=user.id,
+                        username=user.username,
+                        full_name=user.full_name,
+                        answers_json=json.dumps(profile_data['answers']),
+                        status='pending'
+                    )
+                    db.session.add(new_app)
+                db.session.commit()
+            
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("✅ Annehmen", callback_data=f"whitelist_accept_{user.id}"),
+                InlineKeyboardButton("❌ Ablehnen", callback_data=f"whitelist_reject_{user.id}")
+            ]])
+            
+            approval_post_data = profile_data.copy()
+            approval_post_data['target_chat_id'] = approval_chat_id
+            
+            success = await post_profile(context.bot, approval_post_data, is_approval_post=True)
+            if not success:
+                await update.message.reply_text("❌ Fehler beim Senden an den Whitelist-Kanal. Bitte Admin kontaktieren.")
+                return ConversationHandler.END
+
+            try:
+                await context.bot.send_message(
+                    approval_chat_id, 
+                    "Neue Anfrage zur Freischaltung:", 
+                    reply_markup=keyboard,
+                    parse_mode="HTML",
+                    message_thread_id=approval_post_data.get('whitelist_approval_topic_id') if str(approval_post_data.get('whitelist_approval_topic_id')).isdigit() else None
+                )
+            except Exception as e:
+                logger.error(f"Error sending whitelist request: {e}")
+                await update.message.reply_text(f"❌ Fehler bei der Freischaltungs-Anfrage: {e}")
+                return ConversationHandler.END
+
+            await update.message.reply_text(config.get('whitelist_pending_message', 'Dein Steckbrief wird überprüft, bitte warte.'), parse_mode="HTML")
+        else:
+            # Whitelist ist AUS -> Sofort Link senden
+            with flask_app.app_context():
+                # In Datenbank als 'accepted' markieren (damit Join-Logik den Steckbrief postet)
+                existing = InviteApplication.query.filter_by(telegram_user_id=user.id).first()
+                if existing:
+                    existing.status = 'accepted'
+                    existing.answers_json = json.dumps(profile_data.get('answers', profile_data))
+                    existing.full_name = user.full_name
+                    existing.username = user.username
+                else:
+                    new_app = InviteApplication(
+                        telegram_user_id=user.id,
+                        username=user.username,
+                        full_name=user.full_name,
+                        answers_json=json.dumps(profile_data.get('answers', profile_data)),
+                        status='accepted'
+                    )
+                    db.session.add(new_app)
+                db.session.commit()
+            
+            # Link generieren (Wichtig: Link TTL beachten falls gewünscht, hier Standard)
+            try:
+                link = await context.bot.create_chat_invite_link(chat_id=target_chat_id, member_limit=1)
+                await update.message.reply_text(f"Danke! Deine Anmeldung ist abgeschlossen. Hier ist dein Einladungslink zur Gruppe:\n\n{link.invite_link}")
+            except Exception as e:
+                logger.error(f"Fehler bei Link-Generierung (Chat ID: {target_chat_id}): {e}")
+                await update.message.reply_text(f"❌ Fehler bei Link-Generierung (ID: {target_chat_id}): {e}")
+
         return ConversationHandler.END
 
-    if whitelist_active:
-        # Normaler Whitelist Flow für neue User
-        approval_chat_id_str = fix_chat_id(config.get('whitelist_approval_chat_id', ''))
-        if not approval_chat_id_str:
-            await update.message.reply_text("Whitelist ist aktiv, aber kein Admin-Chat konfiguriert.")
-            return ConversationHandler.END
-        
+    except Exception as e:
+        logger.error(f"Crash in handle_rules_confirmation: {e}")
         try:
-            approval_chat_id = int(approval_chat_id_str)
-        except:
-            approval_chat_id = approval_chat_id_str
-        
-        # In Datenbank als 'pending' sichern
-        with flask_app.app_context():
-            # Alten Status überschreiben falls vorhanden
-            existing = InviteApplication.query.filter_by(telegram_user_id=user.id).first()
-            if existing:
-                existing.status = 'pending'
-                existing.answers_json = json.dumps(profile_data['answers']) # Nur Antworten speichern!
-                existing.full_name = user.full_name
-                existing.username = user.username
-            else:
-                new_app = InviteApplication(
-                    telegram_user_id=user.id,
-                    username=user.username,
-                    full_name=user.full_name,
-                    answers_json=json.dumps(profile_data['answers']),
-                    status='pending'
-                )
-                db.session.add(new_app)
-            db.session.commit()
-        
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Annehmen", callback_data=f"whitelist_accept_{user.id}"),
-            InlineKeyboardButton("❌ Ablehnen", callback_data=f"whitelist_reject_{user.id}")
-        ]])
-        
-        approval_post_data = profile_data.copy()
-        approval_post_data['target_chat_id'] = approval_chat_id
-        
-        success = await post_profile(context.bot, approval_post_data, is_approval_post=True)
-        if not success:
-            await update.message.reply_text("❌ Fehler beim Senden an den Whitelist-Kanal. Bitte Admin kontaktieren.")
-            return ConversationHandler.END
-
-        try:
-            await context.bot.send_message(
-                approval_chat_id, 
-                "Neue Anfrage zur Freischaltung:", 
-                reply_markup=keyboard,
-                message_thread_id=approval_post_data.get('whitelist_approval_topic_id') if str(approval_post_data.get('whitelist_approval_topic_id')).isdigit() else None
-            )
-        except Exception as e:
-            logger.error(f"Error sending whitelist request: {e}")
-            await update.message.reply_text(f"❌ Fehler bei der Freischaltungs-Anfrage: {e}")
-            return ConversationHandler.END
-
-        await update.message.reply_text(config.get('whitelist_pending_message', 'Dein Steckbrief wird überprüft, bitte warte.'))
-    else:
-        # Whitelist ist AUS -> Sofort Link senden
-        with flask_app.app_context():
-            # In Datenbank als 'accepted' markieren (damit Join-Logik den Steckbrief postet)
-            existing = InviteApplication.query.filter_by(telegram_user_id=user.id).first()
-            if existing:
-                existing.status = 'accepted'
-                existing.answers_json = json.dumps(profile_data)
-                existing.full_name = user.full_name
-                existing.username = user.username
-            else:
-                new_app = InviteApplication(
-                    telegram_user_id=user.id,
-                    username=user.username,
-                    full_name=user.full_name,
-                    answers_json=json.dumps(profile_data),
-                    status='accepted'
-                )
-                db.session.add(new_app)
-            db.session.commit()
-        
-        # Link generieren (Wichtig: Link TTL beachten falls gewünscht, hier Standard)
-        try:
-            link = await context.bot.create_chat_invite_link(chat_id=target_chat_id, member_limit=1)
-            await update.message.reply_text(f"Danke! Deine Anmeldung ist abgeschlossen. Hier ist dein Einladungslink zur Gruppe:\n\n{link.invite_link}")
-        except Exception as e:
-            logger.error(f"Fehler bei Link-Generierung (Chat ID: {target_chat_id}): {e}")
-            await update.message.reply_text(f"❌ Fehler bei Link-Generierung (ID: {target_chat_id}): {e}")
-
-    return ConversationHandler.END
+            target = update.message if update.message else (update.callback_query.message if update.callback_query else None)
+            if target: await target.reply_text(f"❌ Systemfehler: {e}. Bitte Admin kontaktieren.")
+        except: pass
+        return ConversationHandler.END
 
 async def handle_whitelist_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
