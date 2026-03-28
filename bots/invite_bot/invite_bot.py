@@ -1238,27 +1238,41 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         return ConversationHandler.END
 
     # --- NEU: AKTUELLEN STECKBRIEF ANZEIGEN (Vorschau vor Edit) ---
-    config = get_bot_config('invite')
-    fields = [f for f in config.get('form_fields', []) if f.get('enabled')]
-    current_text = generate_profile_text(user, context.user_data['answers'], fields)
-    
-    # Foto finden
-    current_photo_id = None
-    for f in fields:
-        if f['type'] == 'photo' and context.user_data['answers'].get(f['id']):
-            current_photo_id = context.user_data['answers'][f['id']]
-            if current_photo_id != 'n/a': break
+    try:
+        config = get_bot_config('invite')
+        fields = [f for f in config.get('form_fields', []) if f.get('enabled')]
+        current_text = generate_profile_text(user, context.user_data['answers'], fields)
+        
+        # Foto finden
+        current_photo_id = None
+        for f in fields:
+            if f['type'] == 'photo' and context.user_data['answers'].get(f['id']):
+                current_photo_id = context.user_data['answers'][f['id']]
+                if current_photo_id != 'n/a': break
 
-    await update.message.reply_text("🔎 <b>DEIN AKTUELLER STECKBRIEF:</b>", parse_mode="HTML")
-    
-    msg = None
-    if current_photo_id and current_photo_id != 'n/a':
-        msg = await update.message.reply_photo(photo=current_photo_id, caption=current_text[:1024], parse_mode="HTML")
-    else:
-        msg = await update.message.reply_text(current_text, parse_mode="HTML")
-    
-    # Message ID speichern um sie später evtl zu löschen
-    if msg: context.user_data['edit_entry_msg_id'] = msg.message_id
+        await update.message.reply_text("🔎 <b>DEIN AKTUELLER STECKBRIEF:</b>", parse_mode="HTML")
+        
+        msg = None
+        if current_photo_id and current_photo_id != 'n/a':
+            # Caption auf 1024 Zeichen beschränken, aber vorsichtig mit HTML-Tags
+            caption_text = current_text
+            if len(caption_text) > 1024:
+                caption_text = caption_text[:1000] + "..." # Etwas Puffer für Tags lassen
+                
+            try:
+                msg = await update.message.reply_photo(photo=current_photo_id, caption=caption_text, parse_mode="HTML")
+            except Exception as e:
+                logger.warning(f"bearbeiten: Konnte Foto mit Caption nicht senden (HTML?), sende Separater Text: {e}")
+                msg = await update.message.reply_photo(photo=current_photo_id)
+                await update.message.reply_text(current_text, parse_mode="HTML")
+        else:
+            msg = await update.message.reply_text(current_text, parse_mode="HTML")
+        
+        # Message ID speichern um sie später evtl zu löschen
+        if msg: context.user_data['edit_entry_msg_id'] = msg.message_id
+    except Exception as e:
+        logger.error(f"bearbeiten: Fehler bei der Vorschau-Erstellung für User {user.id}: {e}")
+        await update.message.reply_text("🔎 <b>DEIN AKTUELLER STECKBRIEF:</b> (Fehler beim Laden der grafischen Vorschau, bitte nutze das Menü unten)")
 
     # Menü anzeigen
     return await show_edit_menu(update, context)
@@ -1459,6 +1473,7 @@ def get_handlers():
         fallbacks=[
             CommandHandler("cancel", cancel),
             CommandHandler("start", start),
+            CommandHandler("bearbeiten", bearbeiten), # Wieder in Fallbacks um bestehende Gespräche zu überschreiben
             CommandHandler("datenschutz", datenschutz),
             CallbackQueryHandler(handle_edit_callback, pattern=r'^edit_more_')
         ],
@@ -1470,7 +1485,6 @@ def get_handlers():
     return [
         (conv_handler, 0),
         (CommandHandler("start", start), 0),
-        (CommandHandler("bearbeiten", bearbeiten), 0),
         (CommandHandler("datenschutz", datenschutz), 0),
         (CallbackQueryHandler(handle_whitelist_callback, pattern=r'^whitelist_'), 0),
         (CallbackQueryHandler(handle_existing_member_callback, pattern=r'^existing_'), 0),
