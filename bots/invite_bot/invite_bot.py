@@ -432,10 +432,13 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     
     if context.user_data.get('is_editing'):
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ Ja", callback_data="edit_more_yes"),
-             InlineKeyboardButton("❌ Nein", callback_data="edit_more_no")]
+            [InlineKeyboardButton("🔄 Weiter bearbeiten", callback_data="edit_more_yes"),
+             InlineKeyboardButton("✅ Bearbeitung beenden", callback_data="edit_more_no")]
         ])
-        await update.message.reply_text("Möchtest du noch eine Sache überarbeiten?", reply_markup=keyboard)
+        await update.message.reply_text(
+            f"Deine Änderung wurde erfolgreich übernommen.\n\nMöchtest du noch einen weiteren Bereich anpassen oder bist du fertig?",
+            reply_markup=keyboard
+        )
         return ASKING_QUESTIONS
 
     return await next_question(update, context)
@@ -1163,7 +1166,7 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if not is_bot_active('invite'): return ConversationHandler.END
     user = update.effective_user
     
-    logger.info(f"bearbeiten: Nutzer {user.id} möchte seinen Steckbrief bearbeiten.")
+    logger.info(f"bearbeiten: Nutzer {user.id} (@{user.username}) möchte seinen Steckbrief bearbeiten.")
     
     # Sicherstellen, dass wir eine saubere Session haben
     context.user_data.clear()
@@ -1173,12 +1176,19 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             app = InviteApplication.query.filter_by(telegram_user_id=user.id).first()
             if not app:
                 logger.warning(f"bearbeiten: Kein Steckbrief gefunden für User {user.id}")
-                await update.message.reply_text("❌ Ich konnte keinen Steckbrief für dich finden. Nutze /letsgo um einen zu erstellen.")
+                await update.message.reply_text(
+                    "Es konnte kein aktueller Steckbrief für dein Profil gefunden werden.\n\n"
+                    "Möglicherweise ist dein letzter Eintrag schon sehr alt oder es wurde bisher kein Steckbrief in unserer Datenbank hinterlegt. "
+                    "Nutze bitte den Befehl /letsgo, um einen neuen Steckbrief zu erstellen und dich der Community (erneut) vorzustellen!"
+                )
                 return ConversationHandler.END
                 
             if app.status not in ['completed', 'accepted']:
                 logger.warning(f"bearbeiten: Steckbrief von User {user.id} ist noch im Status '{app.status}'")
-                await update.message.reply_text("❌ Dein Steckbrief ist noch in Bearbeitung oder wurde abgelehnt und kann daher nicht editiert werden.")
+                await update.message.reply_text(
+                    "❌ Dein Steckbrief befindet sich aktuell noch in der Prüfung oder Bearbeitung.\n\n"
+                    "Bitte warte, bis dieser abgeschlossen ist, bevor du Änderungen vornimmst."
+                )
                 return ConversationHandler.END
                 
             # Daten in context laden
@@ -1189,12 +1199,12 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                 context.user_data['old_msg_id'] = app.profile_message_id
                 context.user_data['old_chat_id'] = app.profile_chat_id
                 
-                # Wichtig: Wir müssen auch 'fields' laden, da handle_rules_confirmation diese braucht
+                # Wichtig: Wir müssen auch 'fields' laden
                 config = get_bot_config('invite')
                 context.user_data['fields'] = [f for f in config.get('form_fields', []) if f.get('enabled')]
                 
             except Exception as e:
-                logger.error(f"bearbeiten: Fehler beim Parsen der Datenbank-Antworten für User {user.id}: {e}")
+                logger.error(f"bearbeiten: Fehler beim Parsen der DB-Daten für User {user.id}: {e}")
                 await update.message.reply_text("❌ Fehler beim Laden deiner Daten. Bitte kontaktiere einen Administrator.")
                 return ConversationHandler.END
 
@@ -1216,16 +1226,20 @@ async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         name = f.get('display_name', f['id'])
         keyboard.append([InlineKeyboardButton(f"{emoji} {name} bearbeiten", callback_data=f"edit_field_{f['id']}")])
     
-    keyboard.append([InlineKeyboardButton("✅ Bearbeitung beenden", callback_data="edit_finish")])
+    keyboard.append([InlineKeyboardButton("✅ Bearbeitung beenden & Vorschau", callback_data="edit_finish")])
     
-    text = "Hier kannst du deinen Steckbrief bearbeiten. Welchen Reiter möchtest du bearbeiten?"
+    text = (
+        "<b>Willkommen im Bearbeitungs-Modus!</b>\n\n"
+        "Hier kannst du die Details deines Steckbriefs verwalten und aktualisieren. "
+        "Welchen Bereich möchtest du heute anpassen?"
+    )
     
     if update.callback_query:
-        await update.callback_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        await update.callback_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
     else:
-        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
     
-    return ASKING_QUESTIONS # Wir nutzen ASKING_QUESTIONS als Warte-State für die Auswahl
+    return ASKING_QUESTIONS
 
 async def handle_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
@@ -1253,39 +1267,44 @@ async def handle_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         # Vorschau zeigen
         user = update.effective_user
         config = get_bot_config('invite')
-        fields = config.get('form_fields', [])
-        
-        preview_text = "<b>DEINE VORSCHAU:</b>\n\n"
+        fields = context.user_data.get('fields', [])
         answers = context.user_data.get('answers', {})
         
-        # Steckbrief generieren (wie in post_profile/generate_profile_text)
-        # Wir machen es hier einfach direkt für die Vorschau
+        preview_text = "<b>DEINE AKTUALISIERTE VORSCHAU:</b>\n\n"
+        
         text_lines = []
         for f in fields:
             if not f.get('enabled'): continue
             val = answers.get(f['id'])
             if val and val != 'n/a':
+                emoji = f.get('emoji', '🔹')
+                name = f.get('display_name', f['id'])
                 if f['type'] == 'boolean_buttons':
                     val_str = "Ja" if val else "Nein"
                 elif isinstance(val, list): # Social Media
-                    val_str = ", ".join([f['name'] for f in val])
+                    formatted_socials = []
+                    for entry in val:
+                        if isinstance(entry, dict):
+                            formatted_socials.append(f'<a href="{entry["url"]}">{entry["name"]}</a>')
+                        else:
+                            formatted_socials.append(str(entry))
+                    val_str = ", ".join(formatted_socials)
                 else:
                     val_str = str(val)
-                text_lines.append(f"{f.get('emoji', '🔹')} <b>{f.get('display_name', f['id'])}:</b> {val_str}")
+                text_lines.append(f"{emoji} <b>{name}:</b> {val_str}")
         
         preview_text += "\n".join(text_lines)
-        preview_text += "\n\n<b>Möchtest du den Steckbrief so posten?</b>"
+        preview_text += "\n\n<b>Möchtest du diese Änderungen jetzt übernehmen?</b>"
         
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🚀 Posten / Abschicken", callback_data="edit_confirm_final"),
-             InlineKeyboardButton("🔄 Weiter bearbeiten", callback_data="edit_more_yes")]
+            [InlineKeyboardButton("🚀 Jetzt aktualisieren", callback_data="edit_confirm_final")],
+            [InlineKeyboardButton("🔄 Weiter bearbeiten", callback_data="edit_more_yes")]
         ])
         
-        await query.edit_message_text(preview_text, reply_markup=keyboard, parse_mode="HTML")
+        await query.edit_message_text(preview_text, reply_markup=keyboard, parse_mode="HTML", disable_web_page_preview=True)
         return ASKING_QUESTIONS
 
     elif data == "edit_confirm_final":
-        # Finales Speichern und Posten
         return await finalize_profile(update, context)
 
     return ASKING_QUESTIONS
@@ -1297,8 +1316,7 @@ async def finalize_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     answers = context.user_data.get('answers', {})
     fields = config.get('form_fields', [])
     
-    # Text generieren
-    from .invite_bot import generate_profile_text # Sicherstellen dass wir die aktuelle Logik nutzen
+    # Text und Profil-Daten generieren
     profile_text = generate_profile_text(user, answers, fields)
     
     # Foto finden
@@ -1310,14 +1328,14 @@ async def finalize_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             
     profile_data = {
         'text': profile_text,
-        'photo': photo_file_id if photo_file_id != 'n/a' else None,
+        'photo_id': photo_file_id if photo_file_id != 'n/a' else None,
         'target_chat_id': context.user_data.get('old_chat_id') or config.get('main_chat_id'),
         'topic_id': config.get('topic_id'),
         'user_id': user.id,
         'full_name': user.full_name,
         'username': user.username,
-        'answers': answers, # Rohdaten für DB
-        'fields': fields    # Konfiguration für DB
+        'answers': answers,
+        'fields': fields
     }
 
     # Alte Nachricht löschen falls vorhanden
@@ -1332,8 +1350,6 @@ async def finalize_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     # Whitelist Logik nutzen
     return await handle_rules_confirmation(update, context, force_profile_data=profile_data)
-
-# Ich muss handle_rules_confirmation anpassen, damit sie force_profile_data akzeptiert.
 
 async def catch_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not is_bot_active('invite'): return
