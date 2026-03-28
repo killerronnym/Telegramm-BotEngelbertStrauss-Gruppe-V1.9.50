@@ -687,30 +687,35 @@ async def post_profile(bot, profile_data: Dict[str, Any], is_approval_post: bool
         logger.error(f"post_profile Error in {target_chat_id}: {e}")
         return None
 
-def generate_profile_text(user: User, answers: Dict[str, Any], ordered_fields: List[Dict[Dict[str, Any], Any]]) -> tuple[str, bool]:
+def generate_profile_text(user: User, answers: Dict[str, Any], ordered_fields: List[Dict[str, Any]]) -> tuple[str, bool]:
     """Generiert den vollständigen Steckbrief-Text. Gibt (Text, hat_daten) zurück."""
     steckbrief_lines = []
     pm_allowed_status = None
     share_username_choice = None
     has_actual_data = False
     
+    # Debug: Check wir alle answers loggen
+    # logger.info(f"generate_profile_text: answers keys: {list(answers.keys())}")
+    
+    if not isinstance(answers, dict):
+        return "Keine Daten gefunden.", False
+
     for field in ordered_fields:
-        if not field.get('enabled', True):
-            continue
-            
-        fid = field['id']
+        fid = field.get('id')
+        if not fid: continue
+        
         ftype = field.get('type', '').lower()
         answer = answers.get(fid)
         
+        # Ignoriere Metadata-Felder für den Daten-Checker
         if ftype == 'pm_contact' or fid == 'pm_allowed':
             pm_allowed_status = answer
-            if answer and answer.lower() != 'n/a': has_actual_data = True
             continue
         if ftype == 'header_name' or fid == 'share_username':
             share_username_choice = answer
             continue
 
-        if answer is None or (isinstance(answer, str) and answer.lower().strip() in ['nein', 'n/a']):
+        if answer is None or (isinstance(answer, str) and answer.lower().strip() in ['nein', 'n/a', '']):
             continue
             
         has_actual_data = True
@@ -1254,14 +1259,16 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # --- NEU: AKTUELLEN STECKBRIEF ANZEIGEN (Vorschau vor Edit) ---
     try:
         config = get_bot_config('invite')
-        fields = [f for f in config.get('form_fields', []) if f.get('enabled')]
+        # Robusterer Check auf 'enabled'
+        fields = [f for f in config.get('form_fields', []) if f.get('enabled') is True or f.get('enabled') == 'true']
         current_text, has_data = generate_profile_text(user, context.user_data['answers'], fields)
         
         if not has_data:
-            logger.warning(f"bearbeiten: Steckbrief von User {user.id} existiert zwar, hat aber keine verwertbaren Daten.")
+            logger.warning(f"bearbeiten: Steckbrief von User {user.id} existiert zwar, hat aber keine verwertbaren Daten. answers={context.user_data['answers']}")
             await update.message.reply_text(
                 "🔎 <b>Hinweis:</b> Dein gespeicherter Steckbrief scheint sehr alt zu sein oder enthält keine aktuellen Informationen mehr.\n\n"
-                "Um sicherzugehen, dass alles korrekt ist, erstelle bitte einen neuen Steckbrief mit dem Befehl /letsgo. Das dauert nur ein paar Minuten!"
+                "Um sicherzugehen, dass alles korrekt ist, erstelle bitte einen neuen Steckbrief mit dem Befehl /letsgo. Das dauert nur ein paar Minuten!",
+                parse_mode="HTML"
             )
             return ConversationHandler.END
 
