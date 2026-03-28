@@ -1056,22 +1056,37 @@ async def handle_existing_member_callback(update: Update, context: ContextTypes.
     with flask_app.app_context():
         application = InviteApplication.query.filter_by(telegram_user_id=user_id).first()
         
-        if not application or application.status != 'pending_existing':
+        if not application or (application.status != 'pending_existing' and action != 'resend'):
             await query.edit_message_text("Diese Anfrage wurde bereits bearbeitet oder ist ungültig.")
             return
             
         profile_data = application.answers
 
-        if action == "accept":
+        if action == "accept" or action == "resend":
+            config = get_bot_config('invite') # Fix: config initialisieren
             # Steckbrief posten
             try:
-                await post_profile(context.bot, profile_data)
+                msg = await post_profile(context.bot, profile_data)
+                if not msg: raise Exception("post_profile returned None")
+                
+                # Wir speichern die neue msg_id falls wir sie später brauchen
+                application.profile_message_id = msg.message_id
+                application.profile_chat_id = profile_data.get('target_chat_id')
+                
                 success_msg = config.get('profile_posted_message', "Dein Steckbrief wurde gepostet! Falls du Änderungen vornehmen möchtest, nutze /bearbeiten.")
-                await context.bot.send_message(user_id, success_msg)
-                await query.edit_message_text(f"✅ Steckbrief gepostet (Admin: {admin_user.full_name}).")
+                if action == "accept":
+                    await context.bot.send_message(user_id, success_msg)
+                
+                keyboard = InlineKeyboardMarkup([[
+                    InlineKeyboardButton("🔄 Erneut abschicken", callback_data=f"existing_resend_{user_id}")
+                ]])
+                
+                status_text = "✅ Steckbrief gepostet" if action == "accept" else "🔄 Steckbrief erneut gepostet"
+                await query.edit_message_text(f"{status_text} (Admin: {admin_user.full_name}).", reply_markup=keyboard)
                 application.status = 'completed'
                 db.session.commit()
-                # Birthday automatisch speichern falls vorhanden
+                
+                # Birthday automatisch speichern
                 try:
                     user_to_save = await context.bot.get_chat(user_id)
                     class PseudoUser:
@@ -1079,7 +1094,7 @@ async def handle_existing_member_callback(update: Update, context: ContextTypes.
                     save_birthday_from_answers(PseudoUser(user_to_save), profile_data.get('answers', {}), profile_data.get('fields', []), profile_data.get('target_chat_id'), profile_data.get('topic_id'))
                 except: pass
             except Exception as e:
-                logger.error(f"Fehler beim Posten des Steckbriefs (Existing): {e}")
+                logger.error(f"Fehler beim Posten des Steckbriefs ({action}): {e}")
                 await query.edit_message_text(f"❌ Fehler beim Posten: {e}")
                 
         elif action == "reject":
