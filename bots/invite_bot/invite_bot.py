@@ -869,13 +869,13 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
             existing_app = InviteApplication.query.filter_by(telegram_user_id=user.id).first()
             if existing_app:
                 existing_app.status = 'pending_existing'
-                existing_app.answers_json = json.dumps(profile_data)
+                existing_app.answers_json = json.dumps(profile_data['answers']) # Nur Antworten speichern!
             else:
                 new_app = InviteApplication(
                     telegram_user_id=user.id,
                     username=user.username,
                     full_name=user.full_name,
-                    answers_json=json.dumps(profile_data),
+                    answers_json=json.dumps(profile_data['answers']),
                     status='pending_existing'
                 )
                 db.session.add(new_app)
@@ -928,7 +928,7 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
             existing = InviteApplication.query.filter_by(telegram_user_id=user.id).first()
             if existing:
                 existing.status = 'pending'
-                existing.answers_json = json.dumps(profile_data)
+                existing.answers_json = json.dumps(profile_data['answers']) # Nur Antworten speichern!
                 existing.full_name = user.full_name
                 existing.username = user.username
             else:
@@ -936,7 +936,7 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
                     telegram_user_id=user.id,
                     username=user.username,
                     full_name=user.full_name,
-                    answers_json=json.dumps(profile_data),
+                    answers_json=json.dumps(profile_data['answers']),
                     status='pending'
                 )
                 db.session.add(new_app)
@@ -1227,12 +1227,17 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             # Daten in context laden
             try:
                 answers = json.loads(app.answers_json)
+                
+                # REPARATUR-LOGIK: Falls fälschlicherweise das gesamte profile_data Objekt gespeichert wurde
+                if isinstance(answers, dict) and 'answers' in answers:
+                    logger.info(f"bearbeiten: Korrigiere Datenstruktur für User {user.id}")
+                    answers = answers['answers']
+                
                 context.user_data['answers'] = answers
                 context.user_data['is_editing'] = True
                 context.user_data['old_msg_id'] = app.profile_message_id
                 context.user_data['old_chat_id'] = app.profile_chat_id
                 
-                # Wichtig: Wir müssen auch 'fields' laden
                 config = get_bot_config('invite')
                 context.user_data['fields'] = [f for f in config.get('form_fields', []) if f.get('enabled')]
                 
