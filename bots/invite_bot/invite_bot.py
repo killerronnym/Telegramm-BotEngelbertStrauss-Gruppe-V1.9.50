@@ -64,7 +64,7 @@ def log_user_interaction(user_id, username, message_text):
         logger.error(f"Fehler beim Schreiben in die Datenbank (InviteLog): {e}")
 
 # Conversation States
-ASKING_QUESTIONS, CONFIRMING_RULES, WAITING_FOR_SOCIAL_DECISION, SELECTING_SOCIAL_PLATFORM = range(4)
+ASKING_QUESTIONS, CONFIRMING_RULES, WAITING_FOR_SOCIAL_DECISION, SELECTING_SOCIAL_PLATFORM, WAITING_FOR_LINK_VERIFICATION = range(5)
 
 PLATFORMS = {
     "instagram": {"name": "Instagram", "base_url": "https://instagram.com/"},
@@ -408,15 +408,7 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                 context.user_data['answers'][field['id']] = []
             context.user_data['answers'][field['id']].append(detected)
             
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("Ja, noch einen", callback_data="social_add_yes"),
-                 InlineKeyboardButton("Nein, das reicht", callback_data="social_add_no")]
-            ])
-            await update.message.reply_text(
-                f"Erkannt: {detected['name']}. Möchtest du einen weiteren Social Media Link hinzufügen?",
-                reply_markup=keyboard
-            )
-            return WAITING_FOR_SOCIAL_DECISION
+            return await ask_link_verification(update, context, detected)
         else:
             # Kein Link -> Nach Plattform fragen (Möglichkeit B)
             context.user_data['temp_social_name'] = answer_text
@@ -434,10 +426,71 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
             return SELECTING_SOCIAL_PLATFORM
-
-    logger.info(f"handle_answer: Speichere Antwort für {field['id']}. Nächster Index: {idx+1}")
+        
+    # --- NON-SOCIAL TEXT ENTRY ---
     context.user_data['answers'][field['id']] = answer
+    
+    if context.user_data.get('is_editing'):
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Ja", callback_data="edit_more_yes"),
+             InlineKeyboardButton("❌ Nein", callback_data="edit_more_no")]
+        ])
+        await update.message.reply_text("Möchtest du noch eine Sache überarbeiten?", reply_markup=keyboard)
+        return ASKING_QUESTIONS
+
     return await next_question(update, context)
+
+async def ask_link_verification(update: Update, context: ContextTypes.DEFAULT_TYPE, detected_data: Dict[str, str]) -> int:
+    """Helper to ask the user to test their link before continuing."""
+    url = detected_data['url']
+    name = detected_data['name']
+    
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Ja, funktioniert", callback_data="link_ok_yes"),
+         InlineKeyboardButton("❌ Nein, korrigieren", callback_data="link_ok_no")]
+    ])
+    
+    text = (
+        f"Erkannt: <b>{name}</b>\n\n"
+        f"Bitte probiere den Link einmal aus, um sicherzugehen, dass er auch wirklich weitergeleitet wird:\n"
+        f"👉 <a href='{url}'>{url}</a>\n\n"
+        f"Funktioniert der Link? Ist der Link richtig?"
+    )
+    
+    if update.callback_query:
+        await update.callback_query.edit_message_text(text, reply_markup=keyboard, parse_mode="HTML")
+    else:
+        await update.message.reply_text(text, reply_markup=keyboard, parse_mode="HTML")
+    
+    return WAITING_FOR_LINK_VERIFICATION
+
+async def handle_link_verification(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    
+    action = query.data.replace("link_ok_", "")
+    idx = context.user_data.get('current_field_index', 0)
+    fields = context.user_data.get('fields', [])
+    field_id = fields[idx]['id']
+    
+    if action == 'yes':
+        # Link works! Now ask if they want another one.
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Ja, noch einen", callback_data="social_add_yes"),
+             InlineKeyboardButton("Nein, das reicht", callback_data="social_add_no")]
+        ])
+        await query.edit_message_text(
+            "Super! Möchtest du einen weiteren Social Media Link hinzufügen?",
+            reply_markup=keyboard
+        )
+        return WAITING_FOR_SOCIAL_DECISION
+    else:
+        # Link fails! Remove last entry and ask again.
+        if field_id in context.user_data['answers'] and isinstance(context.user_data['answers'][field_id], list):
+            context.user_data['answers'][field_id].pop()
+            
+        await query.edit_message_text("Oh, das war wohl nichts. Bitte sende mir den Link oder Usernamen erneut:")
+        return ASKING_QUESTIONS
 
 async def handle_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
@@ -525,17 +578,7 @@ async def handle_social_platform_selection(update: Update, context: ContextTypes
         context.user_data['answers'][field_id] = []
     context.user_data['answers'][field_id].append({"name": platform_data["name"], "url": url})
     
-    await query.edit_message_text(f"Gespeichert: {platform_data['name']} ({name})")
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Ja, noch einen", callback_data="social_add_yes"),
-         InlineKeyboardButton("Nein, das reicht", callback_data="social_add_no")]
-    ])
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text="Möchtest du einen weiteren Social Media Link hinzufügen?",
-        reply_markup=keyboard
-    )
-    return WAITING_FOR_SOCIAL_DECISION
+    return await ask_link_verification(update, context, {"name": platform_data["name"], "url": url})
 
 async def handle_social_decision_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
@@ -641,140 +684,148 @@ async def post_profile(bot, profile_data: Dict[str, Any], is_approval_post: bool
         logger.error(f"post_profile Error in {target_chat_id}: {e}")
         return None
 
-async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, force_profile_data=None) -> int:
+    """Wird aufgerufen, wenn der User die Regeln akzeptiert hat ODER wenn ein Profil finalisiert wurde."""
     user = update.effective_user
-    text = update.message.text.lower().strip() if update.message.text else ""
-    logger.info(f"handle_rules_confirmation: Nutzer {user.id} schrieb: '{text}'")
-    
-    if text != 'ok':
-        await update.message.reply_text('Bitte schreibe "ok" zum Bestätigen.')
-        return CONFIRMING_RULES
-
-    log_user_interaction(user.id, user.username, "Regeln mit OK bestätigt")
-
     config = get_bot_config('invite')
-    chat_id_str = fix_chat_id(config.get('main_chat_id', ''))
-    if not chat_id_str:
-        await update.message.reply_text("Bot nicht konfiguriert (Main Chat ID fehlt).")
-        return ConversationHandler.END
     
-    # Try parsing both -100... or numeric
-    try:
-        target_chat_id = int(chat_id_str)
-    except:
-        target_chat_id = chat_id_str
-    
-    is_already_member = False
-    try:
-        member = await context.bot.get_chat_member(chat_id=target_chat_id, user_id=user.id)
-        if member:
-            if member.status == "kicked":
-                await update.message.reply_text(config.get('blocked_message', 'Du bist gesperrt.'))
-                return ConversationHandler.END
-            if member.status in ["member", "administrator", "creator"]:
-                is_already_member = True
-                logger.info(f"Nutzer {user.id} ist bereits Mitglied (Status: {member.status}).")
-    except BadRequest:
-        pass
-
-    # Steckbrief-Daten vorbereiten
-    answers = context.user_data['answers']
-    ordered_fields = context.user_data.get('fields', [])
-    
-    # Steckbrief zusammenbauen
-    steckbrief_lines = []
-    
-    photo_file_id = None
-    pm_allowed_status = None
-    share_username_choice = None
-    
-    for field in ordered_fields:
-        if not field.get('enabled', True):
-            continue
-            
-        fid = field['id']
-        ftype = field.get('type', '').lower()
-        answer = answers.get(fid)
-        
-        if ftype == 'pm_contact' or fid == 'pm_allowed':
-            pm_allowed_status = answer # "Ja" oder "Nein"
-            continue
-        if ftype == 'header_name' or fid == 'share_username':
-            share_username_choice = answer # "Ja" oder "Nein"
-            continue
-
-        if answer is None or (isinstance(answer, str) and answer.lower().strip() in ['nein', 'n/a']):
-            continue
-            
-        if field.get('type', '').lower() == 'photo':
-            photo_file_id = answer
-        elif field.get('type', '').lower() == 'birthday':
-            # Geburtstag: NUR Alter im Steckbrief anzeigen, KEIN Datum
-            emoji = field.get('emoji', '🎂')
-            name_label = field.get('display_name', 'Alter')
-            answer_str = str(answer).strip()
-
-            # Fall 1: Schon als Alter gespeichert (nach NEIN-Fallback, z.B. '25 Jahre')
-            if 'jahre' in answer_str.lower() or answer_str.isdigit():
-                alter_str = answer_str if 'jahre' in answer_str.lower() else f"{answer_str} Jahre"
-                steckbrief_lines.append(f"{emoji} {name_label}: {alter_str}")
-
-            # Fall 2: Als Datum gespeichert (TT.MM.JJJJ) -> Alter berechnen
-            else:
-                date_pattern = re.compile(r'^(\d{1,2})[\s\.](\d{1,2})[\s\.](\d{4})\.?$')
-                match = date_pattern.match(answer_str)
-                if match:
-                    birth_year = int(match.group(3))
-                    birth_month = int(match.group(2))
-                    birth_day = int(match.group(1))
-                    today = datetime.today()
-                    age = today.year - birth_year - (
-                        (today.month, today.day) < (birth_month, birth_day)
-                    )
-                    steckbrief_lines.append(f"{emoji} {name_label}: {age} Jahre")
-
-        else:
-            emoji = field.get('emoji', '🔹')
-            name = field.get('display_name', field['id'].capitalize())
-            
-            # Link-Formatierung für Social Media (HTML)
-            is_social_field = field['id'] == 'instagram' or 'social' in field.get('id', '').lower() or 'social' in field.get('display_name', '').lower() or 'insta' in field.get('display_name', '').lower()
-            if is_social_field:
-                answers_list = answer if isinstance(answer, list) else [answer]
-                formatted_socials = []
-                for entry in answers_list:
-                    if isinstance(entry, dict):
-                        formatted_socials.append(f'<a href="{entry["url"]}">{entry["name"]}</a>')
-                    else:
-                        # Fallback für alte Einträge oder Plain-Text ohne Dictionary
-                        formatted_socials.append(str(entry))
-                answer = ", ".join(formatted_socials)
-            
-            steckbrief_lines.append(f"{emoji} {name}: {answer}")
-    
-    # Header + optionaler Telegram-Username
-    if share_username_choice == "Ja":
-        header = f"<b>NEUER STECKBRIEF</b>\n"
-        # Telegram-Name als erste Zeile (Username falls vorhanden, sonst Vorname)
-        display_name = f"@{user.username}" if user.username else user.first_name
-        steckbrief_lines.insert(0, f"📱 <b>Telegram Name:</b> {display_name}")
+    if force_profile_data:
+        profile_data = force_profile_data
+        is_already_member = True
+        answers = profile_data.get('answers', {})
+        ordered_fields = profile_data.get('fields', [])
+        target_chat_id = profile_data.get('target_chat_id')
+        photo_file_id = profile_data.get('photo_id')
     else:
-        header = "<b>NEUER STECKBRIEF</b>\n"
-    final_text = header + "\n".join(steckbrief_lines)
-    
-    # PM-Banner unten anfügen (Spezial-Typ: pm_contact oder ID: pm_allowed)
-    if pm_allowed_status:
-        banner_emoji = "📩"
-        banner_text = f"Mich darf man privat anschreiben: {pm_allowed_status.upper()}"
-        final_text += f"\n\n{banner_emoji} <b>{banner_text}</b>"
+        text = update.message.text.lower().strip() if update.message.text else ""
+        logger.info(f"handle_rules_confirmation: Nutzer {user.id} schrieb: '{text}'")
+        
+        if text != 'ok':
+            await update.message.reply_text('Bitte schreibe "ok" zum Bestätigen.')
+            return CONFIRMING_RULES
 
-    profile_data = {
-        'text': final_text, 
-        'photo_id': photo_file_id,
-        'target_chat_id': target_chat_id, 
-        'topic_id': config.get('topic_id'),
-        'whitelist_approval_topic_id': config.get('whitelist_approval_topic_id')
-    }
+        log_user_interaction(user.id, user.username, "Regeln mit OK bestätigt")
+
+        chat_id_str = fix_chat_id(config.get('main_chat_id', ''))
+        if not chat_id_str:
+            await update.message.reply_text("Bot nicht konfiguriert (Main Chat ID fehlt).")
+            return ConversationHandler.END
+        
+        try:
+            target_chat_id = int(chat_id_str)
+        except:
+            target_chat_id = chat_id_str
+        
+        is_already_member = False
+        try:
+            member = await context.bot.get_chat_member(chat_id=target_chat_id, user_id=user.id)
+            if member:
+                if member.status == "kicked":
+                    await update.message.reply_text(config.get('blocked_message', 'Du bist gesperrt.'))
+                    return ConversationHandler.END
+                if member.status in ["member", "administrator", "creator"]:
+                    is_already_member = True
+                    logger.info(f"Nutzer {user.id} ist bereits Mitglied (Status: {member.status}).")
+        except BadRequest:
+            pass
+
+        # Steckbrief-Daten vorbereiten
+        answers = context.user_data['answers']
+        ordered_fields = context.user_data.get('fields', [])
+        
+    # Steckbrief zusammenbauen (nur wenn nicht erzwungen)
+    if not force_profile_data:
+        steckbrief_lines = []
+        photo_file_id = None
+        pm_allowed_status = None
+        share_username_choice = None
+        
+        for field in ordered_fields:
+            if not field.get('enabled', True):
+                continue
+                
+            fid = field['id']
+            ftype = field.get('type', '').lower()
+            answer = answers.get(fid)
+            
+            if ftype == 'pm_contact' or fid == 'pm_allowed':
+                pm_allowed_status = answer
+                continue
+            if ftype == 'header_name' or fid == 'share_username':
+                share_username_choice = answer
+                continue
+
+            if answer is None or (isinstance(answer, str) and answer.lower().strip() in ['nein', 'n/a']):
+                continue
+                
+            if ftype == 'photo':
+                photo_file_id = answer
+            elif ftype == 'birthday':
+                # Geburtstag: NUR Alter im Steckbrief anzeigen, KEIN Datum
+                emoji = field.get('emoji', '🎂')
+                name_label = field.get('display_name', 'Alter')
+                answer_str = str(answer).strip()
+
+                # Fall 1: Schon als Alter gespeichert (nach NEIN-Fallback, z.B. '25 Jahre')
+                if 'jahre' in answer_str.lower() or answer_str.isdigit():
+                    alter_str = answer_str if 'jahre' in answer_str.lower() else f"{answer_str} Jahre"
+                    steckbrief_lines.append(f"{emoji} {name_label}: {alter_str}")
+
+                # Fall 2: Als Datum gespeichert (TT.MM.JJJJ) -> Alter berechnen
+                else:
+                    date_pattern = re.compile(r'^(\d{1,2})[\s\.](\d{1,2})[\s\.](\d{4})\.?$')
+                    match = date_pattern.match(answer_str)
+                    if match:
+                        birth_year = int(match.group(3))
+                        birth_month = int(match.group(2))
+                        birth_day = int(match.group(1))
+                        today = datetime.today()
+                        age = today.year - birth_year - (
+                            (today.month, today.day) < (birth_month, birth_day)
+                        )
+                        steckbrief_lines.append(f"{emoji} {name_label}: {age} Jahre")
+
+            else:
+                emoji = field.get('emoji', '🔹')
+                name = field.get('display_name', field['id'].capitalize())
+                
+                # Link-Formatierung für Social Media (HTML)
+                is_social_field = fid == 'instagram' or 'social' in fid.lower() or 'social' in field.get('display_name', '').lower() or 'insta' in field.get('display_name', '').lower()
+                if is_social_field:
+                    answers_list = answer if isinstance(answer, list) else [answer]
+                    formatted_socials = []
+                    for entry in answers_list:
+                        if isinstance(entry, dict):
+                            formatted_socials.append(f'<a href="{entry["url"]}">{entry["name"]}</a>')
+                        else:
+                            formatted_socials.append(str(entry))
+                    answer = ", ".join(formatted_socials)
+                
+                steckbrief_lines.append(f"{emoji} {name}: {answer}")
+        
+        # Header + optionaler Telegram-Username
+        if share_username_choice == "Ja":
+            header = f"<b>NEUER STECKBRIEF</b>\n"
+            display_name = f"@{user.username}" if user.username else user.first_name
+            steckbrief_lines.insert(0, f"📱 <b>Telegram Name:</b> {display_name}")
+        else:
+            header = "<b>NEUER STECKBRIEF</b>\n"
+        final_text = header + "\n".join(steckbrief_lines)
+        
+        if pm_allowed_status:
+            banner_emoji = "📩"
+            banner_text = f"Mich darf man privat anschreiben: {pm_allowed_status.upper()}"
+            final_text += f"\n\n{banner_emoji} <b>{banner_text}</b>"
+
+        profile_data = {
+            'text': final_text, 
+            'photo_id': photo_file_id,
+            'target_chat_id': target_chat_id, 
+            'topic_id': config.get('topic_id'),
+            'whitelist_approval_topic_id': config.get('whitelist_approval_topic_id')
+        }
+    
+    # --- AB HIER: POSTING / WHITELIST LOGIK ---
 
     # Geburtstag sofort in der DB speichern (unabhängig von Whitelist-Status)
     try:
@@ -836,7 +887,7 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
             await update.message.reply_text(f"❌ Fehler bei der Freigabe-Anfrage: {e}")
             return ConversationHandler.END
 
-        await update.message.reply_text("Dein Steckbrief wird berprft, bitte warte.")
+        await update.message.reply_text(config.get('whitelist_pending_message', 'Dein Steckbrief wird überprüft, bitte warte.'))
         return ConversationHandler.END
 
     if config.get('whitelist_enabled'):
@@ -895,7 +946,7 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
             await update.message.reply_text(f"❌ Fehler bei der Freischaltungs-Anfrage: {e}")
             return ConversationHandler.END
 
-        await update.message.reply_text(config.get('whitelist_pending_message', 'Dein Antrag wird geprǬft.'))
+        await update.message.reply_text(config.get('whitelist_pending_message', 'Dein Steckbrief wird überprüft, bitte warte.'))
     else:
         # Whitelist ist AUS -> Sofort Link senden
         with flask_app.app_context():
@@ -1105,7 +1156,155 @@ async def handle_custom_commands(update: Update, context: ContextTypes.DEFAULT_T
     if cmd_name in custom_commands:
         response = custom_commands[cmd_name]
         await update.message.reply_text(response)
-        log_user_interaction(update.effective_user.id, update.effective_user.username, f"Custom Command /{cmd_name} ausgeführt")
+
+async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Startet den Bearbeitungs-Prozess für einen bestehenden Steckbrief."""
+    if not is_bot_active('invite'): return ConversationHandler.END
+    user = update.effective_user
+    
+    with flask_app.app_context():
+        app = InviteApplication.query.filter_by(telegram_user_id=user.id).first()
+        if not app or app.status not in ['completed', 'accepted']:
+            await update.message.reply_text("Du hast noch keinen fertigen Steckbrief, den du bearbeiten könntest.")
+            return ConversationHandler.END
+            
+        # Daten in context laden
+        context.user_data['answers'] = json.loads(app.answers_json)
+        context.user_data['is_editing'] = True
+        context.user_data['old_msg_id'] = app.profile_message_id
+        context.user_data['old_chat_id'] = app.profile_chat_id
+
+    # Menü anzeigen
+    return await show_edit_menu(update, context)
+
+async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    config = get_bot_config('invite')
+    fields = [f for f in config.get('form_fields', []) if f.get('enabled')]
+    
+    keyboard = []
+    for f in fields:
+        emoji = f.get('emoji', '🔹')
+        name = f.get('display_name', f['id'])
+        keyboard.append([InlineKeyboardButton(f"{emoji} {name} bearbeiten", callback_data=f"edit_field_{f['id']}")])
+    
+    keyboard.append([InlineKeyboardButton("✅ Bearbeitung beenden", callback_data="edit_finish")])
+    
+    text = "Hier kannst du deinen Steckbrief bearbeiten. Welchen Reiter möchtest du bearbeiten?"
+    
+    if update.callback_query:
+        await update.callback_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+    else:
+        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    return ASKING_QUESTIONS # Wir nutzen ASKING_QUESTIONS als Warte-State für die Auswahl
+
+async def handle_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data
+    
+    if data.startswith("edit_field_"):
+        field_id = data.replace("edit_field_", "")
+        config = get_bot_config('invite')
+        fields = config.get('form_fields', [])
+        
+        # Finde den Index des gewählten Feldes
+        for i, f in enumerate(fields):
+            if f['id'] == field_id:
+                context.user_data['current_field_index'] = i
+                # Frage stellen
+                await query.edit_message_text(f"Bitte gib einen neuen Wert für <b>{f['display_name']}</b> ein:\n\n{f['label']}", parse_mode="HTML")
+                return ASKING_QUESTIONS
+                
+    elif data == "edit_more_yes":
+        return await show_edit_menu(update, context)
+        
+    elif data == "edit_more_no" or data == "edit_finish":
+        # Vorschau zeigen
+        user = update.effective_user
+        config = get_bot_config('invite')
+        fields = config.get('form_fields', [])
+        
+        preview_text = "<b>DEINE VORSCHAU:</b>\n\n"
+        answers = context.user_data.get('answers', {})
+        
+        # Steckbrief generieren (wie in post_profile/generate_profile_text)
+        # Wir machen es hier einfach direkt für die Vorschau
+        text_lines = []
+        for f in fields:
+            if not f.get('enabled'): continue
+            val = answers.get(f['id'])
+            if val and val != 'n/a':
+                if f['type'] == 'boolean_buttons':
+                    val_str = "Ja" if val else "Nein"
+                elif isinstance(val, list): # Social Media
+                    val_str = ", ".join([f['name'] for f in val])
+                else:
+                    val_str = str(val)
+                text_lines.append(f"{f.get('emoji', '🔹')} <b>{f.get('display_name', f['id'])}:</b> {val_str}")
+        
+        preview_text += "\n".join(text_lines)
+        preview_text += "\n\n<b>Möchtest du den Steckbrief so posten?</b>"
+        
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🚀 Posten / Abschicken", callback_data="edit_confirm_final"),
+             InlineKeyboardButton("🔄 Weiter bearbeiten", callback_data="edit_more_yes")]
+        ])
+        
+        await query.edit_message_text(preview_text, reply_markup=keyboard, parse_mode="HTML")
+        return ASKING_QUESTIONS
+
+    elif data == "edit_confirm_final":
+        # Finales Speichern und Posten
+        return await finalize_profile(update, context)
+
+    return ASKING_QUESTIONS
+
+async def finalize_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    user = update.effective_user
+    config = get_bot_config('invite')
+    answers = context.user_data.get('answers', {})
+    fields = config.get('form_fields', [])
+    
+    # Text generieren
+    from .invite_bot import generate_profile_text # Sicherstellen dass wir die aktuelle Logik nutzen
+    profile_text = generate_profile_text(user, answers, fields)
+    
+    # Foto finden
+    photo_file_id = None
+    for f in fields:
+        if f['type'] == 'photo' and answers.get(f['id']):
+            photo_file_id = answers[f['id']]
+            if photo_file_id != 'n/a': break
+            
+    profile_data = {
+        'text': profile_text,
+        'photo': photo_file_id if photo_file_id != 'n/a' else None,
+        'target_chat_id': context.user_data.get('old_chat_id') or config.get('main_chat_id'),
+        'topic_id': config.get('topic_id'),
+        'user_id': user.id,
+        'full_name': user.full_name,
+        'username': user.username,
+        'answers': answers, # Rohdaten für DB
+        'fields': fields    # Konfiguration für DB
+    }
+
+    # Alte Nachricht löschen falls vorhanden
+    old_msg_id = context.user_data.get('old_msg_id')
+    old_chat_id = context.user_data.get('old_chat_id')
+    if old_msg_id and old_chat_id:
+        try:
+            await context.bot.delete_message(chat_id=old_chat_id, message_id=old_msg_id)
+            logger.info(f"finalize_profile: Alte Nachricht {old_msg_id} gelöscht.")
+        except Exception as e:
+            logger.warning(f"finalize_profile: Konnte alte Nachricht nicht löschen: {e}")
+
+    # Whitelist Logik nutzen
+    return await handle_rules_confirmation(update, context, force_profile_data=profile_data)
+
+# Ich muss handle_rules_confirmation anpassen, damit sie force_profile_data akzeptiert.
 
 async def catch_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not is_bot_active('invite'): return
@@ -1138,12 +1337,17 @@ def get_handlers():
             ],
             SELECTING_SOCIAL_PLATFORM: [
                 CallbackQueryHandler(handle_social_platform_selection, pattern=r'^social_platform_')
+            ],
+            WAITING_FOR_LINK_VERIFICATION: [
+                CallbackQueryHandler(handle_link_verification, pattern=r'^link_ok_')
             ]
         },
         fallbacks=[
             CommandHandler("cancel", cancel),
             CommandHandler("start", start),
+            CommandHandler("bearbeiten", bearbeiten),
             CommandHandler("datenschutz", datenschutz),
+            CallbackQueryHandler(handle_edit_callback, pattern=r'^edit_')
         ],
         persistent=True,
         name="invite_conversation",
@@ -1153,6 +1357,7 @@ def get_handlers():
     return [
         (conv_handler, 0),
         (CommandHandler("start", start), 0),
+        (CommandHandler("bearbeiten", bearbeiten), 0),
         (CommandHandler("datenschutz", datenschutz), 0),
         (CallbackQueryHandler(handle_whitelist_callback, pattern=r'^whitelist_'), 0),
         (CallbackQueryHandler(handle_existing_member_callback, pattern=r'^existing_'), 0),
