@@ -1240,7 +1240,6 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # --- NEU: AKTUELLEN STECKBRIEF ANZEIGEN (Vorschau vor Edit) ---
     config = get_bot_config('invite')
     fields = [f for f in config.get('form_fields', []) if f.get('enabled')]
-    from .invite_bot import generate_profile_text
     current_text = generate_profile_text(user, context.user_data['answers'], fields)
     
     # Foto finden
