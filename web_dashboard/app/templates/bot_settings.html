@@ -441,6 +441,13 @@
                         </div>
 
                         <hr class="my-4 border-secondary">
+                        <h6 class="text-info fw-bold mb-3">Texte nach Abschluss</h6>
+                        <div class="mb-3">
+                            <label class="small text-secondary fw-bold mb-1">Erfolgsmeldung nach Posten</label>
+                            <textarea class="form-control font-monospace" name="profile_posted_message"
+                                rows="3">{{ config.profile_posted_message or '' }}</textarea>
+                            <div class="form-text small text-white-50">Sichtbar für den User, sobald der Steckbrief in der Gruppe gepostet wurde. (Hier idealerweise den Hinweis auf /bearbeiten einfügen)</div>
+                        </div>
                         <h6 class="text-info fw-bold mb-3">Texte für Whitelist-Modus</h6>
                         <div class="mb-3">
                             <label class="small text-secondary fw-bold mb-1">Warteschleifen-Nachricht</label>

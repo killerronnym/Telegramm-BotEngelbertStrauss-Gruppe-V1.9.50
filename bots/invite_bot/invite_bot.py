@@ -1054,7 +1054,8 @@ async def handle_existing_member_callback(update: Update, context: ContextTypes.
             # Steckbrief posten
             try:
                 await post_profile(context.bot, profile_data)
-                await context.bot.send_message(user_id, "Dein Steckbrief wurde gepostet!")
+                success_msg = config.get('profile_posted_message', "Dein Steckbrief wurde gepostet! Falls du Änderungen vornehmen möchtest, nutze /bearbeiten.")
+                await context.bot.send_message(user_id, success_msg)
                 await query.edit_message_text(f"✅ Steckbrief gepostet (Admin: {admin_user.full_name}).")
                 application.status = 'completed'
                 db.session.commit()
@@ -1324,6 +1325,8 @@ def get_handlers():
                 CommandHandler("datenschutz", datenschutz),
                 CallbackQueryHandler(handle_skip, pattern=r'^skip_field$'),
                 CallbackQueryHandler(handle_answer, pattern=r'^bool_ans_'),
+                CallbackQueryHandler(handle_edit_callback, pattern=r'^edit_field_'),
+                CallbackQueryHandler(handle_edit_callback, pattern=r'^edit_finish'),
                 MessageHandler(filters.PHOTO | (filters.TEXT & filters.ChatType.PRIVATE & ~filters.COMMAND), handle_answer)
             ],
             CONFIRMING_RULES: [
@@ -1347,7 +1350,7 @@ def get_handlers():
             CommandHandler("start", start),
             CommandHandler("bearbeiten", bearbeiten),
             CommandHandler("datenschutz", datenschutz),
-            CallbackQueryHandler(handle_edit_callback, pattern=r'^edit_')
+            CallbackQueryHandler(handle_edit_callback, pattern=r'^edit_more_')
         ],
         persistent=True,
         name="invite_conversation",
