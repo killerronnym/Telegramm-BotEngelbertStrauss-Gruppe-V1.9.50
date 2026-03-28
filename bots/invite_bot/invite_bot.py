@@ -687,11 +687,12 @@ async def post_profile(bot, profile_data: Dict[str, Any], is_approval_post: bool
         logger.error(f"post_profile Error in {target_chat_id}: {e}")
         return None
 
-def generate_profile_text(user: User, answers: Dict[str, Any], ordered_fields: List[Dict[str, Any]]) -> str:
-    """Generiert den vollständigen Steckbrief-Text aus den Antworten."""
+def generate_profile_text(user: User, answers: Dict[str, Any], ordered_fields: List[Dict[Dict[str, Any], Any]]) -> tuple[str, bool]:
+    """Generiert den vollständigen Steckbrief-Text. Gibt (Text, hat_daten) zurück."""
     steckbrief_lines = []
     pm_allowed_status = None
     share_username_choice = None
+    has_actual_data = False
     
     for field in ordered_fields:
         if not field.get('enabled', True):
@@ -703,6 +704,7 @@ def generate_profile_text(user: User, answers: Dict[str, Any], ordered_fields: L
         
         if ftype == 'pm_contact' or fid == 'pm_allowed':
             pm_allowed_status = answer
+            if answer and answer.lower() != 'n/a': has_actual_data = True
             continue
         if ftype == 'header_name' or fid == 'share_username':
             share_username_choice = answer
@@ -711,8 +713,10 @@ def generate_profile_text(user: User, answers: Dict[str, Any], ordered_fields: L
         if answer is None or (isinstance(answer, str) and answer.lower().strip() in ['nein', 'n/a']):
             continue
             
+        has_actual_data = True
+        
         if ftype == 'photo':
-            continue # Foto kommt nicht in den Text
+            continue 
         elif ftype == 'birthday':
             emoji = field.get('emoji', '🎂')
             name_label = field.get('display_name', 'Alter')
@@ -761,7 +765,7 @@ def generate_profile_text(user: User, answers: Dict[str, Any], ordered_fields: L
         banner_text = f"Mich darf man privat anschreiben: {pm_allowed_status.upper()}"
         final_text += f"\n\n{banner_emoji} <b>{banner_text}</b>"
         
-    return final_text
+    return final_text, has_actual_data
 
 async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, force_profile_data=None) -> int:
     """Wird aufgerufen, wenn der User die Regeln akzeptiert hat ODER wenn ein Profil finalisiert wurde."""
@@ -814,7 +818,7 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
 
     # Steckbrief zusammenbauen (nur wenn nicht erzwungen)
     if not force_profile_data:
-        final_text = generate_profile_text(user, answers, ordered_fields)
+        final_text, _ = generate_profile_text(user, answers, ordered_fields)
         
         # Foto finden
         photo_file_id = None
@@ -1246,8 +1250,16 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     try:
         config = get_bot_config('invite')
         fields = [f for f in config.get('form_fields', []) if f.get('enabled')]
-        current_text = generate_profile_text(user, context.user_data['answers'], fields)
+        current_text, has_data = generate_profile_text(user, context.user_data['answers'], fields)
         
+        if not has_data:
+            logger.warning(f"bearbeiten: Steckbrief von User {user.id} existiert zwar, hat aber keine verwertbaren Daten.")
+            await update.message.reply_text(
+                "🔎 <b>Hinweis:</b> Dein gespeicherter Steckbrief scheint sehr alt zu sein oder enthält keine aktuellen Informationen mehr.\n\n"
+                "Um sicherzugehen, dass alles korrekt ist, erstelle bitte einen neuen Steckbrief mit dem Befehl /letsgo. Das dauert nur ein paar Minuten!"
+            )
+            return ConversationHandler.END
+
         # Foto finden
         current_photo_id = None
         for f in fields:
@@ -1400,7 +1412,7 @@ async def finalize_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     fields = config.get('form_fields', [])
     
     # Text und Profil-Daten generieren
-    profile_text = generate_profile_text(user, answers, fields)
+    profile_text, _ = generate_profile_text(user, answers, fields)
     
     # Foto finden
     photo_file_id = None
