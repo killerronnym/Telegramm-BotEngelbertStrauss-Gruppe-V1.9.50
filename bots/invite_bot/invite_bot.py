@@ -12,7 +12,7 @@ import re
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, User
 from telegram.error import BadRequest
 from telegram.ext import (
     Application,
@@ -687,6 +687,82 @@ async def post_profile(bot, profile_data: Dict[str, Any], is_approval_post: bool
         logger.error(f"post_profile Error in {target_chat_id}: {e}")
         return None
 
+def generate_profile_text(user: User, answers: Dict[str, Any], ordered_fields: List[Dict[str, Any]]) -> str:
+    """Generiert den vollständigen Steckbrief-Text aus den Antworten."""
+    steckbrief_lines = []
+    pm_allowed_status = None
+    share_username_choice = None
+    
+    for field in ordered_fields:
+        if not field.get('enabled', True):
+            continue
+            
+        fid = field['id']
+        ftype = field.get('type', '').lower()
+        answer = answers.get(fid)
+        
+        if ftype == 'pm_contact' or fid == 'pm_allowed':
+            pm_allowed_status = answer
+            continue
+        if ftype == 'header_name' or fid == 'share_username':
+            share_username_choice = answer
+            continue
+
+        if answer is None or (isinstance(answer, str) and answer.lower().strip() in ['nein', 'n/a']):
+            continue
+            
+        if ftype == 'photo':
+            continue # Foto kommt nicht in den Text
+        elif ftype == 'birthday':
+            emoji = field.get('emoji', '🎂')
+            name_label = field.get('display_name', 'Alter')
+            answer_str = str(answer).strip()
+
+            if 'jahre' in answer_str.lower() or answer_str.isdigit():
+                alter_str = answer_str if 'jahre' in answer_str.lower() else f"{answer_str} Jahre"
+                steckbrief_lines.append(f"{emoji} <b>{name_label}:</b> {alter_str}")
+            else:
+                date_pattern = re.compile(r'^(\d{1,2})[\s\.](\d{1,2})[\s\.](\d{4})\.?$')
+                match = date_pattern.match(answer_str)
+                if match:
+                    birth_year = int(match.group(3))
+                    birth_month = int(match.group(2))
+                    birth_day = int(match.group(1))
+                    today = datetime.today()
+                    age = today.year - birth_year - ((today.month, today.day) < (birth_month, birth_day))
+                    steckbrief_lines.append(f"{emoji} <b>{name_label}:</b> {age} Jahre")
+        else:
+            emoji = field.get('emoji', '🔹')
+            name = field.get('display_name', fid.capitalize())
+            
+            is_social_field = fid == 'instagram' or 'social' in fid.lower() or 'social' in field.get('display_name', '').lower() or 'insta' in field.get('display_name', '').lower()
+            if is_social_field:
+                answers_list = answer if isinstance(answer, list) else [answer]
+                formatted_socials = []
+                for entry in answers_list:
+                    if isinstance(entry, dict):
+                        formatted_socials.append(f'<a href="{entry["url"]}">{entry["name"]}</a>')
+                    else:
+                        formatted_socials.append(str(entry))
+                answer = ", ".join(formatted_socials)
+            
+            steckbrief_lines.append(f"{emoji} <b>{name}:</b> {answer}")
+    
+    # Header + optionaler Telegram-Username
+    header = "<b>NEUER STECKBRIEF</b>\n"
+    if share_username_choice == "Ja":
+        display_name = f"@{user.username}" if user.username else user.first_name
+        steckbrief_lines.insert(0, f"📱 <b>Telegram Name:</b> {display_name}")
+    
+    final_text = header + "\n" + "\n".join(steckbrief_lines)
+    
+    if pm_allowed_status:
+        banner_emoji = "📩"
+        banner_text = f"Mich darf man privat anschreiben: {pm_allowed_status.upper()}"
+        final_text += f"\n\n{banner_emoji} <b>{banner_text}</b>"
+        
+    return final_text
+
 async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, force_profile_data=None) -> int:
     """Wird aufgerufen, wenn der User die Regeln akzeptiert hat ODER wenn ein Profil finalisiert wurde."""
     user = update.effective_user
@@ -732,93 +808,20 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
         except BadRequest:
             pass
 
-        # Steckbrief-Daten vorbereiten
-        answers = context.user_data['answers']
-        ordered_fields = context.user_data.get('fields', [])
-        
+    # Steckbrief-Daten vorbereiten
+    answers = context.user_data['answers']
+    ordered_fields = context.user_data.get('fields', [])
+
     # Steckbrief zusammenbauen (nur wenn nicht erzwungen)
     if not force_profile_data:
-        steckbrief_lines = []
+        final_text = generate_profile_text(user, answers, ordered_fields)
+        
+        # Foto finden
         photo_file_id = None
-        pm_allowed_status = None
-        share_username_choice = None
-        
-        for field in ordered_fields:
-            if not field.get('enabled', True):
-                continue
-                
-            fid = field['id']
-            ftype = field.get('type', '').lower()
-            answer = answers.get(fid)
-            
-            if ftype == 'pm_contact' or fid == 'pm_allowed':
-                pm_allowed_status = answer
-                continue
-            if ftype == 'header_name' or fid == 'share_username':
-                share_username_choice = answer
-                continue
-
-            if answer is None or (isinstance(answer, str) and answer.lower().strip() in ['nein', 'n/a']):
-                continue
-                
-            if ftype == 'photo':
-                photo_file_id = answer
-            elif ftype == 'birthday':
-                # Geburtstag: NUR Alter im Steckbrief anzeigen, KEIN Datum
-                emoji = field.get('emoji', '🎂')
-                name_label = field.get('display_name', 'Alter')
-                answer_str = str(answer).strip()
-
-                # Fall 1: Schon als Alter gespeichert (nach NEIN-Fallback, z.B. '25 Jahre')
-                if 'jahre' in answer_str.lower() or answer_str.isdigit():
-                    alter_str = answer_str if 'jahre' in answer_str.lower() else f"{answer_str} Jahre"
-                    steckbrief_lines.append(f"{emoji} {name_label}: {alter_str}")
-
-                # Fall 2: Als Datum gespeichert (TT.MM.JJJJ) -> Alter berechnen
-                else:
-                    date_pattern = re.compile(r'^(\d{1,2})[\s\.](\d{1,2})[\s\.](\d{4})\.?$')
-                    match = date_pattern.match(answer_str)
-                    if match:
-                        birth_year = int(match.group(3))
-                        birth_month = int(match.group(2))
-                        birth_day = int(match.group(1))
-                        today = datetime.today()
-                        age = today.year - birth_year - (
-                            (today.month, today.day) < (birth_month, birth_day)
-                        )
-                        steckbrief_lines.append(f"{emoji} {name_label}: {age} Jahre")
-
-            else:
-                emoji = field.get('emoji', '🔹')
-                name = field.get('display_name', field['id'].capitalize())
-                
-                # Link-Formatierung für Social Media (HTML)
-                is_social_field = fid == 'instagram' or 'social' in fid.lower() or 'social' in field.get('display_name', '').lower() or 'insta' in field.get('display_name', '').lower()
-                if is_social_field:
-                    answers_list = answer if isinstance(answer, list) else [answer]
-                    formatted_socials = []
-                    for entry in answers_list:
-                        if isinstance(entry, dict):
-                            formatted_socials.append(f'<a href="{entry["url"]}">{entry["name"]}</a>')
-                        else:
-                            formatted_socials.append(str(entry))
-                    answer = ", ".join(formatted_socials)
-                
-                steckbrief_lines.append(f"{emoji} {name}: {answer}")
-        
-        # Header + optionaler Telegram-Username
-        if share_username_choice == "Ja":
-            header = f"<b>NEUER STECKBRIEF</b>\n"
-            display_name = f"@{user.username}" if user.username else user.first_name
-            steckbrief_lines.insert(0, f"📱 <b>Telegram Name:</b> {display_name}")
-        else:
-            header = "<b>NEUER STECKBRIEF</b>\n"
-        final_text = header + "\n".join(steckbrief_lines)
-        
-        if pm_allowed_status:
-            banner_emoji = "📩"
-            banner_text = f"Mich darf man privat anschreiben: {pm_allowed_status.upper()}"
-            final_text += f"\n\n{banner_emoji} <b>{banner_text}</b>"
+        for f in ordered_fields:
+            if f.get('type') == 'photo' and answers.get(f['id']):
+                photo_file_id = answers[f['id']]
+                if photo_file_id != 'n/a': break
 
         profile_data = {
             'text': final_text, 
@@ -827,6 +830,8 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
             'topic_id': config.get('topic_id'),
             'whitelist_approval_topic_id': config.get('whitelist_approval_topic_id')
         }
+    else:
+        profile_data = force_profile_data
     
     # --- AB HIER: POSTING / WHITELIST LOGIK ---
 
