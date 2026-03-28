@@ -1237,6 +1237,30 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         await update.message.reply_text("❌ Ein Systemfehler ist aufgetreten. Bitte versuche es später erneut.")
         return ConversationHandler.END
 
+    # --- NEU: AKTUELLEN STECKBRIEF ANZEIGEN (Vorschau vor Edit) ---
+    config = get_bot_config('invite')
+    fields = [f for f in config.get('form_fields', []) if f.get('enabled')]
+    from .invite_bot import generate_profile_text
+    current_text = generate_profile_text(user, context.user_data['answers'], fields)
+    
+    # Foto finden
+    current_photo_id = None
+    for f in fields:
+        if f['type'] == 'photo' and context.user_data['answers'].get(f['id']):
+            current_photo_id = context.user_data['answers'][f['id']]
+            if current_photo_id != 'n/a': break
+
+    await update.message.reply_text("🔎 <b>DEIN AKTUELLER STECKBRIEF:</b>", parse_mode="HTML")
+    
+    msg = None
+    if current_photo_id and current_photo_id != 'n/a':
+        msg = await update.message.reply_photo(photo=current_photo_id, caption=current_text[:1024], parse_mode="HTML")
+    else:
+        msg = await update.message.reply_text(current_text, parse_mode="HTML")
+    
+    # Message ID speichern um sie später evtl zu löschen
+    if msg: context.user_data['edit_entry_msg_id'] = msg.message_id
+
     # Menü anzeigen
     return await show_edit_menu(update, context)
 
@@ -1253,9 +1277,8 @@ async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     keyboard.append([InlineKeyboardButton("✅ Bearbeitung beenden & Vorschau", callback_data="edit_finish")])
     
     text = (
-        "<b>Willkommen im Bearbeitungs-Modus!</b>\n\n"
-        "Hier kannst du die Details deines Steckbriefs verwalten und aktualisieren. "
-        "Welchen Bereich möchtest du heute anpassen?"
+        "<b>Was möchtest du an deinem Steckbrief bearbeiten?</b>\n\n"
+        "Wähle oben eine Kategorie aus, um den Inhalt zu aktualisieren."
     )
     
     if update.callback_query:
