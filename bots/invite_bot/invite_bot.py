@@ -1163,17 +1163,45 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if not is_bot_active('invite'): return ConversationHandler.END
     user = update.effective_user
     
-    with flask_app.app_context():
-        app = InviteApplication.query.filter_by(telegram_user_id=user.id).first()
-        if not app or app.status not in ['completed', 'accepted']:
-            await update.message.reply_text("Du hast noch keinen fertigen Steckbrief, den du bearbeiten könntest.")
-            return ConversationHandler.END
-            
-        # Daten in context laden
-        context.user_data['answers'] = json.loads(app.answers_json)
-        context.user_data['is_editing'] = True
-        context.user_data['old_msg_id'] = app.profile_message_id
-        context.user_data['old_chat_id'] = app.profile_chat_id
+    logger.info(f"bearbeiten: Nutzer {user.id} möchte seinen Steckbrief bearbeiten.")
+    
+    # Sicherstellen, dass wir eine saubere Session haben
+    context.user_data.clear()
+    
+    try:
+        with flask_app.app_context():
+            app = InviteApplication.query.filter_by(telegram_user_id=user.id).first()
+            if not app:
+                logger.warning(f"bearbeiten: Kein Steckbrief gefunden für User {user.id}")
+                await update.message.reply_text("❌ Ich konnte keinen Steckbrief für dich finden. Nutze /letsgo um einen zu erstellen.")
+                return ConversationHandler.END
+                
+            if app.status not in ['completed', 'accepted']:
+                logger.warning(f"bearbeiten: Steckbrief von User {user.id} ist noch im Status '{app.status}'")
+                await update.message.reply_text("❌ Dein Steckbrief ist noch in Bearbeitung oder wurde abgelehnt und kann daher nicht editiert werden.")
+                return ConversationHandler.END
+                
+            # Daten in context laden
+            try:
+                answers = json.loads(app.answers_json)
+                context.user_data['answers'] = answers
+                context.user_data['is_editing'] = True
+                context.user_data['old_msg_id'] = app.profile_message_id
+                context.user_data['old_chat_id'] = app.profile_chat_id
+                
+                # Wichtig: Wir müssen auch 'fields' laden, da handle_rules_confirmation diese braucht
+                config = get_bot_config('invite')
+                context.user_data['fields'] = [f for f in config.get('form_fields', []) if f.get('enabled')]
+                
+            except Exception as e:
+                logger.error(f"bearbeiten: Fehler beim Parsen der Datenbank-Antworten für User {user.id}: {e}")
+                await update.message.reply_text("❌ Fehler beim Laden deiner Daten. Bitte kontaktiere einen Administrator.")
+                return ConversationHandler.END
+
+    except Exception as e:
+        logger.error(f"bearbeiten: Datenbank-Fehler für User {user.id}: {e}")
+        await update.message.reply_text("❌ Ein Systemfehler ist aufgetreten. Bitte versuche es später erneut.")
+        return ConversationHandler.END
 
     # Menü anzeigen
     return await show_edit_menu(update, context)
@@ -1319,7 +1347,10 @@ async def catch_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 def get_handlers():
     """Gibt die Handler für den Master Bot zurück."""
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("letsgo", letsgo)],
+        entry_points=[
+            CommandHandler("letsgo", letsgo),
+            CommandHandler("bearbeiten", bearbeiten)
+        ],
         states={
             ASKING_QUESTIONS: [
                 CommandHandler("datenschutz", datenschutz),
@@ -1348,7 +1379,6 @@ def get_handlers():
         fallbacks=[
             CommandHandler("cancel", cancel),
             CommandHandler("start", start),
-            CommandHandler("bearbeiten", bearbeiten),
             CommandHandler("datenschutz", datenschutz),
             CallbackQueryHandler(handle_edit_callback, pattern=r'^edit_more_')
         ],
