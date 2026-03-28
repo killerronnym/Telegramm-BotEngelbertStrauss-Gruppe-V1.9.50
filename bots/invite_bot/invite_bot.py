@@ -837,10 +837,17 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
     except Exception as e:
         logger.error(f"Fehler beim automatischen Speichern des Geburtstags: {e}")
 
-    if is_already_member:
+    # Bestimmen, wo die Antwort hingesendet wird (Nachricht oder Callback)
+    reply_target = update.message if update.message else (update.callback_query.message if update.callback_query else None)
+    
+    # Check ob Whitelist für Updates aktiv sein soll
+    # Wenn Whitelist generell AUS ist, können Bestandskunden/Edits sofort posten.
+    whitelist_active = config.get('whitelist_enabled', False)
+
+    if (is_already_member or is_editing) and whitelist_active:
         approval_chat_id_str = fix_chat_id(config.get('whitelist_approval_chat_id', ''))
         if not approval_chat_id_str:
-            await update.message.reply_text("Admin-Kanal nicht konfiguriert.")
+            if reply_target: await reply_target.reply_text("Admin-Kanal nicht konfiguriert.")
             return ConversationHandler.END
             
         try:
@@ -848,7 +855,7 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
         except:
             approval_chat_id = approval_chat_id_str
         
-        # In DB speichern als 'pending_existing' (separater Status zur Sicherheit)
+        # In DB speichern als 'pending_existing'
         with flask_app.app_context():
             existing_app = InviteApplication.query.filter_by(telegram_user_id=user.id).first()
             if existing_app:
@@ -875,25 +882,27 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
         
         success = await post_profile(context.bot, approval_post_data, is_approval_post=True)
         if not success:
-            await update.message.reply_text("❌ Fehler beim Senden an den Admin-Kanal. Bitte Admin kontaktieren (Bot Rechte/Chat ID prüfen).")
+            if reply_target: await reply_target.reply_text("❌ Fehler beim Senden an den Admin-Kanal. Bitte Admin kontaktieren.")
             return ConversationHandler.END
 
         try:
             await context.bot.send_message(
                 approval_chat_id, 
-                f"Nutzer {user.full_name} ist bereits in der Gruppe. Soll der Steckbrief gepostet werden?", 
+                f"📝 <b>UPDATE-ANFRAGE:</b> Nutzer {user.full_name} möchte seinen Steckbrief aktualisieren.\nOben siehst du die neue Version.", 
                 reply_markup=keyboard,
+                parse_mode="HTML",
                 message_thread_id=approval_post_data.get('whitelist_approval_topic_id') if str(approval_post_data.get('whitelist_approval_topic_id')).isdigit() else None
             )
         except Exception as e:
             logger.error(f"Error sending approval button message: {e}")
-            await update.message.reply_text(f"❌ Fehler bei der Freigabe-Anfrage: {e}")
+            if reply_target: await reply_target.reply_text(f"❌ Fehler bei der Freigabe-Anfrage: {e}")
             return ConversationHandler.END
 
-        await update.message.reply_text(config.get('whitelist_pending_message', 'Dein Steckbrief wird überprüft, bitte warte.'))
+        if reply_target: await reply_target.reply_text(config.get('whitelist_pending_message', 'Deine Änderung wird überprüft, bitte warte.'))
         return ConversationHandler.END
 
-    if config.get('whitelist_enabled'):
+    if whitelist_active:
+        # Normaler Whitelist Flow für neue User
         approval_chat_id_str = fix_chat_id(config.get('whitelist_approval_chat_id', ''))
         if not approval_chat_id_str:
             await update.message.reply_text("Whitelist ist aktiv, aber kein Admin-Chat konfiguriert.")
@@ -1273,12 +1282,17 @@ async def handle_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         preview_text = "<b>DEINE AKTUALISIERTE VORSCHAU:</b>\n\n"
         
         text_lines = []
+        photo_id = None
         for f in fields:
             if not f.get('enabled'): continue
             val = answers.get(f['id'])
             if val and val != 'n/a':
                 emoji = f.get('emoji', '🔹')
                 name = f.get('display_name', f['id'])
+                if f['type'] == 'photo':
+                    photo_id = val
+                    continue # Foto kommt in die Caption
+                
                 if f['type'] == 'boolean_buttons':
                     val_str = "Ja" if val else "Nein"
                 elif isinstance(val, list): # Social Media
@@ -1301,7 +1315,20 @@ async def handle_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             [InlineKeyboardButton("🔄 Weiter bearbeiten", callback_data="edit_more_yes")]
         ])
         
-        await query.edit_message_text(preview_text, reply_markup=keyboard, parse_mode="HTML", disable_web_page_preview=True)
+        # Falls Foto vorhanden: Als Photo senden, sonst als Text
+        if photo_id and photo_id != 'n/a':
+            await query.message.reply_photo(
+                photo=photo_id,
+                caption=preview_text[:1024],
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
+            # Alte Auswahl-Nachricht löschen um Chat sauber zu halten
+            try: await query.message.delete()
+            except: pass
+        else:
+            await query.edit_message_text(preview_text, reply_markup=keyboard, parse_mode="HTML", disable_web_page_preview=True)
+            
         return ASKING_QUESTIONS
 
     elif data == "edit_confirm_final":
