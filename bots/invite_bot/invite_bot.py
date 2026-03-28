@@ -1103,34 +1103,39 @@ async def handle_whitelist_callback(update: Update, context: ContextTypes.DEFAUL
             await query.edit_message_text(f"Diese Anfrage ist nicht mehr verfügbar (vielleicht schon bearbeitet?).")
             return
             
-        profile_data = application.answers
-
+        raw_answers = application.answers
+        # Rekonstruktion für Link-Generierung
+        fields = [f for f in config.get('form_fields', []) if f.get('enabled')]
+        target_chat_id = fix_chat_id(config.get('main_chat_id', ''))
+        
         if action == "accept":
-            target_chat_id = profile_data.get('target_chat_id')
-            if target_chat_id:
-                try:
-                    link = await context.bot.create_chat_invite_link(chat_id=target_chat_id, member_limit=1)
-                    await context.bot.send_message(user_id, f"Gute Nachrichten! Deine Anfrage wurde angenommen. Hier ist dein Einladungslink zur Gruppe:\n\n{link.invite_link}")
-                    await query.edit_message_text(f"✅ Angenommen von {admin_user.full_name}. Der Nutzer hat den Link erhalten.")
-                    application.status = 'accepted'
-                    db.session.commit()
-                    # Birthday automatisch speichern falls vorhanden
-                    # Wir nutzen die User-ID um den User aus dem Bot-Umfeld zu holen (vage, aber effective_user ist hier der Admin)
-                    # Wir müssen den User-Daten-User finden.
-                    try:
-                        user_to_save = await context.bot.get_chat(user_id)
-                        # Wir simulieren ein User Objekt für den Helper
-                        class PseudoUser:
-                            def __init__(self, c): self.id, self.first_name, self.username = c.id, c.first_name, c.username
-                        save_birthday_from_answers(PseudoUser(user_to_save), profile_data.get('answers', {}), profile_data.get('fields', []), target_chat_id, profile_data.get('topic_id'))
-                    except: pass
-                except Exception as e:
-                    logger.error(f"Fehler bei Link-Generierung (Accept, ID: {target_chat_id}): {e}")
-                    await query.edit_message_text(f"❌ Fehler bei Link-Generierung (ID: {target_chat_id}): {e}")
-            else:
-                await query.edit_message_text("Fehler: Target Chat ID nicht gefunden.")
-                application.status = 'rejected'
+            if not target_chat_id:
+                await query.edit_message_text("Fehler: Ziel-Gruppe nicht konfiguriert.")
+                return
+
+            try:
+                link = await context.bot.create_chat_invite_link(chat_id=target_chat_id, member_limit=1)
+                await context.bot.send_message(user_id, f"Gute Nachrichten! Deine Anfrage wurde angenommen. Hier ist dein Einladungslink zur Gruppe:\n\n{link.invite_link}")
+                await query.edit_message_text(f"✅ Angenommen von {admin_user.full_name}. Der Nutzer hat den Link erhalten.")
+                
+                application.status = 'accepted'
+                # Wir speichern die Ziel-Chat-ID im Datensatz
+                application.profile_chat_id = target_chat_id
                 db.session.commit()
+                
+                # Birthday automatisch speichern
+                try:
+                    user_to_save = await context.bot.get_chat(user_id)
+                    class PseudoUser:
+                        def __init__(self, c):
+                            self.id = c.id
+                            self.first_name = getattr(c, 'first_name', getattr(c, 'title', "Nutzer"))
+                            self.username = c.username
+                    save_birthday_from_answers(PseudoUser(user_to_save), raw_answers, fields, target_chat_id, config.get('topic_id'))
+                except: pass
+            except Exception as e:
+                logger.error(f"Fehler bei Link-Generierung (Accept, ID: {target_chat_id}): {e}")
+                await query.edit_message_text(f"❌ Fehler bei Link-Generierung (ID: {target_chat_id}): {e}")
                 
         elif action == "reject":
             rejection_message = config.get('whitelist_rejection_message', 'Deine Anfrage wurde leider abgelehnt.')
@@ -1157,20 +1162,45 @@ async def handle_existing_member_callback(update: Update, context: ContextTypes.
             await query.edit_message_text("Diese Anfrage wurde bereits bearbeitet oder ist ungültig.")
             return
             
-        profile_data = application.answers
-
+        raw_answers = application.answers
         if action == "accept" or action == "resend":
-            config = get_bot_config('invite') # Fix: config initialisieren
+            config = get_bot_config('invite')
+            fields = [f for f in config.get('form_fields', []) if f.get('enabled')]
+            target_chat_id = fix_chat_id(config.get('main_chat_id', ''))
+            
+            # Profildaten für posting rekonstruieren
+            try:
+                user_info = await context.bot.get_chat(user_id)
+            except:
+                user_info = None
+
+            final_text, _ = generate_profile_text(user_info, raw_answers, fields)
+            
+            # Foto finden
+            photo_file_id = None
+            for f in fields:
+                if f.get('type') == 'photo' and raw_answers.get(f['id']):
+                    photo_file_id = raw_answers[f['id']]
+                    if photo_file_id != 'n/a': break
+
+            reconstructed_profile = {
+                'text': final_text,
+                'photo_id': photo_file_id,
+                'target_chat_id': target_chat_id,
+                'topic_id': config.get('topic_id'),
+                'whitelist_approval_topic_id': config.get('whitelist_approval_topic_id'),
+                'answers': raw_answers
+            }
+
             # Steckbrief posten
             try:
-                msg = await post_profile(context.bot, profile_data)
+                msg = await post_profile(context.bot, reconstructed_profile)
                 if not msg: raise Exception("post_profile returned None")
                 
-                # Wir speichern die neue msg_id falls wir sie später brauchen
                 application.profile_message_id = msg.message_id
-                application.profile_chat_id = profile_data.get('target_chat_id')
+                application.profile_chat_id = target_chat_id
                 
-                success_msg = config.get('profile_posted_message', "Dein Steckbrief wurde gepostet! Falls du Änderungen vornehmen möchtest, nutze /bearbeiten.")
+                success_msg = config.get('profile_posted_message', "Dein Steckbrief wurde gepostet!")
                 if action == "accept":
                     await context.bot.send_message(user_id, success_msg)
                 
@@ -1185,10 +1215,8 @@ async def handle_existing_member_callback(update: Update, context: ContextTypes.
                 
                 # Birthday automatisch speichern
                 try:
-                    user_to_save = await context.bot.get_chat(user_id)
-                    class PseudoUser:
-                        def __init__(self, c): self.id, self.first_name, self.username = c.id, c.first_name, c.username
-                    save_birthday_from_answers(PseudoUser(user_to_save), profile_data.get('answers', {}), profile_data.get('fields', []), profile_data.get('target_chat_id'), profile_data.get('topic_id'))
+                    if user_info:
+                        save_birthday_from_answers(user_info, raw_answers, fields, target_chat_id, config.get('topic_id'))
                 except: pass
             except Exception as e:
                 logger.error(f"Fehler beim Posten des Steckbriefs ({action}): {e}")
@@ -1209,19 +1237,47 @@ async def handle_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     with flask_app.app_context():
         application = InviteApplication.query.filter_by(telegram_user_id=user_id, status='accepted').first()
         if application:
-            profile_data = application.answers # property handles json.loads
-            if profile_data and 'text' in profile_data:
-                logger.info(f"handle_new_member: Poste Steckbrief für {user_id}")
-                lines = profile_data['text'].split('\n')
-                if lines:
-                    lines[0] = "🎉 Willkommen in der Gruppe!"
-                profile_data['text'] = "\n".join(lines)
-                sent_msg = await post_profile(context.bot, profile_data)
-                # message_id speichern für späteres Auto-Löschen
-                if sent_msg and hasattr(sent_msg, 'message_id'):
-                    application.profile_message_id = sent_msg.message_id
-                    application.profile_chat_id = profile_data.get('target_chat_id')
-                    logger.info(f"handle_new_member: Steckbrief message_id {sent_msg.message_id} gespeichert.")
+            config = get_bot_config('invite')
+            raw_answers = application.answers
+            fields = [f for f in config.get('form_fields', []) if f.get('enabled')]
+            target_chat_id = application.profile_chat_id or fix_chat_id(config.get('main_chat_id', ''))
+            
+            # Profildaten rekonstruieren
+            try:
+                m_user = await context.bot.get_chat(user_id)
+            except:
+                m_user = None
+
+            final_text, _ = generate_profile_text(m_user, raw_answers, fields)
+            
+            # Willkommens-Grüß anpassen
+            lines = final_text.split('\n')
+            if lines:
+                lines[0] = "🎉 Willkommen in der Gruppe!"
+            final_text = "\n".join(lines)
+
+            # Foto finden
+            photo_file_id = None
+            for f in fields:
+                if f.get('type') == 'photo' and raw_answers.get(f['id']):
+                    photo_file_id = raw_answers[f['id']]
+                    if photo_file_id != 'n/a': break
+
+            reconstructed_profile = {
+                'text': final_text,
+                'photo_id': photo_file_id,
+                'target_chat_id': target_chat_id,
+                'topic_id': config.get('topic_id'),
+                'whitelist_approval_topic_id': config.get('whitelist_approval_topic_id'),
+                'answers': raw_answers
+            }
+            
+            sent_msg = await post_profile(context.bot, reconstructed_profile)
+            # message_id speichern für späteres Auto-Löschen
+            if sent_msg and hasattr(sent_msg, 'message_id'):
+                application.profile_message_id = sent_msg.message_id
+                application.profile_chat_id = target_chat_id
+                logger.info(f"handle_new_member: Steckbrief message_id {sent_msg.message_id} gespeichert.")
                 
             application.status = 'completed'
             db.session.commit()
