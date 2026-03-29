@@ -897,8 +897,9 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
                 pass
 
         # Steckbrief-Daten vorbereiten
-        answers = context.user_data.get('answers', {})
-        ordered_fields = context.user_data.get('fields', [])
+        if not force_profile_data:
+            answers = context.user_data.get('answers', {})
+            ordered_fields = context.user_data.get('fields', [])
 
         # Steckbrief zusammenbauen (nur wenn nicht erzwungen)
         if not force_profile_data:
