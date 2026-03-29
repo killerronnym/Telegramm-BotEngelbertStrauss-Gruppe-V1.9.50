@@ -888,12 +888,28 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <form id="profileEditForm" method="POST">
-                <div class="modal-body bg-black">
-                    <div class="alert alert-dark border-secondary small text-white-50 mb-3">
-                        <i class="bi bi-info-circle me-1"></i> Hier siehst du die Antworten des Users. Du kannst diese manuell korrigieren (Achtung auf Anführungszeichen " ). Danach den Steckbrief neu posten!
+                    <div class="row g-3">
+                        <div class="col-lg-8">
+                            <label class="small text-secondary fw-bold mb-1">Rohdaten (JSON System-Format)</label>
+                            <textarea class="form-control form-control-sm form-control-dark font-monospace" name="answers_json" id="profile_answers_json" rows="20" style="background:#0f172a; color:#a5b4fc; font-size:13px;"></textarea>
+                        </div>
+                        <div class="col-lg-4">
+                            <label class="small text-secondary fw-bold mb-1">Foto-Vorschau & Verwaltung</label>
+                            <div id="profile_photo_container" class="bg-black bg-opacity-50 rounded border border-secondary border-opacity-25 p-3 text-center d-flex flex-column align-items-center justify-content-center" style="min-height: 250px;">
+                                <img id="profile_modal_photo" src="" class="img-fluid rounded shadow-lg mb-3" style="max-height: 300px; display: none;">
+                                <div id="profile_no_photo" class="text-muted">
+                                    <i class="bi bi-image fs-1 d-block mb-2"></i>
+                                    <span class="small">Kein Foto vorhanden</span>
+                                </div>
+                                <div id="photo_actions" class="mt-2" style="display: none;">
+                                    <button type="button" class="btn btn-outline-danger btn-sm w-100" id="clear_photo_btn">
+                                        <i class="bi bi-trash3 me-1"></i> Foto löschen
+                                    </button>
+                                    <p class="small text-secondary mt-2 mb-0">Foto-Änderungen werden erst beim Speichern des JSONs aktiv.</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <label class="small text-secondary fw-bold mb-1">Rohdaten (JSON System-Format)</label>
-                    <textarea class="form-control form-control-sm form-control-dark font-monospace" name="answers_json" id="profile_answers_json" rows="20" style="background:#0f172a; color:#a5b4fc; font-size:13px;"></textarea>
                 </div>
                 <div class="modal-footer border-secondary border-opacity-25">
                     <button type="button" class="btn btn-secondary fw-bold px-4" data-bs-dismiss="modal">Abbrechen</button>
@@ -906,22 +922,62 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    const photoFields = {{ config.form_fields|selectattr('type', 'equalto', 'photo')|map(attribute='id')|list|tojson }};
+    const photoImg = document.getElementById('profile_modal_photo');
+    const noPhotoText = document.getElementById('profile_no_photo');
+    const photoActions = document.getElementById('photo_actions');
+    const jsonTextarea = document.getElementById('profile_answers_json');
+
     document.querySelectorAll('.view-profile-btn').forEach(btn => {
         btn.addEventListener('click', function () {
             const d = this.dataset;
             document.getElementById('profile_modal_name').textContent = d.name;
             document.getElementById('profileEditForm').action = "{{ url_for('dashboard.profile_edit', profile_id=0) }}".replace('0', d.id);
             
+            photoImg.style.display = 'none';
+            noPhotoText.style.display = 'block';
+            photoActions.style.display = 'none';
+
             try {
-                // Prettify JSON
                 const obj = JSON.parse(d.answers);
-                document.getElementById('profile_answers_json').value = JSON.stringify(obj, null, 4);
+                jsonTextarea.value = JSON.stringify(obj, null, 4);
+                
+                // Foto-Feld finden
+                let foundFileId = null;
+                photoFields.forEach(fid => {
+                    if (obj[fid] && obj[fid] !== 'n/a' && obj[fid] !== '') {
+                        foundFileId = obj[fid];
+                    }
+                });
+
+                if (foundFileId) {
+                    photoImg.src = `/api/media/${foundFileId}`;
+                    photoImg.style.display = 'block';
+                    noPhotoText.style.display = 'none';
+                    photoActions.style.display = 'block';
+                }
             } catch(e) {
-                document.getElementById('profile_answers_json').value = d.answers;
+                jsonTextarea.value = d.answers;
             }
             
             new bootstrap.Modal(document.getElementById('profileModal')).show();
         });
+    });
+
+    document.getElementById('clear_photo_btn').addEventListener('click', function() {
+        if (!confirm('Foto wirklich aus den Antworten löschen?')) return;
+        try {
+            const obj = JSON.parse(jsonTextarea.value);
+            photoFields.forEach(fid => {
+                if (obj[fid]) obj[fid] = 'n/a';
+            });
+            jsonTextarea.value = JSON.stringify(obj, null, 4);
+            photoImg.style.display = 'none';
+            noPhotoText.style.display = 'block';
+            photoActions.style.display = 'none';
+        } catch(e) {
+            alert('Fehler beim Manipulieren des JSONs: ' + e);
+        }
     });
 });
 </script>

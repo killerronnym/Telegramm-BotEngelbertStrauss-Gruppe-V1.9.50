@@ -1365,7 +1365,10 @@ async def handle_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if not update.chat_member or not update.chat_member.new_chat_member or update.chat_member.new_chat_member.status != "member":
         return
 
-    user_id = update.chat_member.new_chat_member.user.id
+    user_username = update.chat_member.new_chat_member.user.username or str(user_id)
+    
+    # Für Analytics (Dashboard) loggen:
+    log_user_interaction(user_id, user_username, "Mitglied ist der Gruppe beigetreten.")
     
     with flask_app.app_context():
         application = InviteApplication.query.filter_by(telegram_user_id=user_id, status='accepted').first()
