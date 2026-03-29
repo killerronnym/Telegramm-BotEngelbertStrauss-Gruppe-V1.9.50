@@ -1437,6 +1437,9 @@ async def handle_member_left(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     logger.info(f"handle_member_left: User @{username} ({user_id}) hat die Gruppe verlassen. Prüfe Steckbrief...")
     
+    # Für Analytics (Dashboard) loggen:
+    log_user_interaction(user_id, username, "Mitglied hat die Gruppe verlassen.")
+    
     with flask_app.app_context():
         application = InviteApplication.query.filter_by(telegram_user_id=user_id).first()
         if not application:
@@ -1806,6 +1809,82 @@ def get_fallback_handlers():
     return [
         (MessageHandler(filters.TEXT & filters.ChatType.PRIVATE & ~filters.COMMAND, catch_all), 0)
     ]
+
+async def check_repost_triggers(context: ContextTypes.DEFAULT_TYPE):
+    if not is_bot_active('invite'): return
+    
+    triggers_dir = os.path.join(PROJECT_ROOT, "instance")
+    if not os.path.exists(triggers_dir): return
+    
+    for filename in os.listdir(triggers_dir):
+        if filename.startswith("repost_") and filename.endswith(".tmp"):
+            try:
+                profile_id = int(filename.split("_")[1].split(".")[0])
+                os.remove(os.path.join(triggers_dir, filename))
+                
+                with flask_app.app_context():
+                    application = InviteApplication.query.get(profile_id)
+                    if not application: continue
+                    
+                    config = get_bot_config('invite')
+                    fields = [f for f in config.get('form_fields', []) if f.get('enabled')]
+                    answers = application.answers
+                    
+                    class DummyUser:
+                        def __init__(self, uid, uname, fname):
+                            self.id = uid
+                            self.username = uname
+                            self.full_name = fname
+                            self.first_name = fname.split()[0] if fname else ""
+                    
+                    m_user = DummyUser(application.telegram_user_id, application.username, application.full_name)
+                    
+                    final_text, _ = generate_profile_text(m_user, answers, fields)
+                    
+                    # Willkommens-Grüß anpassen
+                    lines = final_text.split('\n')
+                    if lines:
+                        lines[0] = "🎉 Willkommen in der Gruppe! (Aktualisiert)"
+                    final_text = "\n".join(lines)
+                    
+                    photo_file_id = None
+                    for f_field in fields:
+                        if f_field.get('type') == 'photo' and answers.get(f_field['id']):
+                            photo_file_id = answers[f_field['id']]
+                            if photo_file_id == 'n/a': photo_file_id = None
+                            break
+                            
+                    target_chat_id = application.profile_chat_id or config.get('main_chat_id')
+                    
+                    reconstructed = {
+                        'text': final_text,
+                        'photo_id': photo_file_id,
+                        'target_chat_id': target_chat_id,
+                        'topic_id': config.get('topic_id'),
+                        'whitelist_approval_topic_id': config.get('whitelist_approval_topic_id')
+                    }
+                    
+                    old_msg_id = application.profile_message_id
+                    
+                    msg = await post_profile(context.bot, reconstructed)
+                    if msg:
+                        application.profile_message_id = msg.message_id
+                        if target_chat_id: application.profile_chat_id = target_chat_id
+                        application.status = 'completed'
+                        
+                        # Delete old message
+                        if old_msg_id and target_chat_id:
+                            try:
+                                await context.bot.delete_message(chat_id=target_chat_id, message_id=old_msg_id)
+                                logger.info(f"Alter Steckbrief {old_msg_id} nach manuellem Repost gelöscht.")
+                            except Exception as e:
+                                logger.warning(f"Konnte alten Steckbrief {old_msg_id} nicht löschen (Repost): {e}")
+                        db.session.commit()
+            except Exception as e:
+                logger.error(f"Fehler bei check_repost_triggers: {e}")
+
+def setup_jobs(job_queue):
+    job_queue.run_repeating(check_repost_triggers, interval=10, first=10)
 
 # Nur wenn direkt ausgeführt (Legacy Fallback)
 if __name__ == "__main__":

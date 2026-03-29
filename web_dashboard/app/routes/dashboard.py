@@ -182,15 +182,18 @@ def bot_settings():
         with open(INVITE_BOT_LOG_FILE, 'r') as f: logs = f.readlines()[-50:]
         
     user_logs = []
+    profiles = []
     try:
-        from ..models import InviteLog
+        from ..models import InviteLog, InviteApplication
         db_logs = InviteLog.query.order_by(InviteLog.timestamp.desc()).limit(100).all()
         for log in db_logs:
             user_logs.append(f"{log.timestamp.strftime('%Y-%m-%d %H:%M:%S')} - User ID: {log.telegram_user_id} - Username: @{log.username} - Message: {log.action}")
+            
+        profiles = InviteApplication.query.order_by(InviteApplication.updated_at.desc()).all()
     except Exception as e:
         pass
         
-    return render_template("bot_settings.html", config=json.loads(s.config_json), is_invite_running=get_bot_status_simple()['invite']['running'], user_interaction_logs=user_logs, invite_bot_logs=logs)
+    return render_template("bot_settings.html", config=json.loads(s.config_json), is_invite_running=get_bot_status_simple()['invite']['running'], user_interaction_logs=user_logs, invite_bot_logs=logs, profiles=profiles)
 
 @bp.route('/bot-settings/save-content', methods=['POST'])
 @login_required
@@ -1044,9 +1047,15 @@ def id_finder_analytics():
 
         sys.stdout.write("--- [DEBUG] Everything ready. Rendering template. ---\n")
         sys.stdout.flush()
+        
+        from ..models import InviteLog
+        joins_leaves = InviteLog.query.filter(
+            InviteLog.action.ilike('%beigetreten%') | InviteLog.action.ilike('%verlassen%') | InviteLog.action.ilike('%entfernt%')
+        ).order_by(InviteLog.timestamp.desc()).limit(50).all()
 
         return render_template('id_finder_analytics.html', 
                                stats={'total_users': total_users}, 
+                               joins_leaves=joins_leaves,
                                activity={
                                    'timeline': {'labels': timeline_labels, 'total': total_data}, 
                                    'leaderboard': leaderboard, 
@@ -1897,3 +1906,36 @@ def event_settings():
     known_topics = {str(t.topic_id): t.topic_name for t in ts}
     
     return render_template('event_settings.html', config=config, events=events, known_topics=known_topics)
+
+@bp.route('/bot-settings/profile/repost/<int:profile_id>', methods=['POST'])
+@login_required
+def profile_repost(profile_id):
+    from ..models import InviteApplication
+    app = InviteApplication.query.get(profile_id)
+    if app:
+        # Create a trigger file so the background process can pick it up, or we can just send it manually.
+        # But invite_bot doesn't have a background process for reposts. We must just trigger it somehow.
+        # Actually it's easier to set its status to a special 'repost_pending' and let the updater loop handle it,
+        # OR we can just write a file that a new bot function will check.
+        # For simplicity, let's write a file and the bot checking it will handle it.
+        tfile = os.path.join(PROJECT_ROOT, 'instance', f'repost_{profile_id}.tmp')
+        with open(tfile, 'w') as f: f.write('1')
+        flash('Befehl zum erneuten Posten des Steckbriefs gesendet.', 'success')
+    return redirect(url_for('dashboard.bot_settings'))
+
+@bp.route('/bot-settings/profile/edit/<int:profile_id>', methods=['POST'])
+@login_required
+def profile_edit(profile_id):
+    from ..models import InviteApplication
+    app = InviteApplication.query.get(profile_id)
+    if app:
+        new_answers = request.form.get('answers_json')
+        try:
+            app.answers = json.loads(new_answers)
+            # wir setzen das updated_at Datum damit es oben steht
+            app.updated_at = datetime.utcnow()
+            db.session.commit()
+            flash('Steckbrief erfolgreich bearbeitet! Vergiss nicht, ihn neu zu posten, damit die Änderungen live gehen!', 'success')
+        except Exception as e:
+            flash(f'Fehler beim Speichern der Antworten: {e}', 'danger')
+    return redirect(url_for('dashboard.bot_settings'))

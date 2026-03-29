@@ -481,6 +481,11 @@
                         data-bs-toggle="tab" data-bs-target="#commands-panel" type="button"><i
                             class="bi bi-terminal me-2"></i>Befehle</button>
                 </li>
+                <li class="nav-item">
+                    <button class="nav-link fw-bold text-uppercase small tracking-wider" id="profiles-tab"
+                        data-bs-toggle="tab" data-bs-target="#profiles-panel" type="button"><i
+                            class="bi bi-people-fill me-2"></i>Steckbriefe</button>
+                </li>
             </ul>
 
             <div class="tab-content border border-white border-opacity-5 rounded-3 p-4"
@@ -650,6 +655,71 @@
                     </div>
                 </div>
 
+                <!-- Steckbriefe Tab -->
+                <div class="tab-pane fade" id="profiles-panel" role="tabpanel">
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center py-3 px-4">
+                            <h6 class="mb-0 fw-bold">Alle User-Steckbriefe</h6>
+                            <span class="badge bg-secondary">{{ profiles|length }} Einträge</span>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                                <table class="table table-dark table-hover align-middle mb-0">
+                                    <thead style="position: sticky; top: 0; background: #1e293b; z-index: 1;">
+                                        <tr>
+                                            <th class="small text-secondary fw-bold text-center">ID</th>
+                                            <th class="small text-secondary fw-bold">TELEGRAM USER</th>
+                                            <th class="small text-secondary fw-bold">STATUS</th>
+                                            <th class="small text-secondary fw-bold">LETZTES UPDATE</th>
+                                            <th class="text-end pe-4 small text-secondary fw-bold">AKTION</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% if profiles %}
+                                        {% for p in profiles %}
+                                        <tr>
+                                            <td class="text-center font-monospace small text-white-50">{{ p.id }}</td>
+                                            <td>
+                                                <div class="fw-bold text-white">{{ p.full_name or 'Unbekannt' }}</div>
+                                                <div class="small text-info">@{{ p.username or p.telegram_user_id }}</div>
+                                            </td>
+                                            <td>
+                                                {% if p.status == 'completed' or p.status == 'accepted' %}
+                                                <span class="badge bg-success">Aktiv</span>
+                                                {% elif p.status == 'pending' or p.status == 'pending_existing' %}
+                                                <span class="badge bg-warning text-dark">Wartet</span>
+                                                {% else %}
+                                                <span class="badge bg-secondary">{{ p.status }}</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="small opacity-75">{{ p.updated_at.strftime('%d.%m.%Y %H:%M') if p.updated_at else 'Unbekannt' }}</td>
+                                            <td class="text-end pe-4">
+                                                <div class="d-flex justify-content-end gap-2">
+                                                    <button class="btn btn-outline-light btn-sm border-0 view-profile-btn"
+                                                        data-id="{{ p.id }}" data-answers='{{ p.answers_json|safe }}' data-name="{{ p.full_name or p.username }}">
+                                                        <i class="bi bi-eye"></i> Bearbeiten
+                                                    </button>
+                                                    <form action="{{ url_for('dashboard.profile_repost', profile_id=p.id) }}" method="POST" style="display:inline;">
+                                                        <button type="submit" class="btn btn-outline-primary btn-sm border-0" title="Erneut Posten" onclick="return confirm('Steckbrief wirklich nochmal neu in die Gruppe posten? Der Chat-Eintrag wird komplett neu erstellt.');">
+                                                            <i class="bi bi-send-fill"></i>
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                        {% else %}
+                                        <tr>
+                                            <td colspan="5" class="text-center py-4 text-muted small">Noch keine Steckbriefe vorhanden.</td>
+                                        </tr>
+                                        {% endif %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div> <!-- End of Tab Content -->
@@ -798,6 +868,53 @@
         </div>
     </div>
 </div>
+
+<!-- View/Edit Profile Modal -->
+<div class="modal fade" id="profileModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content bg-dark text-white border-secondary">
+            <div class="modal-header border-secondary border-opacity-25 py-3">
+                <h5 class="modal-title fw-bold fs-5">Steckbrief: <span id="profile_modal_name" class="text-info"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="profileEditForm" method="POST">
+                <div class="modal-body bg-black">
+                    <div class="alert alert-dark border-secondary small text-white-50 mb-3">
+                        <i class="bi bi-info-circle me-1"></i> Hier siehst du die Antworten des Users. Du kannst diese manuell korrigieren (Achtung auf Anführungszeichen " ). Danach den Steckbrief neu posten!
+                    </div>
+                    <label class="small text-secondary fw-bold mb-1">Rohdaten (JSON System-Format)</label>
+                    <textarea class="form-control form-control-sm form-control-dark font-monospace" name="answers_json" id="profile_answers_json" rows="20" style="background:#0f172a; color:#a5b4fc; font-size:13px;"></textarea>
+                </div>
+                <div class="modal-footer border-secondary border-opacity-25">
+                    <button type="button" class="btn btn-secondary fw-bold px-4" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="submit" class="btn btn-success fw-bold px-4" onclick="return confirm('Änderungen wirklich speichern? Damit diese live umgesetzt werden, muss der Steckbrief danach neu gepostet werden.');">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.view-profile-btn').forEach(btn => {
+        btn.addEventListener('click', function () {
+            const d = this.dataset;
+            document.getElementById('profile_modal_name').textContent = d.name;
+            document.getElementById('profileEditForm').action = "{{ url_for('dashboard.profile_edit', profile_id=0) }}".replace('0', d.id);
+            
+            try {
+                // Prettify JSON
+                const obj = JSON.parse(d.answers);
+                document.getElementById('profile_answers_json').value = JSON.stringify(obj, null, 4);
+            } catch(e) {
+                document.getElementById('profile_answers_json').value = d.answers;
+            }
+            
+            new bootstrap.Modal(document.getElementById('profileModal')).show();
+        });
+    });
+});
+</script>
 
 <!-- Edit Field Modal -->
 <div class="modal fade" id="editFieldModal" tabindex="-1" aria-hidden="true">
