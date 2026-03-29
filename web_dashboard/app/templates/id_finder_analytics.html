@@ -241,8 +241,8 @@
                 {% for day_row in heatmap %}
                 <div class="hm-row">
                   {% for cell in day_row %}
-                  {% set alpha = (cell.count / 20.0) if cell.count < 20 else 1.0 %}
-                  <div class="hm-cell" style="background: rgba(79, 142, 247, {{ alpha }});" title="{{ cell.count }} Msgs"></div>
+                  {% set alpha = (cell / 20.0) if cell < 20 else 1.0 %}
+                  <div class="hm-cell" style="background: rgba(79, 142, 247, {{ alpha }});" title="{{ cell }} Msgs"></div>
                   {% endfor %}
                 </div>
                 {% endfor %}
