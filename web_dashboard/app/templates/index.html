@@ -2,6 +2,73 @@
 
 {% block title %}Bot Steuerung | Dashboard{% endblock %}
 
+{% block modals %}
+<!-- Backup Settings Modal -->
+<div class="modal fade" id="backupSettingsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border-secondary">
+            <div class="modal-header border-secondary border-opacity-25 py-3">
+                <h5 class="modal-title fw-bold fs-5">Automatisches Backup Setup</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/api/backup/settings/save" method="POST">
+                <div class="modal-body">
+                    <p class="small text-secondary mb-4">Konfigurieren Sie hier die tägliche Sicherung Ihrer Datenbank auf ein externes System (z.B. NAS).</p>
+                    
+                    <div class="form-check form-switch mb-4 p-2 ps-5 rounded border border-white border-opacity-5"
+                        style="background: rgba(255,255,255,0.01);">
+                        <input class="form-check-input" type="checkbox" id="auto_backup_enabled" name="enabled" 
+                            {% if backup_config and backup_config.enabled %}checked{% endif %}>
+                        <label class="form-check-label small fw-bold" for="auto_backup_enabled">Autom. Backup aktiv</label>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="small text-secondary fw-bold mb-1">NAS ZIELPFAD (Absolut)</label>
+                        <input type="text" class="form-control form-control-sm" name="nas_path" 
+                            placeholder="z.B. \\NAS\Backups oder Z:\Bot-Backups"
+                            value="{{ backup_config.nas_path if backup_config else '' }}">
+                        <div class="form-text small text-muted">Stellen Sie sicher, dass der Bot-Prozess Schreibrechte auf diesen Pfad hat.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="small text-secondary fw-bold mb-1">UHRZEIT (Täglich)</label>
+                        <input type="time" class="form-control form-control-sm" name="backup_time" 
+                            value="{{ backup_config.backup_time if backup_config else '06:55' }}">
+                        <div class="form-text small text-muted">Standardmäßig um 06:55 Uhr.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="small text-secondary fw-bold mb-1">REDUNDANZ (Lokale Kopie)</label>
+                        <select class="form-select form-select-sm" name="local_retention">
+                            <option value="7" {% if backup_config and backup_config.local_retention == 7 %}selected{% endif %}>Letzte 7 Tage behalten</option>
+                            <option value="30" {% if backup_config and backup_config.local_retention == 30 %}selected{% endif %}>Letzte 30 Tage behalten</option>
+                            <option value="0" {% if backup_config and backup_config.local_retention == 0 %}selected{% endif %}>Keine lokale Redundanz</option>
+                        </select>
+                    </div>
+
+                    <div class="alert alert-info py-2" style="font-size: 0.75rem;">
+                        <i class="bi bi-info-circle me-1"></i> Backups werden zusätzlich in <code>/instance/backups/</code> gesichert.
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0 pb-4 px-4">
+                    <button type="button" class="btn btn-secondary fw-bold px-4" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="submit" class="btn btn-primary fw-bold px-4">Einstellungen speichern</button>
+                </div>
+                <!-- Manual Trigger Area -->
+                <div class="px-4 pb-4 mt-2">
+                    <hr class="border-secondary opacity-25">
+                    <div class="d-grid gap-2">
+                        <button type="button" onclick="triggerManualNasBackup()" class="btn btn-outline-warning fw-bold">
+                            <i class="bi bi-hdd-network me-1"></i> SOFORT AUF NAS SICHERN
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <!-- Include Sortable.js for drag and drop -->
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
@@ -387,8 +454,13 @@
                                 style="background: rgba(245, 158, 11, 0.1); border: 1px solid #f59e0b;">
                                 <i class="bi bi-upload me-1"></i> WIEDERHERSTELLEN
                             </button>
-                            <input type="file" id="inputBackupFile" style="display:none" accept=".db"
-                                onchange="handleBackupUpload(this)">
+                                <button data-bs-toggle="modal" data-bs-target="#backupSettingsModal"
+                                    class="btn-settings-big btn-outline-info"
+                                    style="background: rgba(13, 202, 240, 0.1); border: 1px solid #0dcaf0;">
+                                    <i class="bi bi-gear me-1"></i> AUTOM. BACKUP SETUP
+                                </button>
+                                <input type="file" id="inputBackupFile" style="display:none" accept=".db"
+                                    onchange="handleBackupUpload(this)">
                         </div>
                         {% elif item.type != 'update' %}
                         <a href="{{ item.link }}"
@@ -680,6 +752,71 @@
             list.innerHTML = html;
         } catch (e) {
             list.innerHTML = '<div class="text-center py-2 text-danger">Fehler beim Laden.</div>';
+        }
+    }
+
+    // --- BACKUP & RESTORE LOGIC ---
+    async function handleBackupUpload(input) {
+        if (!input.files || input.files.length === 0) return;
+        
+        const file = input.files[0];
+        if (!confirm(`Möchten Sie die Datenbank wirklich mit der Datei "${file.name}" überschreiben? Der Server wird danach neu gestartet.`)) {
+            input.value = '';
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('backup_file', file);
+
+        const btn = document.querySelector('button[onclick*="inputBackupFile"]');
+        const originalContent = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-arrow-repeat spin me-1"></i> WIEDERHERSTELLUNG...';
+
+        try {
+            const res = await fetch('/api/backup/upload', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                alert(data.message || "Backup erfolgreich wiederhergestellt! Der Server startet neu...");
+                location.reload();
+            } else {
+                alert("Fehler: " + (data.error || "Unbekannter Fehler"));
+                btn.disabled = false;
+                btn.innerHTML = originalContent;
+            }
+        } catch (e) {
+            alert("Netzwerkfehler beim Hochladen des Backups.");
+            btn.disabled = false;
+            btn.innerHTML = originalContent;
+        }
+        input.value = '';
+    }
+
+    async function triggerManualNasBackup() {
+        if (!confirm("Möchten Sie jetzt sofort ein Backup auf das NAS-System durchführen?")) return;
+        
+        const btn = event.target.closest('button');
+        const originalContent = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-arrow-repeat spin me-1"></i> BACKUP LÄUFT...';
+
+        try {
+            const res = await fetch('/api/backup/trigger', { method: 'POST' });
+            const data = await res.json();
+            if (data.success) {
+                alert(data.message);
+            } else {
+                alert("Fehler: " + (data.error || "Unbekannter Fehler"));
+            }
+        } catch (e) {
+            alert("Netzwerkfehler.");
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalContent;
         }
     }
 

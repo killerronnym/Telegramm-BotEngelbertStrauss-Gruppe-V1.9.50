@@ -132,7 +132,11 @@ def index():
         except: pass
     layout_settings = BotSettings.query.filter_by(bot_name='dashboard_layout').first()
     layout = json.loads(layout_settings.config_json) if layout_settings else None
-    return render_template('index.html', version=version, layout=layout)
+    
+    backup_settings = BotSettings.query.filter_by(bot_name='backup_bot').first()
+    backup_config = json.loads(backup_settings.config_json) if backup_settings else {'enabled': False, 'nas_path': '', 'backup_time': '06:55', 'local_retention': 7}
+    
+    return render_template('index.html', version=version, layout=layout, backup_config=backup_config)
 
 @bp.route('/api/dashboard/save-layout', methods=['POST'])
 @login_required
@@ -1806,6 +1810,75 @@ def upload_backup():
         
     except Exception as e:
         logger.error(f"Error restoring backup: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@bp.route('/api/backup/settings/save', methods=['POST'])
+@login_required
+def save_backup_settings():
+    if getattr(current_user, 'role', 'user') != 'admin':
+        flash('Nur Administratoren können Backup-Einstellungen ändern.', 'danger')
+        return redirect(url_for('dashboard.index'))
+    
+    s = BotSettings.query.filter_by(bot_name='backup_bot').first()
+    if not s:
+        s = BotSettings(bot_name='backup_bot')
+        db.session.add(s)
+        
+    cfg = {
+        'enabled': 'enabled' in request.form,
+        'nas_path': request.form.get('nas_path', '').strip(),
+        'backup_time': request.form.get('backup_time', '06:55'),
+        'local_retention': int(request.form.get('local_retention', 7))
+    }
+    
+    s.config_json = json.dumps(cfg)
+    db.session.commit()
+    
+    # Optional: Update the running job in the bot
+    # This might require a bot restart or a dynamic job update mechanism
+    # For now, a bot restart is simplest if they want immediate change, but usually they'll wait for the next day.
+    
+    flash('Backup-Einstellungen erfolgreich gespeichert.', 'success')
+    return redirect(url_for('dashboard.index'))
+
+@bp.route('/api/backup/trigger', methods=['POST'])
+@login_required
+def manual_backup_trigger():
+    if getattr(current_user, 'role', 'user') != 'admin':
+        return jsonify({"success": False, "error": "Keine Berechtigung."}), 403
+    
+    # We can't directly call the async function easily from here without a scheduler access
+    # But we can write a trigger file that the bot monitors, OR just run the sync part here.
+    # Actually, shutil.copy2 is synchronous. We can just do it here for the NAS part.
+    
+    from shared_bot_utils import DB_PATH
+    import shutil
+    import os
+    from datetime import datetime
+    
+    s = BotSettings.query.filter_by(bot_name='backup_bot').first()
+    if not s or not s.config_json:
+        return jsonify({"success": False, "error": "Backup ist nicht konfiguriert."}), 400
+        
+    cfg = json.loads(s.config_json)
+    nas_path = cfg.get('nas_path')
+    
+    if not nas_path:
+        return jsonify({"success": False, "error": "Kein NAS-Pfad konfiguriert."}), 400
+        
+    try:
+        if not os.path.exists(nas_path):
+            os.makedirs(nas_path, exist_ok=True)
+            
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        backup_filename = f"app_backup_MANUAL_{timestamp}.db"
+        nas_file_path = os.path.join(nas_path, backup_filename)
+        
+        shutil.copy2(DB_PATH, nas_file_path)
+        
+        return jsonify({"success": True, "message": f"Manuelles Backup erfolgreich an NAS übertragen: {backup_filename}"})
+    except Exception as e:
+        return jsonify({"success": False, "error": f"Fehler beim NAS-Backup: {str(e)}"}), 500
 
 @bp.route('/api/id-finder/user-activity/<int:uid>')
 def id_finder_user_activity(uid):
