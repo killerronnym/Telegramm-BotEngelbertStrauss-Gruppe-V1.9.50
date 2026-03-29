@@ -35,14 +35,49 @@
 </style>
 
 <div class="dashboard-container">
-    <div class="d-flex justify-content-between align-items-start mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <a href="{{ url_for('dashboard.id_finder_dashboard') }}" class="btn-back mb-4"><i class="bi bi-chevron-left"></i> ZURÜCK ZUR ÜBERSICHT</a>
-            <h1 class="fw-bold mb-1 h3 text-white">ID-Finder <span class="text-blue">Analyse</span></h1>
-            <p class="text-secondary small">Detaillierte Gruppenanalyse & User-Statistiken</p>
+            <a href="{{ url_for('dashboard.id_finder_dashboard') }}" class="btn-back mb-3"><i class="bi bi-chevron-left"></i> ZURÜCK ZUR ÜBERSICHT</a>
+            <h1 class="fw-bold mb-1 h3 text-white">Advanced <span class="text-blue">Analytics</span></h1>
+            <p class="text-secondary small">Vollständige Gruppen-Einsicht & Performance-Indikatoren</p>
         </div>
-        <div class="text-end">
-            <span class="text-white fw-bold h4 mb-0">{{ stats.total_users }} gesp. User</span>
+        <div class="d-flex gap-3">
+            <div class="stat-card px-4 border-blue">
+                <div class="stat-label">Total Mitglieder</div>
+                <div class="stat-value text-blue">{{ stats.total_users }} <i class="bi bi-people-fill ms-2 opacity-50"></i></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Stats Grid -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-label">Alle Nachrichten</div>
+                <div class="stat-value">{{ "{:,}".format(stats.total_messages).replace(',', '.') }}</div>
+                <div class="small text-success mt-1"><i class="bi bi-chat-dots-fill me-1"></i> Gesamthistorie</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-label">Medien-Inhalte</div>
+                <div class="stat-value">{{ "{:,}".format(stats.total_media).replace(',', '.') }}</div>
+                <div class="small text-info mt-1"><i class="bi bi-image-fill me-1"></i> Bilder & Videos</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-label">Ø Msgs / Tag</div>
+                <div class="stat-value text-warning">{{ stats.avg_msgs_day }}</div>
+                <div class="small text-secondary mt-1"><i class="bi bi-graph-up me-1"></i> Aktivitätsrate</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-label">Daten-Abdeckung</div>
+                <div class="stat-value">100%</div>
+                <div class="small text-dim mt-1"><i class="bi bi-database-check me-1"></i> Live aus DB</div>
+            </div>
         </div>
     </div>
 
@@ -82,57 +117,116 @@
         <button id="gaLoadBtn" class="btn btn-primary px-4 fw-bold">DATEN LADEN</button>
     </div>
 
-    <!-- Charts & Leaderboard Section -->
+    <!-- Main Row: Messages & Growth -->
     <div class="row g-4 mb-5">
-        <div class="col-lg-7">
+        <div class="col-lg-8">
             <div class="card h-100">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <div>
-                        <h6>Aktivitäts-Zeitstrahl</h6>
-                        <p class="small text-dim mb-0">Nachrichtenverlauf im Zeitraum.</p>
+                        <h6>Nachrichten-Volumen</h6>
+                        <p class="small text-dim mb-0">Zeitlicher Verlauf der Gruppenaktivität.</p>
                     </div>
-                    <button class="btn btn-outline-secondary btn-sm" onclick="clearComparison()">Chart zurücksetzen</button>
                 </div>
                 <div class="card-body">
-                    <div id="activeUserPills" class="d-flex flex-wrap gap-2 mb-4">
-                        <!-- User Pills go here -->
-                    </div>
+                    <div id="activeUserPills" class="d-flex flex-wrap gap-2 mb-3"></div>
                     <div class="chart-container"><canvas id="gaTimelineCanvas"></canvas></div>
                 </div>
             </div>
         </div>
-        <div class="col-lg-5">
+        <div class="col-lg-4">
             <div class="card h-100">
                 <div class="card-header">
-                    <h6>Benutzer-Rangliste</h6>
-                    <p class="small text-dim mb-0">Top-Benutzer (klickbar).</p>
+                    <h6>Mitglieder-Wachstum</h6>
+                    <p class="small text-dim mb-0">Tägliches Netto-Wachstum.</p>
                 </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive" style="max-height: 450px;">
-                        <table class="table table-dark table-hover mb-0">
-                            <thead class="sticky-top">
+                <div class="card-body">
+                    <div class="chart-container" style="height: 300px;"><canvas id="gaGrowthCanvas"></canvas></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Second Row: Heatmap & Ranking -->
+    <div class="row g-4 mb-5">
+        <div class="col-lg-12">
+            <div class="card">
+                <div class="card-header">
+                    <h6>Aktivitäts-Heatmap</h6>
+                    <p class="small text-dim mb-0">Häufigste Schreibzeiten nach Wochentag und Stunde.</p>
+                </div>
+                <div class="card-body px-0">
+                    <div class="table-responsive">
+                        <table class="table table-borderless table-sm mb-0 text-center" style="table-layout: fixed;">
+                            <thead>
                                 <tr>
-                                    <th class="ps-4">Rang</th>
-                                    <th>Benutzer</th>
-                                    <th class="text-end">Nachrichten</th>
-                                    <th class="text-end">Medien</th>
+                                    <th style="width: 50px;"></th>
+                                    {% for h in range(24) %}<th class="small py-2 text-dim" style="font-size: 0.6rem;">{{ h }}h</th>{% endfor %}
                                 </tr>
                             </thead>
-                            <tbody id="gaLeaderboardBody">
+                            <tbody>
+                                {% set days = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'] %}
+                                {% for day_idx in range(7) %}
+                                <tr>
+                                    <td class="small fw-bold text-secondary">{{ days[day_idx] }}</td>
+                                    {% for hour_idx in range(24) %}
+                                    {% set val = activity.heatmap[day_idx][hour_idx] %}
+                                    {% set opacity = (val / 50 if val < 50 else 1) * 0.9 %}
+                                    <td class="p-1" title="{{ val }} Nachrichten um {{ hour_idx }}:00 am {{ days[day_idx] }}">
+                                        <div style="background: rgba(168, 85, 247, {{ opacity }}); height: 20px; border-radius: 2px;"></div>
+                                    </td>
+                                    {% endfor %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-5">
+        <div class="col-lg-12">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h6>Executive Rangliste (Top 10)</h6>
+                    <p class="small text-dim mb-0">Einflussreichste Benutzer im Zeitraum.</p>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-dark table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="ps-4">Rang</th>
+                                    <th>User</th>
+                                    <th>Mitglied seit</th>
+                                    <th class="text-end">Nachrichten</th>
+                                    <th class="text-end pe-4">Medien-Anteil</th>
+                                </tr>
+                            </thead>
+                            <tbody>
                                 {% for u in activity.leaderboard %}
                                 <tr class="leaderboard-row" data-uid="{{ u.uid }}" data-msgs="{{ u.msgs }}" onclick="toggleUserComparison('{{ u.uid }}', '{{ u.name }}', {{ u.msgs }})">
-                                    <td class="ps-4 text-dim">#{{ loop.index }}</td>
+                                    <td class="ps-4"><span class="badge bg-secondary bg-opacity-25">{{ loop.index }}</span></td>
                                     <td>
                                         <div class="d-flex align-items-center gap-3">
-                                            <img src="/api/avatar/{{ u.uid }}" class="ga-avatar" onerror="this.src='https://ui-avatars.com/api/?name={{ u.name }}&background=random&color=fff'">
+                                            <img src="/api/avatar/{{ u.uid }}" class="ga-avatar" style="width: 32px; height: 32px;" onerror="this.src='https://ui-avatars.com/api/?name={{ u.name }}&background=random&color=fff'">
                                             <div>
-                                                <div class="fw-bold text-white text-truncate" style="max-width: 120px;">{{ u.name }}</div>
-                                                <div class="small text-dim">ID: {{ u.uid }}</div>
+                                                <div class="fw-bold text-white">{{ u.name }}</div>
+                                                <div class="small text-info">@{{ u.username }}</div>
                                             </div>
                                         </div>
                                     </td>
+                                    <td class="text-dim small">{{ u.joined_at }}</td>
                                     <td class="text-end fw-bold">{{ u.msgs }}</td>
-                                    <td class="text-end text-dim">{{ u.media }}</td>
+                                    <td class="text-end pe-4">
+                                        <div class="d-flex align-items-center justify-content-end gap-2 text-dim small">
+                                            <span>{{ u.media }}</span>
+                                            <div class="progress" style="width: 60px; height: 4px; background: rgba(255,255,255,0.05);">
+                                                <div class="progress-bar bg-info" style="width: {{ (u.media / u.msgs * 100) if u.msgs > 0 else 0 }}%;"></div>
+                                            </div>
+                                        </div>
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -266,6 +360,30 @@
                 datasets: [{ data: {{ activity.busiest_days|tojson }}, backgroundColor: '#a855f7', borderRadius: 4 }]
             },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+        });
+
+        // Growth Chart
+        new Chart(document.getElementById('gaGrowthCanvas'), {
+            type: 'bar',
+            data: {
+                labels: {{ activity.growth.labels|tojson }},
+                datasets: [{
+                    label: 'Netto-Wachstum',
+                    data: {{ activity.growth.net|tojson }},
+                    backgroundColor: {{ activity.growth.net|tojson }}.map(v => v >= 0 ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'),
+                    borderColor: {{ activity.growth.net|tojson }}.map(v => v >= 0 ? '#10b981' : '#ef4444'),
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { ticks: { color: '#64748b', maxRotation: 0, autoSkip: true, maxTicksLimit: 6 }, grid: { display: false } },
+                    y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b' } }
+                }
+            }
         });
     }
 

@@ -966,24 +966,33 @@ def id_finder_analytics():
 
         sys.stdout.write(f"--- [DEBUG] Filter set. Days={days}, Month={month}, Year={year} ---\n")
         sys.stdout.flush()
-
         total_users = IDFinderUser.query.count()
+        total_messages = IDFinderMessage.query.count()
+        total_media = IDFinderMessage.query.filter(IDFinderMessage.content_type != 'text').count()
 
-        # Leaderboard
+        # Leaderboard with extra info
         leaderboard_query = db.session.query(
             IDFinderUser.telegram_id,
             IDFinderUser.first_name,
+            IDFinderUser.username,
+            IDFinderUser.created_at,
             func.count(IDFinderMessage.id).label('msg_count'),
             func.sum(case((IDFinderMessage.content_type != 'text', 1), else_=0)).label('media_count')
         ).join(IDFinderMessage, IDFinderUser.telegram_id == IDFinderMessage.telegram_user_id) \
          .filter(query_filter) \
-         .group_by(IDFinderUser.telegram_id, IDFinderUser.first_name) \
-         .order_by(text('msg_count DESC')).limit(100).all()
+         .group_by(IDFinderUser.telegram_id, IDFinderUser.first_name, IDFinderUser.username, IDFinderUser.created_at) \
+         .order_by(text('msg_count DESC')).limit(10).all()
 
-        leaderboard = [
-            {"uid": str(row.telegram_id), "name": row.first_name or "Unknown", "msgs": int(row.msg_count), "media": int(row.media_count or 0)}
-            for row in leaderboard_query
-        ]
+        leaderboard = []
+        for row in leaderboard_query:
+            leaderboard.append({
+                "uid": str(row.telegram_id),
+                "name": row.first_name or "Unknown",
+                "username": row.username or "Unbekannt",
+                "msgs": int(row.msg_count),
+                "media": int(row.media_count or 0),
+                "joined_at": row.created_at.strftime('%d.%m.%Y') if row.created_at else "Unbekannt"
+            })
         
         sys.stdout.write(f"--- [DEBUG] Leaderboard ready: {len(leaderboard)} entries ---\n")
         sys.stdout.flush()
@@ -1045,23 +1054,69 @@ def id_finder_analytics():
                     busiest_days[py_dow] = row.count
                 except: pass
 
+        # Growth Data (Joins vs Leaves)
+        from ..models import InviteLog
+        growth_query = db.session.query(
+            func.date(InviteLog.timestamp).label('date'),
+            func.sum(case((InviteLog.action.ilike('%beigetreten%'), 1), else_=0)).label('joins'),
+            func.sum(case((InviteLog.action.ilike('%verlassen%') | InviteLog.action.ilike('%entfernt%'), 1), else_=0)).label('leaves')
+        ).filter(InviteLog.timestamp >= cutoff) \
+         .group_by('date').order_by('date').all()
+
+        growth_labels = []
+        growth_net = []
+        
+        date_map_joins = {fmt_dt(row.date): row.joins for row in growth_query if row.date}
+        date_map_leaves = {fmt_dt(row.date): row.leaves for row in growth_query if row.date}
+        
+        for i in range(days-1, -1, -1):
+            d = now - timedelta(days=i)
+            d_str = d.strftime('%d.%m')
+            growth_labels.append(d_str)
+            net = date_map_joins.get(d_str, 0) - date_map_leaves.get(d_str, 0)
+            growth_net.append(net)
+
+        # Activity Heatmap (Day x Hour)
+        heatmap_query = db.session.query(
+            dow_expr.label('dow'),
+            extract('hour', IDFinderMessage.timestamp).label('hour'),
+            func.count(IDFinderMessage.id).label('count')
+        ).filter(query_filter).group_by('dow', 'hour').all()
+
+        # Matrix: 7 days x 24 hours
+        heatmap_matrix = [[0 for _ in range(24)] for _ in range(7)]
+        for row in heatmap_query:
+            if row.dow is not None and row.hour is not None:
+                try:
+                    val = int(row.dow)
+                    if engine_name == 'mysql': py_dow = (val + 5) % 7
+                    else: py_dow = (val + 6) % 7
+                    heatmap_matrix[py_dow][int(row.hour)] = row.count
+                except: pass
+
         sys.stdout.write("--- [DEBUG] Everything ready. Rendering template. ---\n")
         sys.stdout.flush()
         
-        from ..models import InviteLog
         joins_leaves = InviteLog.query.filter(
             InviteLog.action.ilike('%beigetreten%') | InviteLog.action.ilike('%verlassen%') | InviteLog.action.ilike('%entfernt%')
         ).order_by(InviteLog.timestamp.desc()).all()
 
         return render_template('id_finder_analytics.html', 
-                               stats={'total_users': total_users}, 
-                               joins_leaves=joins_leaves,
-                               activity={
-                                   'timeline': {'labels': timeline_labels, 'total': total_data}, 
-                                   'leaderboard': leaderboard, 
-                                   'busiest_hours': busiest_hours, 
-                                   'busiest_days': busiest_days
-                               })
+                                stats={
+                                    'total_users': total_users,
+                                    'total_messages': total_messages,
+                                    'total_media': total_media,
+                                    'avg_msgs_day': round(total_messages / (days or 1), 1)
+                                }, 
+                                joins_leaves=joins_leaves,
+                                activity={
+                                    'timeline': {'labels': timeline_labels, 'total': total_data}, 
+                                    'leaderboard': leaderboard, 
+                                    'busiest_hours': busiest_hours, 
+                                    'busiest_days': busiest_days,
+                                    'growth': {'labels': growth_labels, 'net': growth_net},
+                                    'heatmap': heatmap_matrix
+                                })
     except Exception as e:
         # LOG AND CRASH gracefully
         err_msg = f"\n--- Analytics Error [{datetime.now()}] ---\n{traceback.format_exc()}\n"
