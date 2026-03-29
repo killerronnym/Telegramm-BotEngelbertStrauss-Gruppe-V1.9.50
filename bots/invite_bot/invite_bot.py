@@ -241,10 +241,17 @@ async def handle_letsgo_choice(update: Update, context: ContextTypes.DEFAULT_TYP
         with flask_app.app_context():
             app = InviteApplication.query.filter_by(telegram_user_id=user.id).first()
             if app:
-                context.user_data['old_msg_id'] = app.profile_message_id
-                context.user_data['old_chat_id'] = app.profile_chat_id
+                old_msg = app.profile_message_id
+                old_chat = app.profile_chat_id
                 db.session.delete(app)
                 db.session.commit()
+                
+                # Alten Steckbrief sofort aus Gruppe löschen
+                if old_msg and old_chat:
+                    try:
+                        await context.bot.delete_message(chat_id=old_chat, message_id=old_msg)
+                    except Exception as e:
+                        logger.warning(f"Letsgo Restart: Konnte alten Steckbrief nicht löschen: {e}")
                 
         config = get_bot_config('invite')
         fields = [f for f in config.get('form_fields', []) if f.get('enabled', True)]
