@@ -840,10 +840,10 @@ def generate_profile_text(user: User, answers: Dict[str, Any], ordered_fields: L
         answer = answers.get(fid)
         
         # Ignoriere Metadata-Felder für den Daten-Checker
-        if ftype == 'pm_contact' or fid == 'pm_allowed':
+        if ftype == 'pm_contact' or str(fid).lower() in ['pm_allowed', 'privat', 'pm']:
             pm_allowed_status = answer
             continue
-        if ftype == 'header_name' or fid == 'share_username':
+        if ftype == 'header_name' or str(fid).lower() in ['share_username', 'username', 'telegram_name']:
             share_username_choice = answer
             continue
 
