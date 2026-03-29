@@ -943,6 +943,8 @@ def id_finder_update_admin_permissions():
 def id_finder_analytics():
     sys.stdout.write("--- [DEBUG] Entered id_finder_analytics ---\n")
     sys.stdout.flush()
+    from ..models import InviteLog
+
     def fmt_dt(d):
         if not d: return ""
         try:
