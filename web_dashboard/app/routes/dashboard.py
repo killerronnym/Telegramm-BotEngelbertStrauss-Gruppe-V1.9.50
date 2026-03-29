@@ -945,7 +945,12 @@ def id_finder_analytics():
     sys.stdout.flush()
     def fmt_dt(d):
         if not d: return ""
-        if isinstance(d, str): return d
+        if isinstance(d, str):
+            if len(d) == 10 and d[4] == '-' and d[7] == '-': # YYYY-MM-DD
+                try:
+                    return f"{d[8:10]}.{d[5:7]}"
+                except: return d
+            return d
         return d.strftime('%d.%m')
     try:
         now = datetime.utcnow()
@@ -1183,12 +1188,18 @@ def id_finder_user_details(uid):
         rank = next((i + 1 for i, r in enumerate(rank_query) if r.telegram_user_id == uid), 0)
 
         return jsonify({
-            'name': user.first_name or "Unbekannt", 'username': user.username or f"ID: {uid}", 'uid': str(uid),
-            'msgs': total_msgs, 'media': total_media, 'days': active_days, 'rank': rank,
-            'joined': user.created_at.strftime('%d.%m.%Y') if user.created_at else "—",
+            'name': user.first_name or "Unbekannt", 
+            'username': user.username or f"ID: {uid}", 
+            'uid': str(uid),
+            'msgs': total_msgs, 
+            'media': total_media, 
+            'days': active_days, 
+            'rank': rank,
+            'joined': user.first_contact.strftime('%d.%m.%Y') if user.first_contact else "—",
             'last_active': msgs[0]['time'] if msgs else "—",
             'timeline': {'labels': tl_labels, 'data': tl_data},
-            'topics': topics, 'recent': msgs
+            'topics': topics, 
+            'recent': msgs
         })
     except Exception as e:
         sys.stderr.write(f"Error in user-details API: {e}\n{traceback.format_exc()}\n")
