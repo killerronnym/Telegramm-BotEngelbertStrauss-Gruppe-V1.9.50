@@ -112,6 +112,24 @@ def create_app(test_config=None):
                 except Exception:
                     db.session.rollback()  # Spalte existiert bereits
                 try:
+                    db.session.execute(db.text("ALTER TABLE id_finder_user ADD COLUMN photo_file_id VARCHAR(200)"))
+                    db.session.commit()
+                    print("Migration: photo_file_id in id_finder_user hinzugefügt.")
+                except Exception:
+                    db.session.rollback()
+                try:
+                    db.session.execute(db.text("ALTER TABLE id_finder_user ADD COLUMN photo_url VARCHAR(500)"))
+                    db.session.commit()
+                    print("Migration: photo_url in id_finder_user hinzugefügt.")
+                except Exception:
+                    db.session.rollback()
+                try:
+                    db.session.execute(db.text("ALTER TABLE id_finder_user ADD COLUMN photo_cached_at DATETIME"))
+                    db.session.commit()
+                    print("Migration: photo_cached_at in id_finder_user hinzugefügt.")
+                except Exception:
+                    db.session.rollback()
+                try:
                     db.session.execute(db.text("ALTER TABLE group_event ADD COLUMN topic_id VARCHAR(50)"))
                     db.session.commit()
                     print("Migration: topic_id in group_event hinzugefügt.")
