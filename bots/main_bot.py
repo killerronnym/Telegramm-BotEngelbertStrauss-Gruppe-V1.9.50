@@ -244,8 +244,76 @@ def main():
                             except: pass
                     raise ApplicationHandlerStop()
 
+    async def global_message_logger(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Log all incoming group messages to the IDFinderMessage table for analytics."""
+        if not update.effective_user or update.effective_user.is_bot:
+            return
+            
+        msg = update.effective_message
+        if not msg:
+            return
+            
+        try:
+            from web_dashboard.app.models import db, IDFinderUser, IDFinderMessage
+            app = get_shared_flask_app()
+            with app.app_context():
+                # Ensure user exists
+                user = IDFinderUser.query.filter_by(telegram_id=update.effective_user.id).first()
+                if not user:
+                    user = IDFinderUser(
+                        telegram_id=update.effective_user.id,
+                        username=update.effective_user.username,
+                        first_name=update.effective_user.first_name,
+                        last_name=update.effective_user.last_name,
+                        language_code=update.effective_user.language_code
+                    )
+                    db.session.add(user)
+                    db.session.commit()
+                else:
+                    # Update status
+                    user.last_contact = datetime.utcnow()
+                    db.session.commit()
+                
+                # Determine content type
+                content_type = 'text'
+                file_id = None
+                if msg.photo:
+                    content_type = 'photo'
+                    file_id = msg.photo[-1].file_id
+                elif msg.video:
+                    content_type = 'video'
+                    file_id = msg.video.file_id
+                elif msg.document:
+                    content_type = 'document'
+                    file_id = msg.document.file_id
+                elif msg.sticker:
+                    content_type = 'sticker'
+                    file_id = msg.sticker.file_id
+                elif msg.animation:
+                    content_type = 'animation'
+                    file_id = msg.animation.file_id
+
+                # Store message
+                new_msg = IDFinderMessage(
+                    telegram_user_id=update.effective_user.id,
+                    message_id=msg.message_id,
+                    chat_id=update.effective_chat.id,
+                    message_thread_id=msg.message_thread_id,
+                    chat_type=update.effective_chat.type,
+                    text=msg.text or msg.caption,
+                    content_type=content_type,
+                    file_id=file_id,
+                    is_command=msg.text.startswith('/') if msg.text else False,
+                    timestamp=datetime.utcnow()
+                )
+                db.session.add(new_msg)
+                db.session.commit()
+        except Exception as e:
+            logger.error(f"Error logging message for analytics: {e}")
+
     from telegram.ext import TypeHandler
     app.add_handler(TypeHandler(Update, global_block_check), group=-100)
+    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, global_message_logger), group=0)
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, auto_admin_on_join), group=-1)
     app.add_handler(CommandHandler("activate", activate_command))
 

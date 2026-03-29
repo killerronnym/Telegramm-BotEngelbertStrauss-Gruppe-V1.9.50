@@ -1021,22 +1021,65 @@ def id_finder_analytics():
             date_expr.label('date'),
             func.count(IDFinderMessage.id).label('count')
         ).filter(query_filter).group_by(date_expr).order_by(date_expr).all()
-
-        # Make sure timeline has continuous dates for the requested period if filtering by days
+        
+        # Fallback for empty messages: use InviteLog for trend
+        if not total_messages:
+            sys.stdout.write("--- [DEBUG] No messages found, using InviteLog for activity trend ---\n")
+            sys.stdout.flush()
+            date_expr = func.date(InviteLog.timestamp)
+            timeline_query = db.session.query(
+                date_expr.label('date'),
+                func.count(InviteLog.id).label('count')
+            ).filter(InviteLog.timestamp >= cutoff).group_by(date_expr).order_by(date_expr).all()
+        
         timeline_labels = []
         total_data = []
         
-        if days > 0 and year == 0 and month == 0:
-            date_map = {fmt_dt(row.date): row.count for row in timeline_query if row.date}
-            for i in range(days-1, -1, -1):
-                d = now - timedelta(days=i)
-                d_str = d.strftime('%d.%m')
-                timeline_labels.append(d_str)
-                total_data.append(date_map.get(d_str, 0))
-        else:
-            # For month/year filtering, rely on the data returned directly
-            timeline_labels = [fmt_dt(row.date) for row in timeline_query]
-            total_data = [row.count for row in timeline_query]
+        # Consistent labels for the chart even if data is missing on some days
+        date_map = {fmt_dt(row.date): row.count for row in timeline_query if row.date}
+        for i in range(days-1, -1, -1):
+            d = now - timedelta(days=i)
+            d_str = d.strftime('%d.%m')
+            timeline_labels.append(d_str)
+            total_data.append(date_map.get(d_str, 0))
+
+        # Growth Data (Joins vs Leaves)
+        growth_labels = []
+        joins_data = []
+        leaves_data = []
+        
+        growth_query = db.session.query(
+            func.date(InviteLog.timestamp).label('date'),
+            func.sum(case((InviteLog.action.ilike('%beigetreten%'), 1), else_=0)).label('joins'),
+            func.sum(case((InviteLog.action.ilike('%verlassen%'), 1), else_=0)).label('leaves')
+        ).filter(InviteLog.timestamp >= cutoff).group_by(func.date(InviteLog.timestamp)).all()
+        
+        growth_map = {fmt_dt(row.date): (row.joins or 0, row.leaves or 0) for row in growth_query if row.date}
+        for i in range(days-1, -1, -1):
+            d = now - timedelta(days=i)
+            d_str = d.strftime('%d.%m')
+            growth_labels.append(d_str)
+            j, l = growth_map.get(d_str, (0, 0))
+            joins_data.append(int(j))
+            leaves_data.append(int(l))
+
+        # Events (Joins/Leaves List)
+        joins_leaves = InviteLog.query.filter(
+            InviteLog.action.ilike('%beigetreten%') | 
+            InviteLog.action.ilike('%verlassen%') | 
+            InviteLog.action.ilike('%entfernt%') |
+            InviteLog.action.ilike('%Regeln%') |
+            InviteLog.action.ilike('%letsgo%')
+        ).order_by(InviteLog.timestamp.desc()).limit(30).all()
+
+        # Stats for KPIs
+        stats = {
+            "msgs": total_messages if total_messages > 0 else InviteLog.query.count(),
+            "active_users": IDFinderUser.query.filter(IDFinderUser.last_contact >= cutoff).count(),
+            "media_share": f"{(total_media / total_messages * 100):.1f}%" if total_messages > 0 else "0.0%",
+            "growth_net": sum(joins_data) - sum(leaves_data),
+            "avg_msgs_per_day": round(total_messages / days, 1) if days > 0 else 0
+        }
 
         # Hours distribution
         hour_expr = extract('hour', IDFinderMessage.timestamp)
@@ -1126,20 +1169,13 @@ def id_finder_analytics():
         ).order_by(InviteLog.timestamp.desc()).limit(50).all()
 
         return render_template('id_finder_analytics.html', 
-                                stats={
-                                    'total_users': total_users,
-                                    'total_messages': total_messages,
-                                    'total_media': total_media,
-                                    'avg_msgs_day': round(total_messages / (days or 1), 1) if total_messages and days else 0
-                                }, 
+                                stats=stats,
+                                leaderboard=leaderboard,
                                 joins_leaves=joins_leaves,
+                                heatmap=heatmap_matrix,
                                 activity={
                                     'timeline': {'labels': timeline_labels, 'total': total_data}, 
-                                    'leaderboard': leaderboard, 
-                                    'busiest_hours': busiest_hours, 
-                                    'busiest_days': busiest_days,
-                                    'growth': {'labels': growth_labels, 'net': growth_net, 'joins': [date_map_joins.get(l, 0) for l in growth_labels], 'leaves': [date_map_leaves.get(l, 0) for l in growth_labels]},
-                                    'heatmap': heatmap_matrix
+                                    'growth': {'labels': growth_labels, 'joins': joins_data, 'leaves': leaves_data}
                                 })
     except Exception as e:
         import traceback

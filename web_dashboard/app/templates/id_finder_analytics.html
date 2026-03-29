@@ -4,77 +4,99 @@
 {% block content %}
 <style>
 /* ── RESET & BASE ── */
-:root {
-  --bg: #0a0e17;
-  --bg1: #0f1523;
-  --bg2: #141a2e;
-  --bg3: #1a2135;
-  --bg4: #1f2844;
-  --border: rgba(255,255,255,0.06);
-  --border2: rgba(255,255,255,0.10);
-  --border3: rgba(255,255,255,0.16);
-  --blue: #4f8ef7;
-  --blue2: #3a7af5;
-  --purple: #a855f7;
-  --green: #22c55e;
-  --amber: #f59e0b;
-  --red: #ef4444;
-  --teal: #14b8a6;
-  --pink: #ec4899;
-  --text: #e8edf5;
-  --text2: #94a3b8;
-  --text3: #4a5568;
-  --mono: 'JetBrains Mono', monospace;
+:root{
+  --bg:#0a0e17;
+  --bg1:#0f1523;
+  --bg2:#141a2e;
+  --bg3:#1a2135;
+  --bg4:#1f2844;
+  --border:rgba(255,255,255,0.06);
+  --border2:rgba(255,255,255,0.10);
+  --border3:rgba(255,255,255,0.16);
+  --blue:#4f8ef7;
+  --blue2:#3a7af5;
+  --purple:#a855f7;
+  --green:#22c55e;
+  --amber:#f59e0b;
+  --red:#ef4444;
+  --teal:#14b8a6;
+  --pink:#ec4899;
+  --text:#e8edf5;
+  --text2:#94a3b8;
+  --text3:#4a5568;
+  --mono:'JetBrains Mono',monospace;
+  --sans:'Inter',system-ui,sans-serif;
+  --radius:10px;
+  --radius-lg:14px;
+  --radius-xl:18px;
+  --shadow:0 4px 24px rgba(0,0,0,0.4);
+  --shadow-lg:0 8px 40px rgba(0,0,0,0.6);
 }
 
-body { background: var(--bg); color: var(--text); }
+.main-wrap{padding:0 28px 60px; background: var(--bg); color: var(--text); font-family: var(--sans);}
+
+/* ── TOPBAR ── */
+.topbar{background:var(--bg1);border-bottom:1px solid var(--border);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;backdrop-filter:blur(20px)}
+.topbar-left{display:flex;align-items:center;gap:16px}
+.topbar-title{font-size:16px;font-weight:800;letter-spacing:-.02em}
+.topbar-title em{font-style:normal;color:var(--blue)}
+.live-pill{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);color:var(--green);font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;display:flex;align-items:center;gap:5px;letter-spacing:.04em}
+.live-dot{width:6px;height:6px;background:var(--green);border-radius:50%;animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.topbar-stat{text-align:right}
+.topbar-stat .val{font-size:18px;font-weight:900;line-height:1;letter-spacing:-.03em}
+.topbar-stat .lbl{font-size:10px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
 
 /* ── KPI ── */
-.kpi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 24px; }
-.kpi { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 18px; position: relative; overflow: hidden; }
-.kpi::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--c, var(--blue)); }
-.kpi .lbl { font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 8px; }
-.kpi .val { font-size: 24px; font-weight: 900; letter-spacing: -.03em; line-height: 1; }
-.kpi .meta { font-size: 11px; color: var(--text2); margin-top: 6px; }
+.kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:24px}
+.kpi{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px;position:relative;overflow:hidden;}
+.kpi::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:var(--radius-lg) var(--radius-lg) 0 0;background:var(--c,var(--blue))}
+.kpi .lbl{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px}
+.kpi .val{font-size:26px;font-weight:900;letter-spacing:-.04em;line-height:1;margin-bottom:8px}
+.kpi .meta{font-size:11px;color:var(--text2);display:flex;align-items:center;gap:5px}
 
 /* ── CARDS ── */
-.card { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; height: 100%; }
-.card-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
-.card-h { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text3); }
-.card-sub { font-size: 11px; color: var(--text3); }
+.card-premium{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
+.card-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
+.card-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3)}
+.card-sub{font-size:11px;color:var(--text3);margin-top:2px}
 
 /* ── LEADERBOARD ── */
-.lb-scroll { max-height: 480px; overflow-y: auto; }
-.lb-row { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-bottom: 1px solid var(--border); cursor: pointer; transition: all .2s; }
-.lb-row:hover { background: rgba(255,255,255,0.03); }
-.lb-av { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border2); }
-.lb-info { flex: 1; min-width: 0; }
-.lb-name { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lb-uid { font-size: 10px; color: var(--text3); font-family: var(--mono); }
-.lb-msgs { font-size: 14px; font-weight: 800; text-align: right; min-width: 40px; }
+.lb-scroll{max-height:450px;overflow-y:auto}
+.lb-row{display:flex;align-items:center;gap:10px;padding:9px 18px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;}
+.lb-row:hover{background:rgba(255,255,255,0.025)}
+.lb-rank{font-size:11px;font-weight:800;min-width:22px;font-family:var(--mono)}
+.lb-av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;border:2px solid transparent}
+.lb-info{flex:1;min-width:0}
+.lb-name{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-uid{font-size:10px;color:var(--text3);font-family:var(--mono)}
+.lb-msgs{font-size:13px;font-weight:800}
 
 /* ── EVENTS ── */
-.ev-row { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-bottom: 1px solid var(--border); }
-.ev-info { flex: 1; min-width: 0; }
-.ev-badge { font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
-.ev-badge.join { background: rgba(34,197,94,0.1); color: var(--green); border: 1px solid rgba(34,197,94,0.2); }
-.ev-badge.leave { background: rgba(239,68,68,0.1); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
+.ev-row{display:flex;align-items:center;gap:10px;padding:8px 18px;border-bottom:1px solid var(--border)}
+.ev-time{font-size:10px;color:var(--text3);min-width:90px;font-family:var(--mono)}
+.ev-user{flex:1;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge-premium{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;letter-spacing:.03em}
+.badge-premium.join{background:rgba(34,197,94,.1);color:var(--green);border:1px solid rgba(34,197,94,.2)}
+.badge-premium.leave{background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.2)}
 
 /* ── PANEL ── */
-.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 200; opacity: 0; pointer-events: none; transition: opacity .25s; backdrop-filter: blur(4px); }
-.overlay.show { opacity: 1; pointer-events: all; }
-.user-panel { position: fixed; right: -520px; top: 0; bottom: 0; width: 500px; background: var(--bg1); border-left: 1px solid var(--border2); z-index: 201; overflow-y: auto; transition: right .3s cubic-bezier(.32,.72,0,1); padding: 24px; box-shadow: -10px 0 30px rgba(0,0,0,0.5); }
-.user-panel.open { right: 0; }
-.up-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 0; }
-.up-stat { background: var(--bg3); border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-align: center; }
-.up-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.up-info-item { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;opacity:0;pointer-events:none;transition:opacity .25s;backdrop-filter:blur(4px)}
+.overlay.show{opacity:1;pointer-events:all}
+.user-panel{position:fixed;right:-520px;top:0;bottom:0;width:500px;background:var(--bg1);border-left:1px solid var(--border2);z-index:201;overflow-y:auto;transition:right .3s cubic-bezier(.32,.72,0,1);box-shadow:var(--shadow-lg);display:flex;flex-direction:column}
+.user-panel.open{right:0}
+.up-header{padding:20px 24px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg1);z-index:10;backdrop-filter:blur(20px)}
+.up-avatar{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;border:3px solid;flex-shrink:0}
+.up-body{padding:20px 24px;flex:1}
+.up-stat{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px 14px;text-align:center}
+.up-info-item{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
 
 /* ── HEATMAP ── */
-.hm-grid { display: grid; grid-template-columns: 24px 1fr; gap: 8px; padding: 18px; }
-.hm-row { display: flex; gap: 2px; margin-bottom: 2px; }
-.hm-cell { flex: 1; height: 14px; border-radius: 2px; cursor: pointer; transition: transform 0.1s; }
-.hm-cell:hover { transform: scale(1.2); z-index: 2; }
+.heatmap-inner{padding:12px 16px 14px;display:grid;grid-template-columns:28px 1fr;gap:4px;align-items:start}
+.hm-row{display:flex;gap:2px;margin-bottom:2px}
+.hm-cell{flex:1;height:13px;border-radius:2px;cursor:pointer;transition:filter .1s}
+.hm-cell:hover{filter:brightness(1.5);outline:1px solid rgba(255,255,255,.3)}
 </style>
 
 <!-- OVERLAY for user panel -->
@@ -82,260 +104,293 @@ body { background: var(--bg); color: var(--text); }
 
 <!-- USER DETAIL PANEL -->
 <div class="user-panel" id="userPanel">
-    <div class="d-flex justify-content-between align-items-start mb-4">
+  <div class="up-header">
+    <div class="d-flex justify-content-between align-items-start mb-3">
         <div class="d-flex align-items-center gap-3">
-            <img src="" id="detAvatar" class="lb-av" style="width:64px;height:64px;">
-            <div>
-                <h3 class="mb-0 text-white fw-900" id="detName">Wird geladen...</h3>
-                <div class="text-blue" id="detUsername">@username</div>
-                <div class="small text-secondary" id="detId">ID: —</div>
-            </div>
+          <div id="panelAvatar" class="up-avatar">?</div>
+          <div>
+            <div id="panelName" class="h5 fw-900 mb-0">Wird geladen...</div>
+            <div id="panelUsername" class="small text-secondary fw-700">@username</div>
+            <div id="panelUid" class="small text-muted" style="font-size:9px">UID: —</div>
+          </div>
         </div>
-        <button class="up-close btn btn-sm btn-dark" onclick="closePanel()">×</button>
+        <button class="btn btn-sm btn-dark" onclick="closePanel()">×</button>
+    </div>
+    <div id="panelBadges" class="d-flex flex-wrap gap-2"></div>
+  </div>
+
+  <div class="up-body">
+    <div class="row g-2 mb-4">
+      <div class="col-4"><div class="up-stat"><div id="ps-msgs" class="h4 fw-900 text-blue mb-0">0</div><div class="small text-secondary fw-700 text-uppercase" style="font-size:9px">Messages</div></div></div>
+      <div class="col-4"><div class="up-stat"><div id="ps-media" class="h4 fw-900 text-purple mb-0">0</div><div class="small text-secondary fw-700 text-uppercase" style="font-size:9px">Media</div></div></div>
+      <div class="col-4"><div class="up-stat"><div id="ps-days" class="h4 fw-900 text-green mb-0">0</div><div class="small text-secondary fw-700 text-uppercase" style="font-size:9px">Active</div></div></div>
     </div>
 
-    <div class="up-stats">
-        <div class="up-stat"><div class="h3 mb-0 text-blue" id="ps-msgs">0</div><div class="small text-secondary text-uppercase fw-700 mt-1" style="font-size:9px">Nachrichten</div></div>
-        <div class="up-stat"><div class="h3 mb-0 text-purple" id="ps-media">0</div><div class="small text-secondary text-uppercase fw-700 mt-1" style="font-size:9px">Medien</div></div>
-        <div class="up-stat"><div class="h3 mb-0 text-green" id="ps-days">0</div><div class="small text-secondary text-uppercase fw-700 mt-1" style="font-size:9px">Gesendet</div></div>
+    <div class="small text-uppercase text-secondary fw-800 mb-2 ls-1" style="font-size:9px">Profil-Details</div>
+    <div class="row g-2 mb-4">
+      <div class="col-6"><div class="up-info-item"><div class="small text-muted text-uppercase fw-700" style="font-size:8px">Beigetreten</div><div id="pi-joined" class="small fw-600">—</div></div></div>
+      <div class="col-6"><div class="up-info-item"><div class="small text-muted text-uppercase fw-700" style="font-size:8px">Zuletzt Aktiv</div><div id="pi-last" class="small fw-600">—</div></div></div>
     </div>
 
-    <div class="card mb-3"><div class="card-head"><div class="card-h">Aktivität (14 Tage)</div></div><div class="p-3"><canvas id="userTimelineCanvas" height="120"></canvas></div></div>
+    <div class="small text-uppercase text-secondary fw-800 mb-2 ls-1" style="font-size:9px">Tages-Aktivität (14 Tage)</div>
+    <div class="card-premium p-3 mb-4"><canvas id="userTimelineCanvas" height="100"></canvas></div>
 
-    <div class="up-info-grid mb-3">
-        <div class="up-info-item"><div class="small text-uppercase text-secondary fw-700" style="font-size:9px">Beigetreten</div><div class="fw-600 mt-1" id="pi-joined">—</div></div>
-        <div class="up-info-item"><div class="small text-uppercase text-secondary fw-700" style="font-size:9px">Zuletzt aktiv</div><div class="fw-600 mt-1" id="pi-last">—</div></div>
-    </div>
-
-    <div class="card"><div class="card-head"><div class="card-h">Top Themen</div></div><div class="p-3" id="panelTopics"></div></div>
+    <div class="small text-uppercase text-secondary fw-800 mb-2 ls-1" style="font-size:9px">Häufigste Themen</div>
+    <div id="panelTopics" class="mb-4"></div>
+  </div>
 </div>
 
-<div class="container-fluid px-4 py-4">
-    <!-- Header -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h1 class="h4 fw-900 text-white mb-1">ID-Finder <span class="text-blue">Analyse</span></h1>
-            <div class="badge bg-green bg-opacity-10 text-green border border-green border-opacity-25 py-1 px-3">
-                <span class="spinner-grow spinner-grow-sm me-1" role="status"></span> LIVE DATEN
-            </div>
-        </div>
-        <div class="d-flex gap-2">
-            <button class="btn btn-sm btn-dark border-secondary border-opacity-25 px-3">↓ EXPORT</button>
-            <button class="btn btn-sm btn-primary px-3" onclick="window.location.reload()">⟳ REFRESH</button>
-        </div>
+<div class="main-wrap">
+  <!-- TOPBAR -->
+  <div class="topbar mx-n4">
+    <div class="topbar-left">
+      <div class="topbar-title">ID-Finder-Analyse <em>LIVE</em></div>
+      <div class="live-pill"><div class="live-dot"></div>PRO</div>
     </div>
+    <div class="topbar-right">
+      <div class="topbar-stat">
+        <div class="val text-blue">{{ stats.msgs }}</div>
+        <div class="lbl">Aktivitäten</div>
+      </div>
+      <button class="btn btn-sm btn-primary px-3" onclick="window.location.reload()">⟳ REFRESH</button>
+    </div>
+  </div>
 
-    <!-- KPIs -->
+  <div class="content">
+    <!-- KPI ROW -->
     <div class="kpi-grid">
-        <div class="kpi" style="--c:var(--blue)"><div class="lbl">Nachrichten (Total)</div><div class="val">{{ stats.msgs or 0 }}</div><div class="meta">Gesamter Bestand</div></div>
-        <div class="kpi" style="--c:var(--green)"><div class="lbl">Aktive User</div><div class="val">{{ stats.active_users or 0 }}</div><div class="meta">In der Datenbank</div></div>
-        <div class="kpi" style="--c:var(--purple)"><div class="lbl">Medien-Teil</div><div class="val">{{ stats.media_share or 0 }}</div><div class="meta">Bilder & Videos</div></div>
-        <div class="kpi" style="--c:var(--amber)"><div class="lbl">Wachstum</div><div class="val">{{ stats.growth_net or 0 }}</div><div class="meta">Im gewählten Zeitraum</div></div>
-        <div class="kpi" style="--c:var(--teal)"><div class="lbl">Ø / Tag</div><div class="val">{{ stats.avg_msgs_per_day or 0 }}</div><div class="meta">Aktueller Schnitt</div></div>
+      <div class="kpi" style="--c:var(--blue)">
+        <div class="lbl">Interaktionen (30T)</div>
+        <div class="val">{{ stats.msgs }}</div>
+        <div class="meta"><span class="text-green">↑ Realtime</span></div>
+      </div>
+      <div class="kpi" style="--c:var(--green)">
+        <div class="lbl">Aktive User (30T)</div>
+        <div class="val">{{ stats.active_users }}</div>
+        <div class="meta">Basis: Letzter Kontakt</div>
+      </div>
+      <div class="kpi" style="--c:var(--purple)">
+        <div class="lbl">Medien-Anteil</div>
+        <div class="val">{{ stats.media_share }}</div>
+        <div class="meta">Bilder / Videos</div>
+      </div>
+      <div class="kpi" style="--c:var(--amber)">
+        <div class="lbl">Netto-Wachstum</div>
+        <div class="val {% if stats.growth_net >= 0 %}text-green{% else %}text-red{% endif %}">
+          {% if stats.growth_net > 0 %}+{% endif %}{{ stats.growth_net }}
+        </div>
+        <div class="meta">Joins vs. Leaves</div>
+      </div>
+      <div class="kpi" style="--c:var(--teal)">
+        <div class="lbl">Ø / Tag</div>
+        <div class="val">{{ stats.avg_msgs_per_day }}</div>
+        <div class="meta">Trend der Woche</div>
+      </div>
     </div>
 
-    <!-- Main Grid -->
+    <!-- MAIN GRID (Timeline + Leaderboard) -->
     <div class="row g-3 mb-4">
-        <div class="col-lg-8">
-            <div class="card">
-                <div class="card-head">
-                    <div class="card-h">Aktivitäts-Zeitstrahl</div>
-                    <div class="d-flex gap-2">
-                        <div class="btn-group btn-group-sm">
-                            <button class="btn btn-outline-secondary btn-sm" onclick="changePeriod(7)">7T</button>
-                            <button class="btn btn-outline-secondary btn-sm" onclick="changePeriod(30)">30T</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="p-3" style="background:#0f1523;min-height:220px;">
-                    <canvas id="timelineCanvas"></canvas>
-                </div>
+      <div class="col-lg-8">
+        <div class="card-premium h-100">
+          <div class="card-head">
+            <div>
+              <div class="card-h">Aktivitäts-Trend</div>
+              <div class="card-sub">Basierend auf Nachrichten & User-Events</div>
             </div>
-        </div>
-        <div class="col-lg-4">
-            <div class="card">
-                <div class="card-head"><div class="card-h">Top User (Leaderboard)</div></div>
-                <div class="lb-scroll">
-                    {% for u in leaderboard %}
-                    <div class="lb-row" data-uid="{{ u.uid }}" onclick="openPanel('{{ u.uid }}')">
-                        <img src="/api/avatar/{{ u.uid }}" class="lb-av" onerror="this.src='https://ui-avatars.com/api/?name={{ u.name }}&background=random'">
-                        <div class="lb-info">
-                            <div class="lb-name">{{ u.name }}</div>
-                            <div class="lb-uid">@{{ u.username or 'keiner' }}</div>
-                        </div>
-                        <div class="lb-msgs text-blue">{{ u.msgs }}</div>
-                    </div>
-                    {% endfor %}
-                </div>
+            <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-secondary" onclick="window.location.href='?days=7'">7T</button>
+                <button class="btn btn-outline-secondary" onclick="window.location.href='?days=30'">30T</button>
             </div>
+          </div>
+          <div class="p-4" style="min-height:250px;"><canvas id="timelineCanvas"></canvas></div>
         </div>
+      </div>
+      <div class="col-lg-4">
+        <div class="card-premium h-100">
+          <div class="card-head"><div class="card-h">Leaderboard</div></div>
+          <div class="lb-scroll">
+            {% for u in leaderboard %}
+            <div class="lb-row" onclick="openPanel('{{ u.uid }}')">
+              <span class="lb-rank text-muted">#{{ loop.index }}</span>
+              <img src="/api/avatar/{{ u.uid }}" class="lb-av" onerror="this.src='https://ui-avatars.com/api/?name={{ u.name }}&background=random'">
+              <div class="lb-info">
+                <div class="lb-name">{{ u.name }}</div>
+                <div class="lb-uid">@{{ u.username }}</div>
+              </div>
+              <div class="lb-msgs text-blue">{{ u.msgs }}</div>
+            </div>
+            {% endfor %}
+            {% if not leaderboard %}
+            <div class="p-4 text-center text-muted small">Noch keine Daten vorhanden</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
     </div>
 
-    <!-- Bottom Grid -->
+    <!-- BOTTOM GRID (Heatmap + Events + Growth) -->
     <div class="row g-3 mb-4">
-        <div class="col-lg-4">
-            <div class="card">
-                <div class="card-head"><div class="card-h">Mitglieder-Bewegung</div></div>
-                <div class="lb-scroll" style="height: 300px;">
-                    {% for item in joins_leaves %}
-                    <div class="ev-row">
-                        <img src="/api/avatar/{{ item.telegram_user_id }}" class="lb-av" style="width:28px;height:28px;">
-                        <div class="ev-info">
-                            <div class="fw-700" style="font-size:12px;">@{{ item.username or 'Unbekannt' }}</div>
-                            <div class="small text-secondary" style="font-size:9px;">{{ item.timestamp.strftime('%d.%m. %H:%M') }}</div>
-                        </div>
-                        <div class="ev-badge {% if 'beigetreten' in item.action or 'Regeln' in item.action or 'letsgo' in item.action %}join{% else %}leave{% endif %}">
-                            {% if 'beigetreten' in item.action %}JOIN{% elif 'verlassen' in item.action %}LEAVE{% elif 'Regeln' in item.action %}RULES OK{% else %}START{% endif %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                    {% if not joins_leaves %}
-                    <div class="p-4 text-center text-secondary small">Keine aktuellen Bewegungen</div>
-                    {% endif %}
+      <div class="col-lg-5">
+        <div class="card-premium h-100">
+          <div class="card-head"><div class="card-h">Heatmap (24h)</div></div>
+          <div class="heatmap-inner">
+             <div class="text-secondary fw-700" style="font-size:9px; line-height:1.6">
+               Mo<br>Di<br>Mi<br>Do<br>Fr<br>Sa<br>So
+             </div>
+             <div class="hm-area">
+                {% for day_row in heatmap %}
+                <div class="hm-row">
+                  {% for cell in day_row %}
+                  {% set alpha = (cell.count / 20.0) if cell.count < 20 else 1.0 %}
+                  <div class="hm-cell" style="background: rgba(79, 142, 247, {{ alpha }});" title="{{ cell.count }} Msgs"></div>
+                  {% endfor %}
                 </div>
-            </div>
+                {% endfor %}
+             </div>
+          </div>
         </div>
-        <div class="col-lg-4">
-            <div class="card">
-                <div class="card-head"><div class="card-h">Wachstum Diagramm</div></div>
-                <div class="card-body p-3">
-                    <canvas id="growthCanvas" height="240"></canvas>
-                </div>
+      </div>
+      <div class="col-lg-4">
+        <div class="card-premium h-100">
+          <div class="card-head"><div class="card-h">Letzte Ereignisse</div></div>
+          <div class="lb-scroll" style="max-height: 250px;">
+            {% for ev in joins_leaves %}
+            <div class="ev-row">
+              <img src="/api/avatar/{{ ev.telegram_user_id }}" class="lb-av" style="width:24px;height:24px;" onerror="this.src='https://ui-avatars.com/api/?name={{ ev.username }}&background=random'">
+              <div class="ev-info flex-grow-1">
+                <div class="small fw-700">@{{ ev.username }}</div>
+                <div class="text-muted" style="font-size:8px;">{{ ev.timestamp.strftime('%d.%m %H:%M') }}</div>
+              </div>
+              <div class="badge-premium {% if 'beigetreten' in ev.action or 'letsgo' in ev.action %}join{% else %}leave{% endif %}">
+                {% if 'beigetreten' in ev.action %}JOIN{% elif 'verlassen' in ev.action %}LEAVE{% else %}ACTIVE{% endif %}
+              </div>
             </div>
+            {% endfor %}
+          </div>
         </div>
-        <div class="col-lg-4">
-            <div class="card">
-                <div class="card-head"><div class="card-h">Aktivitäts-Heatmap</div></div>
-                <div class="hm-grid">
-                    <div class="hm-y text-secondary" style="font-size:9px;line-height:1.6">
-                        <div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div>
-                    </div>
-                    <div class="hm-area">
-                        {% for day_row in heatmap %}
-                        <div class="hm-row">
-                            {% for cell in day_row %}
-                            {% set val = cell.count %}
-                            {% set alpha = (val / 50.0) if val < 50 else 1.0 %}
-                            <div class="hm-cell" style="background: rgba(79, 142, 247, {{ alpha }});" title="{{ val }} Nachrichten"></div>
-                            {% endfor %}
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-                <div class="card-footer border-0 bg-transparent pt-0 pb-3 px-3 d-flex justify-content-end align-items-center gap-2">
-                    <span class="small text-secondary" style="font-size:9px">WENIG</span>
-                    <div class="d-flex gap-1">
-                        <div style="width:10px;height:6px;background:rgba(79,142,247,0.1)"></div>
-                        <div style="width:10px;height:6px;background:rgba(79,142,247,0.4)"></div>
-                        <div style="width:10px;height:6px;background:rgba(79,142,247,0.7)"></div>
-                        <div style="width:10px;height:6px;background:rgba(79,142,247,1)"></div>
-                    </div>
-                    <span class="small text-secondary" style="font-size:9px">VIEL</span>
-                </div>
-            </div>
+      </div>
+      <div class="col-lg-3">
+        <div class="card-premium h-100">
+          <div class="card-head"><div class="card-h">Wachstum</div></div>
+          <div class="p-3"><canvas id="growthCanvas" height="200"></canvas></div>
         </div>
+      </div>
     </div>
+
+  </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script>
-let timelineChart = null;
-let userTimelineChart = null;
+let timelineChart = null, growthChart = null, userTimeChart = null;
 
 function initCharts() {
-    const ctx = document.getElementById('timelineCanvas').getContext('2d');
-    timelineChart = new Chart(ctx, {
+    const tctx = document.getElementById('timelineCanvas').getContext('2d');
+    timelineChart = new Chart(tctx, {
         type: 'line',
         data: {
             labels: {{ activity.timeline.labels|tojson }},
             datasets: [{
-                label: 'Nachrichten',
+                label: 'Aktivität',
                 data: {{ activity.timeline.total|tojson }},
                 borderColor: '#4f8ef7',
                 backgroundColor: 'rgba(79, 142, 247, 0.1)',
                 borderWidth: 2,
                 fill: true,
                 tension: 0.4,
-                pointRadius: 0
+                pointRadius: 2
             }]
         },
         options: {
-            responsive: true,
-            maintainAspectRatio: false,
+            responsive: true, maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
-                y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
-                x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+                y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#4a5568', font: {size: 10} } },
+                x: { grid: { display : false }, ticks: { color: '#4a5568', font: {size: 10} } }
             }
         }
     });
 
     const gctx = document.getElementById('growthCanvas').getContext('2d');
-    new Chart(gctx, {
+    growthChart = new Chart(gctx, {
         type: 'bar',
         data: {
             labels: {{ activity.growth.labels|tojson }},
             datasets: [
-                { label: 'Beitritte', data: {{ activity.growth.joins|tojson }}, backgroundColor: 'rgba(34,197,94,0.5)', borderRadius: 4 },
-                { label: 'Austritte', data: {{ activity.growth.leaves|tojson }}, backgroundColor: 'rgba(239,68,68,0.5)', borderRadius: 4 }
+                { label: 'Beitritte', data: {{ activity.growth.joins|tojson }}, backgroundColor: '#22c55e99', borderRadius: 4 },
+                { label: 'Austritte', data: {{ activity.growth.leaves|tojson }}, backgroundColor: '#ef444499', borderRadius: 4 }
             ]
         },
         options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: true, labels: {color:'#94a3b8'} } },
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
             scales: {
-                y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
-                x: { grid: { display: false } }
+                y: { stacked: false, grid: { display: false } },
+                x: { stacked: true, grid: { display: false }, ticks: { display: false } }
             }
         }
     });
 }
 
 function openPanel(uid) {
-    document.getElementById('detName').textContent = 'Lade...';
-    document.getElementById('overlay').classList.add('show');
-    document.getElementById('userPanel').classList.add('open');
+    const panel = document.getElementById('userPanel');
+    const overlay = document.getElementById('overlay');
+    
+    // Reset contents
+    document.getElementById('panelName').textContent = "Lade Daten...";
+    document.getElementById('panelUsername').textContent = "...";
+    
+    overlay.classList.add('show');
+    panel.classList.add('open');
 
+    // Fetch Details
     fetch(`/api/id-finder/user-details/${uid}`)
         .then(r => r.json())
-        .then(d => {
-            document.getElementById('detAvatar').src = `/api/avatar/${uid}`;
-            document.getElementById('detName').textContent = d.name;
-            document.getElementById('detUsername').textContent = `@${d.username}`;
-            document.getElementById('detId').textContent = `ID: ${d.uid}`;
+        .then(data => {
+            document.getElementById('panelName').textContent = data.name;
+            document.getElementById('panelUsername').textContent = "@" + data.username;
+            document.getElementById('panelUid').textContent = "UID: " + data.uid;
             
-            document.getElementById('ps-msgs').textContent = d.msgs;
-            document.getElementById('ps-media').textContent = d.media;
-            document.getElementById('ps-days').textContent = d.days;
+            const av = document.getElementById('panelAvatar');
+            av.textContent = data.name.substring(0,2).toUpperCase();
+            av.style.borderColor = "#4f8ef7"; av.style.color = "#4f8ef7";
             
-            document.getElementById('pi-joined').textContent = d.joined;
-            document.getElementById('pi-last').textContent = d.last_active;
-
-            const tpc = document.getElementById('panelTopics');
-            tpc.innerHTML = '';
-            d.topics.forEach(t => {
-                tpc.innerHTML += `
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <div class="small fw-600">${t.name}</div>
-                        <div class="small text-blue fw-700">${t.count}</div>
+            document.getElementById('ps-msgs').textContent = data.msgs;
+            document.getElementById('ps-media').textContent = data.media;
+            document.getElementById('ps-days').textContent = data.active_days || data.days;
+            
+            document.getElementById('pi-joined').textContent = data.joined;
+            document.getElementById('pi-last').textContent = data.last_active;
+            
+            // Topic bars
+            const topicsDiv = document.getElementById('panelTopics');
+            topicsDiv.innerHTML = '';
+            data.topics.forEach(t => {
+                topicsDiv.innerHTML += `
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <div class="small fw-700 text-light">${t.name}</div>
+                        <div class="small text-blue fw-900">${t.count}</div>
+                    </div>
+                    <div class="progress bg-dark mb-2" style="height:4px">
+                        <div class="progress-bar bg-blue" style="width:${(t.count/data.msgs*100) || 0}%"></div>
                     </div>
                 `;
             });
-
-            if (userTimelineChart) userTimelineChart.destroy();
-            const utCtx = document.getElementById('userTimelineCanvas').getContext('2d');
-            userTimelineChart = new Chart(utCtx, {
+            
+            // Mini Timeline
+            if(userTimeChart) userTimeChart.destroy();
+            const utctx = document.getElementById('userTimelineCanvas').getContext('2d');
+            userTimeChart = new Chart(utctx, {
                 type: 'line',
                 data: {
-                    labels: d.timeline.labels,
+                    labels: data.timeline.labels,
                     datasets: [{
-                        data: d.timeline.data,
+                        data: data.timeline.data,
                         borderColor: '#4f8ef7',
                         borderWidth: 2,
-                        pointRadius: 0,
+                        fill: false,
                         tension: 0.4,
-                        fill: false
+                        pointRadius: 0
                     }]
                 },
                 options: {
@@ -348,8 +403,8 @@ function openPanel(uid) {
 }
 
 function closePanel() {
-    document.getElementById('overlay').classList.remove('show');
     document.getElementById('userPanel').classList.remove('open');
+    document.getElementById('overlay').classList.remove('show');
 }
 
 window.onload = initCharts;
