@@ -939,11 +939,19 @@ def id_finder_update_admin_permissions():
 def id_finder_analytics():
     sys.stdout.write("--- [DEBUG] Entered id_finder_analytics ---\n")
     sys.stdout.flush()
+    def fmt_dt(d):
+        if not d: return ""
+        if isinstance(d, str): return d
+        return d.strftime('%d.%m')
     try:
+        now = datetime.utcnow()
+        cutoff = now - timedelta(days=365) # Fallback for growth
         try:
             days = int(request.args.get('days') or 7)
         except ValueError:
             days = 7
+        if days > 0:
+            cutoff = now - timedelta(days=days)
 
         try:
             month = int(request.args.get('month') or 0)
@@ -955,13 +963,11 @@ def id_finder_analytics():
         query_filter = true()
         
         # Handle time filtering
-        now = datetime.utcnow()
         if year > 0 and month > 0:
             query_filter = (extract('year', IDFinderMessage.timestamp) == year) & (extract('month', IDFinderMessage.timestamp) == month)
         elif year > 0:
             query_filter = extract('year', IDFinderMessage.timestamp) == year
         elif days > 0:
-            cutoff = now - timedelta(days=days)
             query_filter = IDFinderMessage.timestamp >= cutoff
 
         sys.stdout.write(f"--- [DEBUG] Filter set. Days={days}, Month={month}, Year={year} ---\n")
@@ -1139,31 +1145,74 @@ def id_finder_user_activity(uid):
 
         now = datetime.utcnow()
         cutoff = now - timedelta(days=days)
-        
         timeline_query = db.session.query(
             func.date(IDFinderMessage.timestamp).label('date'),
             func.count(IDFinderMessage.id).label('count')
         ).filter(IDFinderMessage.telegram_user_id == uid, IDFinderMessage.timestamp >= cutoff) \
          .group_by('date').order_by('date').all()
-
-        date_map = {fmt_dt(row.date): row.count for row in timeline_query if row.date}
-        
+        date_map = {row.date.strftime('%d.%m') if hasattr(row.date, 'strftime') else str(row.date): row.count for row in timeline_query if row.date}
         total_data = []
         for i in range(days-1, -1, -1):
             d_str = (now - timedelta(days=i)).strftime('%d.%m')
             total_data.append(date_map.get(d_str, 0))
-
         return jsonify({"timeline": total_data})
     except Exception as e:
-        err_msg = f"\n--- User Activity Error [{datetime.now()}] ---\n{traceback.format_exc()}\n"
-        sys.stderr.write(err_msg)
-        error_file = os.path.join(PROJECT_ROOT, "logs", "dashboard_error.log")
-        try:
-            os.makedirs(os.path.dirname(error_file), exist_ok=True)
-            with open(error_file, "a", encoding="utf-8") as f:
-                f.write(err_msg)
-        except: pass
-        raise e
+        sys.stderr.write(f"Error in user-activity API: {e}\n")
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/api/id-finder/user-details/<int:uid>')
+def id_finder_user_details(uid):
+    try:
+        from ..models import IDFinderUser, IDFinderMessage, TopicMapping
+        user = IDFinderUser.query.filter_by(telegram_id=uid).first()
+        if not user: return jsonify({'error': 'User not found'}), 404
+        
+        # Stats
+        total_msgs = IDFinderMessage.query.filter_by(telegram_user_id=uid).count()
+        total_media = IDFinderMessage.query.filter(IDFinderMessage.telegram_user_id == uid, IDFinderMessage.content_type != 'text').count()
+        active_days = db.session.query(func.date(IDFinderMessage.timestamp)).filter_by(telegram_user_id=uid).distinct().count() or 1
+        
+        # Timeline (14 days)
+        now = datetime.utcnow()
+        cutoff_14 = now - timedelta(days=14)
+        tl_query = db.session.query(
+            func.date(IDFinderMessage.timestamp).label('date'),
+            func.count(IDFinderMessage.id).label('count')
+        ).filter(IDFinderMessage.telegram_user_id == uid, IDFinderMessage.timestamp >= cutoff_14) \
+         .group_by('date').all()
+        tl_map = {row.date.strftime('%d.%m') if hasattr(row.date, 'strftime') else str(row.date): row.count for row in tl_query}
+        tl_labels = []; tl_data = []
+        for i in range(13, -1, -1):
+            d_str = (now - timedelta(days=i)).strftime('%d.%m')
+            tl_labels.append(d_str); tl_data.append(tl_map.get(d_str, 0))
+            
+        # Topics
+        topic_query = db.session.query(IDFinderMessage.topic_id, func.count(IDFinderMessage.id).label('count')) \
+                       .filter_by(telegram_user_id=uid).group_by(IDFinderMessage.topic_id).order_by(text('count DESC')).limit(5).all()
+        topics = []
+        for tid, count in topic_query:
+            t_name = TopicMapping.query.filter_by(topic_id=str(tid)).first().topic_name if tid and TopicMapping.query.filter_by(topic_id=str(tid)).first() else f"Topic {tid}" if tid else "Hauptgruppe"
+            topics.append({'name': t_name, 'count': count})
+            
+        # Recent messages
+        recent = IDFinderMessage.query.filter_by(telegram_user_id=uid).order_by(IDFinderMessage.timestamp.desc()).limit(5).all()
+        msgs = [{'text': (m.text[:100] + '...') if m.text and len(m.text) > 100 else (m.text or f"[{m.content_type}]"), 'time': m.timestamp.strftime('%d.%m. %H:%M'), 'type': m.content_type or 'text'} for m in recent]
+        
+        # Rank
+        rank_query = db.session.query(IDFinderMessage.telegram_user_id, func.count(IDFinderMessage.id).label('c')).group_by(IDFinderMessage.telegram_user_id).order_by(text('c DESC')).all()
+        rank = next((i + 1 for i, r in enumerate(rank_query) if r.telegram_user_id == uid), 0)
+
+        return jsonify({
+            'name': user.first_name or "Unbekannt", 'username': user.username or f"ID: {uid}", 'uid': str(uid),
+            'msgs': total_msgs, 'media': total_media, 'days': active_days, 'rank': rank,
+            'joined': user.created_at.strftime('%d.%m.%Y') if user.created_at else "—",
+            'last_active': msgs[0]['time'] if msgs else "—",
+            'timeline': {'labels': tl_labels, 'data': tl_data},
+            'topics': topics, 'recent': msgs
+        })
+    except Exception as e:
+        sys.stderr.write(f"Error in user-details API: {e}\n{traceback.format_exc()}\n")
+        return jsonify({'error': str(e)}), 500
 
 # --- USER MANAGEMENT ---
 @bp.route('/users')
@@ -1721,6 +1770,38 @@ def upload_backup():
         
     except Exception as e:
         logger.error(f"Error restoring backup: {e}")
+
+@bp.route('/api/id-finder/user-activity/<int:uid>')
+def id_finder_user_activity(uid):
+    try:
+        from ..models import IDFinderMessage
+        from datetime import datetime, timedelta
+        from sqlalchemy import func
+        now = datetime.utcnow()
+        try:
+            days = int(request.args.get('days') or 7)
+        except ValueError:
+            days = 7
+        cutoff = now - timedelta(days=days)
+        
+        timeline_query = db.session.query(
+            func.date(IDFinderMessage.timestamp).label('date'),
+            func.count(IDFinderMessage.id).label('count')
+        ).filter(IDFinderMessage.telegram_user_id == uid, IDFinderMessage.timestamp >= cutoff) \
+         .group_by('date').order_by('date').all()
+
+        date_map = {row.date.strftime('%d.%m') if hasattr(row.date, 'strftime') else str(row.date): row.count for row in timeline_query if row.date}
+        
+        total_data = []
+        for i in range(days-1, -1, -1):
+            d_str = (now - timedelta(days=i)).strftime('%d.%m')
+            total_data.append(date_map.get(d_str, 0))
+
+        return jsonify({"timeline": total_data})
+    except Exception as e:
+        import sys
+        sys.stderr.write(f"Error for user activity API: {e}\n")
+        return jsonify({'error': str(e)}), 500
 
 @bp.route('/api/event/create', methods=['POST'])
 @login_required
