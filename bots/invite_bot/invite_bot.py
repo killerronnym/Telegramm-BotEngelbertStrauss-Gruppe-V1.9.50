@@ -747,6 +747,8 @@ async def post_profile(bot, profile_data: Dict[str, Any], is_approval_post: bool
                 "parse_mode": "HTML"
             })
             msg = await bot.send_message(**kwargs)
+        
+        logger.info(f"post_profile SUCCESS: {profile_data.get('user_id')} in {target_chat_id}")
         return msg  # Gibt das Message-Objekt zurück (mit .message_id)
     except Exception as e:
         logger.error(f"post_profile Error in {target_chat_id}: {e}")

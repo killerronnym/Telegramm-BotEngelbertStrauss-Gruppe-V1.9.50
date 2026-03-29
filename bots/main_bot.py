@@ -337,7 +337,7 @@ def main():
     from telegram.ext import TypeHandler, ChatMemberHandler
     app.add_handler(TypeHandler(Update, global_block_check), group=-100)
     app.add_handler(ChatMemberHandler(global_chat_member_logger, ChatMemberHandler.CHAT_MEMBER), group=-2)
-    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, global_message_logger), group=0)
+    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, global_message_logger), group=10)
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, auto_admin_on_join), group=-1)
     app.add_handler(CommandHandler("activate", activate_command))
 
