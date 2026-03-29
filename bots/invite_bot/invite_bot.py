@@ -1588,8 +1588,32 @@ async def handle_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         for i, f in enumerate(fields):
             if f['id'] == field_id:
                 context.user_data['current_field_index'] = i
+                
+                label = f.get('label', 'Frage?')
+                ftype = f.get('type', 'text').lower()
+                keyboard = None
+                
+                if ftype in ['boolean_buttons', 'header_name', 'pm_contact', 'birthday']:
+                    if ftype == 'header_name':
+                        label = "Soll dein Telegram-Name im Steckbrief angezeigt werden?"
+                    elif ftype == 'pm_contact':
+                        label = "Darf man dich privat anschreiben?"
+                    elif ftype == 'birthday':
+                        label = "Möchtest du dein Geburtsdatum hinzufügen? (Für Glückwünsche, nur dein Alter wird im Steckbrief gezeigt)"
+                        
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("✅ JA", callback_data="bool_ans_yes"),
+                         InlineKeyboardButton("❌ NEIN", callback_data="bool_ans_no")]
+                    ])
+                elif not f.get('required'):
+                    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏭️ Überspringen / Nein", callback_data="skip_field")]])
+                    
                 # Frage stellen
-                await query.edit_message_text(f"Bitte gib einen neuen Wert für <b>{f['display_name']}</b> ein:\n\n{f['label']}", parse_mode="HTML")
+                await query.edit_message_text(
+                    f"Bitte gib einen neuen Wert für <b>{f.get('display_name', f['id'])}</b> ein:\n\n{label}", 
+                    reply_markup=keyboard,
+                    parse_mode="HTML"
+                )
                 return ASKING_QUESTIONS
                 
     elif data == "edit_more_yes":
