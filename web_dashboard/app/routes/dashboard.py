@@ -945,13 +945,14 @@ def id_finder_analytics():
     sys.stdout.flush()
     def fmt_dt(d):
         if not d: return ""
-        if isinstance(d, str):
-            if len(d) == 10 and d[4] == '-' and d[7] == '-': # YYYY-MM-DD
-                try:
-                    return f"{d[8:10]}.{d[5:7]}"
-                except: return d
-            return d
-        return d.strftime('%d.%m')
+        try:
+            if isinstance(d, str):
+                if '-' in d and len(d) >= 10: # YYYY-MM-DD...
+                    parts = d.split('-')
+                    return f"{parts[2][:2]}.{parts[1]}"
+                return d
+            return d.strftime('%d.%m')
+        except: return str(d)
     try:
         now = datetime.utcnow()
         cutoff = now - timedelta(days=365) # Fallback for growth
@@ -1116,7 +1117,7 @@ def id_finder_analytics():
         
         joins_leaves = InviteLog.query.filter(
             InviteLog.action.ilike('%beigetreten%') | InviteLog.action.ilike('%verlassen%') | InviteLog.action.ilike('%entfernt%')
-        ).order_by(InviteLog.timestamp.desc()).all()
+        ).order_by(InviteLog.timestamp.desc()).limit(50).all()
 
         return render_template('id_finder_analytics.html', 
                                 stats={
@@ -1131,7 +1132,7 @@ def id_finder_analytics():
                                     'leaderboard': leaderboard, 
                                     'busiest_hours': busiest_hours, 
                                     'busiest_days': busiest_days,
-                                    'growth': {'labels': growth_labels, 'net': growth_net},
+                                    'growth': {'labels': growth_labels, 'net': growth_net, 'joins': [date_map_joins.get(l, 0) for l in growth_labels], 'leaves': [date_map_leaves.get(l, 0) for l in growth_labels]},
                                     'heatmap': heatmap_matrix
                                 })
     except Exception as e:
@@ -1202,8 +1203,15 @@ def id_finder_user_details(uid):
             'recent': msgs
         })
     except Exception as e:
+        import traceback
         sys.stderr.write(f"Error in user-details API: {e}\n{traceback.format_exc()}\n")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'name': 'Fehler', 'username': 'error', 'uid': str(uid),
+            'msgs': 0, 'media': 0, 'days': 0, 'rank': 0,
+            'joined': '—', 'last_active': '—',
+            'timeline': {'labels': [], 'data': []},
+            'topics': [], 'recent': []
+        }), 200 # Return 200 with empty data to avoid JS crash
 
 @bp.route('/id-finder/profiles')
 @login_required
