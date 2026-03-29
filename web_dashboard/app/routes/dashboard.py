@@ -1051,7 +1051,7 @@ def id_finder_analytics():
         from ..models import InviteLog
         joins_leaves = InviteLog.query.filter(
             InviteLog.action.ilike('%beigetreten%') | InviteLog.action.ilike('%verlassen%') | InviteLog.action.ilike('%entfernt%')
-        ).order_by(InviteLog.timestamp.desc()).limit(50).all()
+        ).order_by(InviteLog.timestamp.desc()).all()
 
         return render_template('id_finder_analytics.html', 
                                stats={'total_users': total_users}, 
@@ -1938,4 +1938,18 @@ def profile_edit(profile_id):
             flash('Steckbrief erfolgreich bearbeitet! Vergiss nicht, ihn neu zu posten, damit die Änderungen live gehen!', 'success')
         except Exception as e:
             flash(f'Fehler beim Speichern der Antworten: {e}', 'danger')
+    return redirect(url_for('dashboard.bot_settings'))
+
+@bp.route('/bot-settings/profile/delete/<int:profile_id>', methods=['POST'])
+@login_required
+def profile_delete(profile_id):
+    from ..models import InviteApplication
+    app = InviteApplication.query.get(profile_id)
+    if app:
+        try:
+            db.session.delete(app)
+            db.session.commit()
+            flash('Steckbrief erfolgreich gelöscht.', 'success')
+        except Exception as e:
+            flash(f'Fehler beim Löschen des Steckbriefs: {e}', 'danger')
     return redirect(url_for('dashboard.bot_settings'))

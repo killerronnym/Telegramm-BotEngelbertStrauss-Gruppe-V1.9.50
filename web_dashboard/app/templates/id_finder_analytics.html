@@ -143,16 +143,28 @@
         </div>
     </div>
 
+    <!-- Rest of the Analytics Content -->
+    <div class="row g-4 mb-5">
+        <div class="col-lg-6">
+            <div class="card"><div class="card-header"><h6>Häufigste Uhrzeiten</h6></div><div class="card-body"><div class="chart-container" style="height: 250px;"><canvas id="gaHoursCanvas"></canvas></div></div></div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card"><div class="card-header"><h6>Häufigste Wochentage</h6></div><div class="card-body"><div class="chart-container" style="height: 250px;"><canvas id="gaWeekdaysCanvas"></canvas></div></div></div>
+        </div>
+    </div>
+
     <!-- Members Joined / Left History -->
     <div class="row g-4 mb-5">
         <div class="col-12">
             <div class="card h-100">
-                <div class="card-header">
-                    <h6>Kommen & Gehen (Letzte 50 Ereignisse)</h6>
-                    <p class="small text-dim mb-0">Übersicht aller Beitritte und Austritte der User.</p>
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6>Kommen & Gehen (Alle Ereignisse)</h6>
+                        <p class="small text-dim mb-0">Übersicht aller Beitritte und Austritte der User.</p>
+                    </div>
                 </div>
                 <div class="card-body p-0">
-                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
                         <table class="table table-dark table-hover mb-0">
                             <thead class="sticky-top" style="background: #1e293b; z-index: 1;">
                                 <tr>
@@ -167,8 +179,13 @@
                                 <tr>
                                     <td class="ps-4 text-dim small">{{ log.timestamp.strftime('%d.%m.%Y %H:%M') }}</td>
                                     <td>
-                                        <div class="fw-bold text-white">@{{ log.username or 'Unbekannt' }}</div>
-                                        <div class="small text-dim font-monospace">ID: {{ log.telegram_user_id }}</div>
+                                        <div class="d-flex align-items-center gap-3">
+                                            <img src="/api/avatar/{{ log.telegram_user_id }}" class="ga-avatar" style="width: 32px; height: 32px;" onerror="this.src='https://ui-avatars.com/api/?name={{ log.username or log.telegram_user_id }}&background=random&color=fff'">
+                                            <div>
+                                                <div class="fw-bold text-white">@{{ log.username or 'Unbekannt' }}</div>
+                                                <div class="small text-dim font-monospace">ID: {{ log.telegram_user_id }}</div>
+                                            </div>
+                                        </div>
                                     </td>
                                     <td>
                                         {% if 'beigetreten' in log.action.lower() %}
@@ -191,16 +208,6 @@
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
-
-    <!-- Rest of the Analytics Content -->
-    <div class="row g-4 mb-5">
-        <div class="col-lg-6">
-            <div class="card"><div class="card-header"><h6>Häufigste Uhrzeiten</h6></div><div class="card-body"><div class="chart-container" style="height: 250px;"><canvas id="gaHoursCanvas"></canvas></div></div></div>
-        </div>
-        <div class="col-lg-6">
-            <div class="card"><div class="card-header"><h6>Häufigste Wochentage</h6></div><div class="card-body"><div class="chart-container" style="height: 250px;"><canvas id="gaWeekdaysCanvas"></canvas></div></div></div>
         </div>
     </div>
 </div>

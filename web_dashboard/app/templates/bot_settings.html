@@ -667,7 +667,7 @@
                                 <table class="table table-dark table-hover align-middle mb-0">
                                     <thead style="position: sticky; top: 0; background: #1e293b; z-index: 1;">
                                         <tr>
-                                            <th class="small text-secondary fw-bold text-center">ID</th>
+                                            <th class="small text-secondary fw-bold text-center" style="width: 60px;">ID</th>
                                             <th class="small text-secondary fw-bold">TELEGRAM USER</th>
                                             <th class="small text-secondary fw-bold">STATUS</th>
                                             <th class="small text-secondary fw-bold">LETZTES UPDATE</th>
@@ -680,28 +680,38 @@
                                         <tr>
                                             <td class="text-center font-monospace small text-white-50">{{ p.id }}</td>
                                             <td>
-                                                <div class="fw-bold text-white">{{ p.full_name or 'Unbekannt' }}</div>
-                                                <div class="small text-info">@{{ p.username or p.telegram_user_id }}</div>
+                                                <div class="d-flex align-items-center gap-3">
+                                                    <img src="/api/avatar/{{ p.telegram_user_id }}" class="ga-avatar" style="width: 40px; height: 40px; border-radius: 8px;" onerror="this.src='https://ui-avatars.com/api/?name={{ p.full_name or p.username }}&background=random&color=fff'">
+                                                    <div>
+                                                        <div class="fw-bold text-white">{{ p.full_name or 'Unbekannt' }}</div>
+                                                        <div class="small text-info">@{{ p.username or p.telegram_user_id }}</div>
+                                                    </div>
+                                                </div>
                                             </td>
                                             <td>
                                                 {% if p.status == 'completed' or p.status == 'accepted' %}
-                                                <span class="badge bg-success">Aktiv</span>
+                                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">AKTIV</span>
                                                 {% elif p.status == 'pending' or p.status == 'pending_existing' %}
-                                                <span class="badge bg-warning text-dark">Wartet</span>
+                                                <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">WARTET</span>
                                                 {% else %}
-                                                <span class="badge bg-secondary">{{ p.status }}</span>
+                                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">{{ p.status|upper }}</span>
                                                 {% endif %}
                                             </td>
                                             <td class="small opacity-75">{{ p.updated_at.strftime('%d.%m.%Y %H:%M') if p.updated_at else 'Unbekannt' }}</td>
                                             <td class="text-end pe-4">
                                                 <div class="d-flex justify-content-end gap-2">
                                                     <button class="btn btn-outline-light btn-sm border-0 view-profile-btn"
-                                                        data-id="{{ p.id }}" data-answers='{{ p.answers_json|safe }}' data-name="{{ p.full_name or p.username }}">
-                                                        <i class="bi bi-eye"></i> Bearbeiten
+                                                        data-id="{{ p.id }}" data-answers='{{ p.answers_json|safe }}' data-name="{{ p.full_name or p.username }}" title="Bearbeiten">
+                                                        <i class="bi bi-pencil-square"></i>
                                                     </button>
                                                     <form action="{{ url_for('dashboard.profile_repost', profile_id=p.id) }}" method="POST" style="display:inline;">
-                                                        <button type="submit" class="btn btn-outline-primary btn-sm border-0" title="Erneut Posten" onclick="return confirm('Steckbrief wirklich nochmal neu in die Gruppe posten? Der Chat-Eintrag wird komplett neu erstellt.');">
+                                                        <button type="submit" class="btn btn-outline-primary btn-sm border-0" title="Erneut Posten" onclick="return confirm('Steckbrief wirklich nochmal neu in die Gruppe posten?');">
                                                             <i class="bi bi-send-fill"></i>
+                                                        </button>
+                                                    </form>
+                                                    <form action="{{ url_for('dashboard.profile_delete', profile_id=p.id) }}" method="POST" style="display:inline;">
+                                                        <button type="submit" class="btn btn-outline-danger btn-sm border-0" title="Löschen" onclick="return confirm('Steckbrief wirklich unwiderruflich aus der Datenbank löschen?');">
+                                                            <i class="bi bi-trash3"></i>
                                                         </button>
                                                     </form>
                                                 </div>
