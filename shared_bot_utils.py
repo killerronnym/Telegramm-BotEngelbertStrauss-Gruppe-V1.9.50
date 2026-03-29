@@ -168,3 +168,16 @@ def get_shared_flask_app():
         from web_dashboard.app import create_app
         _SHARED_FLASK_APP = create_app()
     return _SHARED_FLASK_APP
+
+def log_user_interaction(user_id, username, action):
+    """Loggt eine User-Interaktion für das Analytics Dashboard."""
+    try:
+        from web_dashboard.app.models import db, InviteLog
+        app = get_shared_flask_app()
+        with app.app_context():
+            log = InviteLog(telegram_user_id=user_id, username=username or "Unknown", action=action)
+            db.session.add(log)
+            db.session.commit()
+            print(f"Analytics: Logged {action} for {username} ({user_id})")
+    except Exception as e:
+        sys.stderr.write(f"ERROR: log_user_interaction({user_id}, {username}, {action}): {e}\n")

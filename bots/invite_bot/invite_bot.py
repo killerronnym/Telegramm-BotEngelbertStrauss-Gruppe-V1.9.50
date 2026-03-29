@@ -53,15 +53,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Globale Variablen komplett ausgebaut, Nutzung von SQLite DB!
-
-def log_user_interaction(user_id, username, message_text):
-    try:
-        with flask_app.app_context():
-            log_entry = InviteLog(telegram_user_id=user_id, username=username or "Unknown", action=message_text)
-            db.session.add(log_entry)
-            db.session.commit()
-    except Exception as e:
-        logger.error(f"Fehler beim Schreiben in die Datenbank (InviteLog): {e}")
+# log_user_interaction wird aus shared_bot_utils importiert
 
 # Conversation States
 ASKING_QUESTIONS, CONFIRMING_RULES, WAITING_FOR_SOCIAL_DECISION, SELECTING_SOCIAL_PLATFORM, WAITING_FOR_LINK_VERIFICATION = range(5)
@@ -709,50 +701,6 @@ async def handle_social_decision(update: Update, context: ContextTypes.DEFAULT_T
             
         return await next_question(update, context)
 
-def save_birthday_from_answers(user, answers, fields, chat_id, topic_id=None):
-    """Sucht nach einem Birthday-Feld in den Antworten und speichert es in der Birthday-Tabelle."""
-    if not Birthday: return
-    
-    birthday_field = next((f for f in fields if f['type'] == 'birthday'), None)
-    if not birthday_field: return
-    
-    val = answers.get(birthday_field['id'])
-    if not val or val.lower() in ['nein', 'n/a']: return
-    
-    # Format: 15.08. oder 15.08.1990
-    date_pattern = re.compile(r'^(\d{1,2})[\s\.]+(\d{1,2})(?:[\s\.]+(\d{4}))?\.?$')
-    match = date_pattern.match(val)
-    if not match: return
-    
-    day = int(match.group(1))
-    month = int(match.group(2))
-    year = int(match.group(3)) if match.group(3) else None
-    
-    try:
-        # User in DB sicherstellen (analog zu birthday_bot)
-        id_user = IDFinderUser.query.filter_by(telegram_id=user.id).first()
-        if not id_user:
-            id_user = IDFinderUser(telegram_id=user.id, first_name=user.first_name, username=user.username)
-            db.session.add(id_user)
-
-        birthday = Birthday.query.filter_by(telegram_user_id=user.id).first()
-        if birthday:
-            birthday.day, birthday.month, birthday.year = day, month, year
-            birthday.chat_id, birthday.username, birthday.first_name = chat_id, user.username, user.first_name
-            birthday.topic_id = topic_id
-        else:
-            birthday = Birthday(
-                telegram_user_id=user.id, chat_id=chat_id,
-                topic_id=topic_id,
-                username=user.username, first_name=user.first_name,
-                day=day, month=month, year=year
-            )
-            db.session.add(birthday)
-        db.session.commit()
-        logger.info(f"Birthday for user {user.id} saved automatically from Steckbrief.")
-    except Exception as e:
-        logger.error(f"Error saving birthday from Steckbrief: {e}")
-
 async def post_profile(bot, profile_data: Dict[str, Any], is_approval_post: bool = False):
     target_chat_id = profile_data['target_chat_id']
     kwargs = {"chat_id": target_chat_id}
@@ -785,36 +733,34 @@ async def post_profile(bot, profile_data: Dict[str, Any], is_approval_post: bool
 def save_birthday_from_answers(user, answers, ordered_fields, target_chat_id, topic_id):
     """Sucht nach Geburtstagsfeldern und speichert diese in der Birthday-Tabelle."""
     try:
-        # Falls user ein PseudoUser ist (aus den Callbacks), brauchen wir trotzdem id und name
         user_id = user.id
-        username = user.username or "Nutzer"
+        username = getattr(user, 'username', 'Nutzer') or "Nutzer"
         first_name = getattr(user, 'first_name', getattr(user, 'full_name', "Nutzer"))
         
-        for field in ordered_fields:
+        for field in (ordered_fields or []):
             if field.get('type') == 'birthday':
                 val = answers.get(field['id'])
                 if not val or val == 'n/a': continue
                 
-                # Datum parsen (DD.MM.YYYY)
                 date_pattern = re.compile(r'^(\d{1,2})[\s\.](\d{1,2})[\s\.](\d{4})\.?$')
                 match = date_pattern.match(str(val).strip())
                 if match:
                     d, m, y = int(match.group(1)), int(match.group(2)), int(match.group(3))
                     
-                    # In DB speichern/auslesen
-                    existing = Birthday.query.filter_by(telegram_user_id=user_id).first()
-                    if existing:
-                        existing.day, existing.month, existing.year = d, m, y
-                        existing.chat_id, existing.topic_id = target_chat_id, topic_id
-                        existing.username, existing.first_name = username, first_name
-                    else:
-                        new_b = Birthday(
-                            telegram_user_id=user_id, day=d, month=m, year=y,
-                            chat_id=target_chat_id, topic_id=topic_id,
-                            username=username, first_name=first_name
-                        )
-                        db.session.add(new_b)
-                    db.session.commit()
+                    with flask_app.app_context():
+                        existing = Birthday.query.filter_by(telegram_user_id=user_id).first()
+                        if existing:
+                            existing.day, existing.month, existing.year = d, m, y
+                            existing.chat_id, existing.topic_id = target_chat_id, topic_id
+                            existing.username, existing.first_name = username, first_name
+                        else:
+                            new_b = Birthday(
+                                telegram_user_id=user_id, day=d, month=m, year=y,
+                                chat_id=target_chat_id, topic_id=topic_id,
+                                username=username, first_name=first_name
+                            )
+                            db.session.add(new_b)
+                        db.session.commit()
                     logger.info(f"Geburtstag für {user_id} gespeichert: {d}.{m}.{y}")
     except Exception as e:
         logger.error(f"Error in save_birthday_from_answers: {e}")
@@ -904,41 +850,6 @@ def generate_profile_text(user: User, answers: Dict[str, Any], ordered_fields: L
         
     return final_text, has_actual_data
 
-def save_birthday_from_answers(user, answers, ordered_fields, target_chat_id, topic_id):
-    """Sucht nach Geburtstagsfeldern und speichert diese in der Birthday-Tabelle."""
-    try:
-        user_id = user.id
-        username = getattr(user, 'username', 'Nutzer') or "Nutzer"
-        first_name = getattr(user, 'first_name', getattr(user, 'full_name', "Nutzer"))
-        
-        for field in (ordered_fields or []):
-            if field.get('type') == 'birthday':
-                val = answers.get(field['id'])
-                if not val or val == 'n/a': continue
-                
-                date_pattern = re.compile(r'^(\d{1,2})[\s\.](\d{1,2})[\s\.](\d{4})\.?$')
-                match = date_pattern.match(str(val).strip())
-                if match:
-                    d, m, y = int(match.group(1)), int(match.group(2)), int(match.group(3))
-                    
-                    with flask_app.app_context():
-                        existing = Birthday.query.filter_by(telegram_user_id=user_id).first()
-                        if existing:
-                            existing.day, existing.month, existing.year = d, m, y
-                            existing.chat_id, existing.topic_id = target_chat_id, topic_id
-                            existing.username, existing.first_name = username, first_name
-                        else:
-                            new_b = Birthday(
-                                telegram_user_id=user_id, day=d, month=m, year=y,
-                                chat_id=target_chat_id, topic_id=topic_id,
-                                username=username, first_name=first_name
-                            )
-                            db.session.add(new_b)
-                        db.session.commit()
-                    logger.info(f"Geburtstag für {user_id} gespeichert: {d}.{m}.{y}")
-    except Exception as e:
-        logger.error(f"Error in save_birthday_from_answers: {e}")
-
 async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, force_profile_data=None) -> int:
     """Wird aufgerufen, wenn der User die Regeln akzeptiert hat ODER wenn ein Profil finalisiert wurde."""
     try:
@@ -1015,8 +926,7 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
 
         # Geburtstag sofort in der DB speichern (unabhängig von Whitelist-Status)
         try:
-            with flask_app.app_context():
-                save_birthday_from_answers(user, answers, ordered_fields, target_chat_id, config.get('topic_id'))
+            save_birthday_from_answers(user, answers, ordered_fields, target_chat_id, config.get('topic_id'))
         except Exception as e:
             logger.error(f"Fehler beim automatischen Speichern des Geburtstags: {e}")
 
@@ -1365,6 +1275,7 @@ async def handle_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if not update.chat_member or not update.chat_member.new_chat_member or update.chat_member.new_chat_member.status != "member":
         return
 
+    user_id = update.chat_member.new_chat_member.user.id
     user_username = update.chat_member.new_chat_member.user.username or str(user_id)
     
     # Für Analytics (Dashboard) loggen:
@@ -1422,45 +1333,64 @@ async def handle_member_left(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """Löscht automatisch den Steckbrief wenn ein User die Gruppe verlässt."""
     user_id = None
     username = None
+    action_type = "Austritt"
     
-    # Check if called from ChatMemberHandler
-    if update.chat_member and update.chat_member.new_chat_member:
-        new_status = update.chat_member.new_chat_member.status
-        if new_status in ["left", "kicked"]:
-            user_id = update.chat_member.new_chat_member.user.id
-            username = update.chat_member.new_chat_member.user.username or str(user_id)
+    # Check if called from ChatMemberHandler (Modern API)
+    if update.chat_member:
+        cm = update.chat_member
+        # Wir interessieren uns nur für Statusänderungen zu "left" oder "kicked"
+        if cm.new_chat_member.status in ["left", "kicked"]:
+            user_id = cm.new_chat_member.user.id
+            username = cm.new_chat_member.user.username or cm.new_chat_member.user.first_name or str(user_id)
+            action_type = "verlassen" if cm.new_chat_member.status == "left" else "entfernt"
             
-    # Check if called from MessageHandler (Service Message)
+    # Check if called from MessageHandler (Service Message Fallback)
     elif update.message and update.message.left_chat_member:
         user_id = update.message.left_chat_member.id
-        username = update.message.left_chat_member.username or str(user_id)
-        
+        username = update.message.left_chat_member.username or update.message.left_chat_member.first_name or str(user_id)
+        action_type = "verlassen (Service Msg)"
+
     if not user_id:
         return
     
-    logger.info(f"handle_member_left: User @{username} ({user_id}) hat die Gruppe verlassen. Prüfe Steckbrief...")
+    msg_log = f"Mitglied @{username} ({user_id}) hat die Gruppe {action_type}."
+    logger.info(f"handle_member_left: {msg_log} Prüfe Steckbrief-Löschung...")
     
     # Für Analytics (Dashboard) loggen:
-    log_user_interaction(user_id, username, "Mitglied hat die Gruppe verlassen.")
+    log_user_interaction(user_id, username, f"Mitglied hat die Gruppe {action_type}.")
     
     with flask_app.app_context():
-        application = InviteApplication.query.filter_by(telegram_user_id=user_id).first()
-        if not application:
+        # Suche alle aktiven Bewerbungen dieses Users
+        apps = InviteApplication.query.filter_by(telegram_user_id=user_id).all()
+        if not apps:
+            logger.info(f"Keine Steckbrief-Daten für User {user_id} gefunden.")
             return
         
-        msg_id = application.profile_message_id
-        chat_id = application.profile_chat_id
+        deleted_count = 0
+        for app in apps:
+            msg_id = app.profile_message_id
+            chat_id = app.profile_chat_id
+            
+            if msg_id and chat_id:
+                try:
+                    await context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
+                    app.profile_message_id = None  # Als gelöscht markieren im Datensatz
+                    deleted_count += 1
+                    logger.info(f"Steckbrief (msg_id {msg_id}) von @{username} erfolgreich gelöscht.")
+                except BadRequest as e:
+                    if "Message to delete not found" in str(e):
+                        app.profile_message_id = None # Nachricht existiert sowieso nicht mehr
+                        logger.warning(f"Steckbrief {msg_id} existierte bereits nicht mehr auf Telegram.")
+                    else:
+                        logger.error(f"Telegram-Fehler beim Löschen von Steckbrief {msg_id}: {e}")
+                except Exception as e:
+                    logger.error(f"Unbekannter Fehler beim Löschen von Steckbrief {msg_id}: {e}")
         
-        if msg_id and chat_id:
-            try:
-                await context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
-                application.profile_message_id = None  # Gelöscht markieren
-                db.session.commit()
-                logger.info(f"handle_member_left: Steckbrief von @{username} (msg_id {msg_id}) erfolgreich gelöscht.")
-            except Exception as e:
-                logger.warning(f"handle_member_left: Konnte Steckbrief nicht löschen (msg_id {msg_id}): {e}")
+        if deleted_count > 0:
+            db.session.commit()
+            logger.info(f"Insgesamt {deleted_count} Steckbrief(e) für {username} entfernt.")
         else:
-            logger.info(f"handle_member_left: Kein Steckbrief-message_id gespeichert für @{username}.")
+            logger.info("Keine aktiven Steckbrief-IDs zum Löschen gefunden.")
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Prozess abgebrochen.")

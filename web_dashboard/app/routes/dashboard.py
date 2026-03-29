@@ -1214,6 +1214,67 @@ def id_finder_user_details(uid):
         sys.stderr.write(f"Error in user-details API: {e}\n{traceback.format_exc()}\n")
         return jsonify({'error': str(e)}), 500
 
+@bp.route('/id-finder/profiles')
+@login_required
+def id_finder_profiles():
+    from ..models import InviteApplication, InviteLog
+    apps = InviteApplication.query.order_by(InviteApplication.created_at.desc()).all()
+    # Wir fügen den beigetreten-Status hinzu (aus den Logs)
+    joined_users = {log.telegram_user_id: True for log in InviteLog.query.filter(InviteLog.action.ilike('%beigetreten%')).all()}
+    
+    profiles = []
+    for app in apps:
+        answers = app.answers or {}
+        # Foto-Feld finden
+        photo_id = None
+        for a_val in answers.values():
+            if isinstance(a_val, str) and len(a_val) > 30 and (a_val.startswith('AgA') or a_val.startswith('file')): 
+                photo_id = a_val
+                break
+        
+        profiles.append({
+            'id': app.id,
+            'telegram_id': app.telegram_user_id,
+            'username': app.username,
+            'name': app.full_name,
+            'status': app.status,
+            'photo_id': photo_id,
+            'joined': joined_users.get(app.telegram_user_id, False),
+            'created_at': app.created_at.strftime('%d.%m.%Y %H:%M') if app.created_at else "—"
+        })
+    return render_template('id_finder_profiles.html', profiles=profiles)
+
+@bp.route('/id-finder/profiles/delete/<int:pid>', methods=['POST'])
+@login_required
+def delete_profile(pid):
+    from ..models import InviteApplication
+    app = InviteApplication.query.get(pid)
+    if app:
+        db.session.delete(app)
+        db.session.commit()
+        return jsonify({'success': True})
+    return jsonify({'success': False, 'error': 'Not found'}), 404
+
+@bp.route('/api/telegram-image/<file_id>')
+@login_required
+def telegram_image(file_id):
+    # Einfacher Proxy für Telegram-Bilder
+    import requests
+    token = os.environ.get('TELEGRAM_BOT_TOKEN')
+    if not token: return "No Token", 500
+    
+    # Get File path
+    try:
+        r = requests.get(f"https://api.telegram.org/bot{token}/getFile?file_id={file_id}", timeout=5)
+        path = r.json().get('result', {}).get('file_path')
+        if not path: return "No Path", 404
+        
+        # Stream image
+        img_resp = requests.get(f"https://api.telegram.org/file/bot{token}/{path}", stream=True, timeout=10)
+        return (img_resp.content, 200, {'Content-Type': img_resp.headers.get('Content-Type')})
+    except:
+        return "Proxy Error", 500
+
 # --- USER MANAGEMENT ---
 @bp.route('/users')
 @login_required

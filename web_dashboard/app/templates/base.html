@@ -148,9 +148,20 @@
     {% if current_user.is_authenticated %}
     <nav class="navbar sticky-top">
         <div class="container d-flex justify-content-between align-items-center">
-            <a class="navbar-brand" href="{{ url_for('dashboard.index') }}">
-                <i class="bi bi-robot text-blue me-2"></i>BOT<span class="text-blue">STEUERUNG</span>
-            </a>
+            <div class="d-flex align-items-center gap-4">
+                <a class="navbar-brand m-0" href="{{ url_for('dashboard.index') }}">
+                    <i class="bi bi-robot text-blue me-2"></i>BOT<span class="text-blue">STEUERUNG</span>
+                </a>
+                <div class="vr bg-secondary opacity-25 d-none d-lg-block" style="height: 24px;"></div>
+                <div class="navbar-nav flex-row gap-3 d-none d-md-flex">
+                    <a class="nav-link small py-0" href="{{ url_for('dashboard.id_finder_analytics') }}">
+                        <i class="bi bi-graph-up me-1"></i> Analytics
+                    </a>
+                    <a class="nav-link small py-0" href="{{ url_for('dashboard.id_finder_profiles') }}">
+                        <i class="bi bi-people me-1"></i> Steckbriefe
+                    </a>
+                </div>
+            </div>
             <div class="d-flex align-items-center">
                 <div class="user-pill d-none d-md-flex">
                     <i class="bi bi-person-circle"></i>
