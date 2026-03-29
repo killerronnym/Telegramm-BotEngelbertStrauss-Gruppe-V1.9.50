@@ -563,6 +563,19 @@ async def handle_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     
     logger.info(f"handle_skip: User überspringt Feld {field['id']}")
     context.user_data['answers'][field['id']] = "n/a" # Oder leer lassen
+    
+    if context.user_data.get('is_editing'):
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 Weiter bearbeiten", callback_data="edit_more_yes"),
+             InlineKeyboardButton("✅ Bearbeitung beenden", callback_data="edit_more_no")]
+        ])
+        await query.edit_message_text(
+            f"✅ Feld <b>{field.get('display_name', field['id'])}</b> wurde aus dem Steckbrief entfernt (geleert).",
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+        return ASKING_QUESTIONS
+        
     return await next_question(update, context)
 
 async def next_question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -637,6 +650,9 @@ async def handle_social_platform_selection(update: Update, context: ContextTypes
     
     if field_id not in context.user_data['answers']:
         context.user_data['answers'][field_id] = []
+    elif not isinstance(context.user_data['answers'][field_id], list):
+        context.user_data['answers'][field_id] = [context.user_data['answers'][field_id]]
+        
     context.user_data['answers'][field_id].append({"name": platform_data["name"], "url": url})
     
     return await ask_link_verification(update, context, {"name": platform_data["name"], "url": url})
@@ -658,6 +674,19 @@ async def handle_social_decision_callback(update: Update, context: ContextTypes.
         return ASKING_QUESTIONS
     else:
         await query.edit_message_text("✅ Keine weiteren Links.")
+        
+        if context.user_data.get('is_editing'):
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔄 Weiter bearbeiten", callback_data="edit_more_yes"),
+                 InlineKeyboardButton("✅ Bearbeitung beenden", callback_data="edit_more_no")]
+            ])
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="✅ Deinen Link habe ich gespeichert.",
+                reply_markup=keyboard
+            )
+            return ASKING_QUESTIONS
+            
         return await next_question(update, context)
 
 async def handle_social_decision(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -670,6 +699,14 @@ async def handle_social_decision(update: Update, context: ContextTypes.DEFAULT_T
         await update.message.reply_text(fields[idx].get('label', 'Noch ein Link?'))
         return ASKING_QUESTIONS
     else:
+        if context.user_data.get('is_editing'):
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔄 Weiter bearbeiten", callback_data="edit_more_yes"),
+                 InlineKeyboardButton("✅ Bearbeitung beenden", callback_data="edit_more_no")]
+            ])
+            await update.message.reply_text("✅ Deinen Link habe ich gespeichert.", reply_markup=keyboard)
+            return ASKING_QUESTIONS
+            
         return await next_question(update, context)
 
 def save_birthday_from_answers(user, answers, fields, chat_id, topic_id=None):
