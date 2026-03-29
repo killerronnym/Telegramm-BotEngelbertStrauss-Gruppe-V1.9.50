@@ -255,17 +255,30 @@
           <div class="card-head"><div class="card-h">Letzte Ereignisse</div></div>
           <div class="lb-scroll" style="max-height: 250px;">
             {% for ev in joins_leaves %}
-            <div class="ev-row">
-              <img src="/api/avatar/{{ ev.telegram_user_id }}" class="lb-av" style="width:24px;height:24px;" onerror="this.src='https://ui-avatars.com/api/?name={{ ev.username }}&background=random'">
+            <div class="ev-row" style="padding: 12px 18px; align-items: center;">
+              <img src="/api/avatar/{{ ev.telegram_user_id }}" class="lb-av" style="width:36px;height:36px;" onerror="this.src='https://ui-avatars.com/api/?name={{ ev.username }}&background=random'">
               <div class="ev-info flex-grow-1">
-                <div class="small fw-700">@{{ ev.username }}</div>
-                <div class="text-muted" style="font-size:8px;">{{ ev.timestamp.strftime('%d.%m %H:%M') }}</div>
+                <div class="fw-800 text-light" style="font-size:13px">@{{ ev.username }}</div>
+                <div class="mt-1 fw-600" style="font-size:11px">
+                  {% if 'beigetreten' in ev.action or 'letsgo' in ev.action %}
+                    <span class="text-green">hat die Gruppe betreten</span>
+                  {% elif 'verlassen' in ev.action %}
+                    <span class="text-red">hat die Gruppe verlassen</span>
+                  {% elif 'entfernt' in ev.action %}
+                    <span class="text-red">wurde entfernt</span>
+                  {% else %}
+                    <span class="text-secondary">{{ ev.action }}</span>
+                  {% endif %}
+                </div>
               </div>
-              <div class="badge-premium {% if 'beigetreten' in ev.action or 'letsgo' in ev.action %}join{% else %}leave{% endif %}">
-                {% if 'beigetreten' in ev.action %}JOIN{% elif 'verlassen' in ev.action %}LEAVE{% else %}ACTIVE{% endif %}
+              <div class="text-muted text-end" style="font-size:10px; font-family:var(--mono);">
+                {{ ev.timestamp.strftime('%d.%m') }}<br>{{ ev.timestamp.strftime('%H:%M') }}
               </div>
             </div>
             {% endfor %}
+            {% if not joins_leaves %}
+            <div class="p-4 text-center text-muted small">Keine aktuellen Ereignisse</div>
+            {% endif %}
           </div>
         </div>
       </div>

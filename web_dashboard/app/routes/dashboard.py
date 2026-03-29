@@ -983,7 +983,6 @@ def id_finder_analytics():
             query_filter = extract('year', IDFinderMessage.timestamp) == year
         elif days > 0:
             query_filter = IDFinderMessage.timestamp >= cutoff
-
         sys.stdout.write(f"--- [DEBUG] Filter set. Days={days}, Month={month}, Year={year} ---\n")
         sys.stdout.flush()
         total_users = IDFinderUser.query.count()
@@ -991,28 +990,41 @@ def id_finder_analytics():
         total_media = IDFinderMessage.query.filter(IDFinderMessage.content_type != 'text').count()
 
         # Leaderboard with extra info
-        leaderboard_query = db.session.query(
-            IDFinderUser.telegram_id,
-            IDFinderUser.first_name,
-            IDFinderUser.username,
-            IDFinderUser.first_contact,
-            func.count(IDFinderMessage.id).label('msg_count'),
-            func.sum(case((IDFinderMessage.content_type != 'text', 1), else_=0)).label('media_count')
-        ).join(IDFinderMessage, IDFinderUser.telegram_id == IDFinderMessage.telegram_user_id) \
-         .filter(query_filter) \
-         .group_by(IDFinderUser.telegram_id, IDFinderUser.first_name, IDFinderUser.username, IDFinderUser.first_contact) \
-         .order_by(text('msg_count DESC')).limit(10).all()
-
         leaderboard = []
-        for row in leaderboard_query:
-            leaderboard.append({
-                "uid": str(row.telegram_id),
-                "name": row.first_name or "Unknown",
-                "username": row.username or "Unbekannt",
-                "msgs": int(row.msg_count),
-                "media": int(row.media_count or 0),
-                "joined_at": row.first_contact.strftime('%d.%m.%Y') if row.first_contact else "Unbekannt"
-            })
+        if total_messages > 0:
+            leaderboard_query = db.session.query(
+                IDFinderUser.telegram_id,
+                IDFinderUser.first_name,
+                IDFinderUser.username,
+                IDFinderUser.first_contact,
+                func.count(IDFinderMessage.id).label('msg_count'),
+                func.sum(case((IDFinderMessage.content_type != 'text', 1), else_=0)).label('media_count')
+            ).join(IDFinderMessage, IDFinderUser.telegram_id == IDFinderMessage.telegram_user_id) \
+             .filter(query_filter) \
+             .group_by(IDFinderUser.telegram_id, IDFinderUser.first_name, IDFinderUser.username, IDFinderUser.first_contact) \
+             .order_by(text('msg_count DESC')).limit(10).all()
+
+            for row in leaderboard_query:
+                leaderboard.append({
+                    "uid": str(row.telegram_id),
+                    "name": row.first_name or "Unknown",
+                    "username": row.username or "Unbekannt",
+                    "msgs": int(row.msg_count),
+                    "media": int(row.media_count or 0),
+                    "joined_at": row.first_contact.strftime('%d.%m.%Y') if row.first_contact else "Unbekannt"
+                })
+        else:
+            # Fallback wrapper if message db is empty but connection is live
+            recent_users = IDFinderUser.query.order_by(IDFinderUser.last_contact.desc()).limit(10).all()
+            for u in recent_users:
+                leaderboard.append({
+                    "uid": str(u.telegram_id),
+                    "name": u.first_name or "Unknown",
+                    "username": u.username or "Unbekannt",
+                    "msgs": 0,
+                    "media": 0,
+                    "joined_at": u.first_contact.strftime('%d.%m.%Y') if u.first_contact else "Unbekannt"
+                })
         
         sys.stdout.write(f"--- [DEBUG] Leaderboard ready: {len(leaderboard)} entries ---\n")
         sys.stdout.flush()
