@@ -97,45 +97,29 @@ def create_app(test_config=None):
         if os.path.exists(INSTALL_LOCK):
             try:
                 db.create_all()
-                # Migration: Neue Spalten hinzufügen falls nicht vorhanden
-                # (db.create_all() erstellt nur neue Tabellen, keine neuen Spalten!)
-                try:
-                    db.session.execute(db.text("ALTER TABLE invite_application ADD COLUMN profile_message_id BIGINT"))
-                    db.session.commit()
-                    print("Migration: profile_message_id hinzugefügt.")
-                except Exception:
-                    db.session.rollback()  # Spalte existiert bereits
-                try:
-                    db.session.execute(db.text("ALTER TABLE invite_application ADD COLUMN profile_chat_id BIGINT"))
-                    db.session.commit()
-                    print("Migration: profile_chat_id hinzugefügt.")
-                except Exception:
-                    db.session.rollback()  # Spalte existiert bereits
-                try:
-                    db.session.execute(db.text("ALTER TABLE id_finder_user ADD COLUMN photo_file_id VARCHAR(200)"))
-                    db.session.commit()
-                    print("Migration: photo_file_id in id_finder_user hinzugefügt.")
-                except Exception:
-                    db.session.rollback()
-                try:
-                    db.session.execute(db.text("ALTER TABLE id_finder_user ADD COLUMN photo_url VARCHAR(500)"))
-                    db.session.commit()
-                    print("Migration: photo_url in id_finder_user hinzugefügt.")
-                except Exception:
-                    db.session.rollback()
-                try:
-                    db.session.execute(db.text("ALTER TABLE id_finder_user ADD COLUMN photo_cached_at DATETIME"))
-                    db.session.commit()
-                    print("Migration: photo_cached_at in id_finder_user hinzugefügt.")
-                except Exception:
-                    db.session.rollback()
-                try:
-                    db.session.execute(db.text("ALTER TABLE group_event ADD COLUMN topic_id VARCHAR(50)"))
-                    db.session.commit()
-                    print("Migration: topic_id in group_event hinzugefügt.")
-                except Exception:
-                    db.session.rollback()  # Spalte existiert bereits
+                # Comprehensive Migration Check for ID Finder Tables
+                def add_col(table, col, dtype):
+                   try:
+                       db.session.execute(db.text(f"ALTER TABLE {table} ADD COLUMN {col} {dtype}"))
+                       db.session.commit()
+                       print(f"Migration: {table}.{col} added.")
+                   except Exception:
+                       db.session.rollback()
+
+                add_col("invite_application", "profile_message_id", "BIGINT")
+                add_col("invite_application", "profile_chat_id", "BIGINT")
+                add_col("group_event", "topic_id", "VARCHAR(50)")
                 
+                # IDFinderUser
+                add_col("id_finder_user", "photo_file_id", "VARCHAR(200)")
+                add_col("id_finder_user", "photo_url", "VARCHAR(500)")
+                add_col("id_finder_user", "photo_cached_at", "DATETIME")
+                
+                # IDFinderMessage
+                add_col("id_finder_message", "is_deleted", "BOOLEAN DEFAULT 0")
+                add_col("id_finder_message", "deletion_reason", "TEXT")
+                add_col("id_finder_message", "text_preview", "VARCHAR(200)")
+
                 if not User.query.filter_by(username='admin').first():
                     admin = User(username='admin', role='admin')
                     admin.set_password('admin') 
