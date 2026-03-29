@@ -191,8 +191,17 @@ def get_avatar(user_id):
                 if img_res.status_code == 200:
                     with open(avatar_path, 'wb') as f: f.write(img_res.content)
                     return send_file(io.BytesIO(img_res.content), mimetype='image/jpeg')
-    except: pass
-    return redirect(f"https://ui-avatars.com/api/?name={user_id}&background=random")
+    except Exception as e:
+        print(f"Error in get_avatar: {e}")
+    
+    from ..models import IDFinderUser
+    user = IDFinderUser.query.filter_by(telegram_id=user_id).first()
+    name = (user.first_name or user.username or str(user_id)) if user else str(user_id)
+    return redirect(f"https://ui-avatars.com/api/?name={encodeURIComponent(name)}&background=random&color=fff")
+
+def encodeURIComponent(s):
+    import urllib.parse
+    return urllib.parse.quote(s)
 
 @bp.route('/topics')
 def get_topics():

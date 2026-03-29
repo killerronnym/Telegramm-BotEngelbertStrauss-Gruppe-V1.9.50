@@ -1,9 +1,14 @@
-{% extends "base.html" %}
-{% block title %}Gruppen-Analyse · Dashboard{% endblock %}
-
-{% block content %}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gruppen-Analyse &middot; Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
-/* ── RESET & BASE ── */
+/* --- RESET & BASE --- */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#0a0e17;
   --bg1:#0f1523;
@@ -32,12 +37,21 @@
   --shadow:0 4px 24px rgba(0,0,0,0.4);
   --shadow-lg:0 8px 40px rgba(0,0,0,0.6);
 }
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.6;min-height:100vh;overflow-x:hidden}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg1)}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px}
 
-.main-wrap{padding:0 28px 60px; background: var(--bg); color: var(--text); font-family: var(--sans);}
+/* --- LAYOUT --- */
+.layout{display:grid;grid-template-columns:1fr;max-width:1600px;margin:0 auto}
+.main-wrap{padding:0 28px 60px}
 
-/* ── TOPBAR ── */
+/* --- TOPBAR --- */
 .topbar{background:var(--bg1);border-bottom:1px solid var(--border);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;backdrop-filter:blur(20px)}
 .topbar-left{display:flex;align-items:center;gap:16px}
+.back-btn{background:transparent;border:1px solid var(--border2);color:var(--text2);padding:6px 12px;border-radius:8px;font-size:12px;font-family:var(--sans);cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .15s;font-weight:600;letter-spacing:.03em;text-decoration:none}
+.back-btn:hover{background:var(--bg3);color:var(--text);border-color:var(--border3)}
 .topbar-title{font-size:16px;font-weight:800;letter-spacing:-.02em}
 .topbar-title em{font-style:normal;color:var(--blue)}
 .live-pill{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);color:var(--green);font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;display:flex;align-items:center;gap:5px;letter-spacing:.04em}
@@ -47,379 +61,581 @@
 .topbar-stat{text-align:right}
 .topbar-stat .val{font-size:18px;font-weight:900;line-height:1;letter-spacing:-.03em}
 .topbar-stat .lbl{font-size:10px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.btn-sm{background:var(--bg3);border:1px solid var(--border2);color:var(--text2);padding:6px 12px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:var(--sans);letter-spacing:.03em}
+.btn-sm:hover{background:var(--bg4);color:var(--text);border-color:var(--border3)}
+.btn-sm.primary{background:var(--blue);border-color:var(--blue2);color:#fff}
+.btn-sm.primary:hover{background:var(--blue2)}
 
-/* ── KPI ── */
+/* --- FILTER BAR --- */
+.filterbar{background:var(--bg2);border-bottom:1px solid var(--border);padding:10px 28px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.filter-label{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em}
+.chip{background:var(--bg3);border:1px solid var(--border);color:var(--text2);font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;cursor:pointer;transition:all .15s;font-family:var(--sans);letter-spacing:.02em;text-decoration:none}
+.chip:hover{border-color:var(--blue);color:var(--text)}
+.chip.on{background:rgba(79,142,247,.15);border-color:rgba(79,142,247,.4);color:var(--blue)}
+.filter-sep{width:1px;height:22px;background:var(--border);flex-shrink:0}
+.f-select{background:var(--bg3);border:1px solid var(--border);color:var(--text);font-size:12px;padding:5px 10px;border-radius:8px;font-family:var(--sans);outline:none;cursor:pointer}
+.f-select:focus{border-color:var(--blue)}
+
+/* --- CONTENT --- */
+.content{padding:24px 0}
+
+/* --- SECTION HEADING --- */
+.section-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.section-head h2{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3)}
+.section-head::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* --- KPI ROW --- */
 .kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:24px}
-.kpi{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px;position:relative;overflow:hidden;}
+.kpi{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px;position:relative;overflow:hidden;cursor:default;transition:border-color .2s}
+.kpi:hover{border-color:var(--border3)}
 .kpi::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:var(--radius-lg) var(--radius-lg) 0 0;background:var(--c,var(--blue))}
 .kpi .lbl{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px}
 .kpi .val{font-size:26px;font-weight:900;letter-spacing:-.04em;line-height:1;margin-bottom:8px}
 .kpi .meta{font-size:11px;color:var(--text2);display:flex;align-items:center;gap:5px}
+.delta{font-weight:700;font-size:11px}
+.delta.up{color:var(--green)}
+.delta.dn{color:var(--red)}
+.kpi-icon{position:absolute;right:14px;top:14px;font-size:22px;opacity:.12}
 
-/* ── CARDS ── */
-.card-premium{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
+/* --- MAIN GRID --- */
+.main-grid{display:grid;grid-template-columns:1fr 340px;gap:14px;margin-bottom:14px}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
 .card-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
+.card-head-left{min-width:0}
 .card-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3)}
 .card-sub{font-size:11px;color:var(--text3);margin-top:2px}
+.card-actions{display:flex;gap:6px;flex-shrink:0}
+.ca-btn{background:transparent;border:1px solid var(--border);color:var(--text2);font-size:11px;padding:4px 9px;border-radius:6px;cursor:pointer;transition:all .15s;font-family:var(--sans);font-weight:600}
+.ca-btn:hover,.ca-btn.on{background:rgba(79,142,247,.12);border-color:rgba(79,142,247,.35);color:var(--blue)}
 
-/* ── LEADERBOARD ── */
-.lb-scroll{max-height:450px;overflow-y:auto}
-.lb-row{display:flex;align-items:center;gap:10px;padding:9px 18px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;}
+/* --- PILLS --- */
+.pills-wrap{min-height:32px;padding:8px 18px 0;display:flex;flex-wrap:wrap;gap:6px}
+.upill{display:inline-flex;align-items:center;gap:5px;border:1px solid;border-radius:20px;font-size:11px;padding:3px 10px;font-weight:600}
+.upill .x{opacity:.45;cursor:pointer;transition:opacity .15s;margin-left:3px;font-size:13px;line-height:1}
+.upill .x:hover{opacity:1}
+
+/* --- TIMELINE --- */
+.chart-wrap{padding:12px 16px 14px;position:relative}
+#timelineCanvas{width:100%!important;height:190px!important}
+
+/* --- LEADERBOARD --- */
+.lb-scroll{max-height:390px;overflow-y:auto}
+.lb-row{display:flex;align-items:center;gap:10px;padding:9px 18px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;position:relative}
+.lb-row:last-child{border-bottom:none}
 .lb-row:hover{background:rgba(255,255,255,0.025)}
+.lb-row.sel{background:rgba(168,85,247,.08);border-left:2px solid var(--purple)}
+.lb-row.sel{padding-left:16px}
 .lb-rank{font-size:11px;font-weight:800;min-width:22px;font-family:var(--mono)}
-.lb-av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;border:2px solid transparent}
+.lb-rank.r1{color:#f0c040}
+.lb-rank.r2{color:#a0aec0}
+.lb-rank.r3{color:#c87533}
+.lb-rank.rn{color:var(--text3)}
+.lb-av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;background:var(--bg4);border:2px solid var(--border2);object-fit:cover}
 .lb-info{flex:1;min-width:0}
 .lb-name{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lb-uid{font-size:10px;color:var(--text3);font-family:var(--mono)}
+.lb-right{text-align:right;flex-shrink:0}
 .lb-msgs{font-size:13px;font-weight:800}
+.lb-bar-fill{height:3px;border-radius:2px;transition:width .3s}
 
-/* ── EVENTS ── */
+/* --- MESSAGE MEDIA --- */
+.msg-media{margin-top:8px;border-radius:8px;overflow:hidden;border:1px solid var(--border);background:var(--bg);max-width:260px}
+.msg-img{width:100%;display:block;cursor:pointer;transition:transform .2s}
+.msg-img:hover{transform:scale(1.02)}
+.msg-video{width:100%;display:block}
+.msg-text:not(:empty){margin-bottom:4px}
+
+/* --- BOTTOM GRID --- */
+.bottom-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px}
+.bottom-grid-2{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-bottom:14px}
+
+/* --- MINI BAR CHART --- */
+.mini-chart{padding:12px 16px 10px}
+.mini-bars{display:flex;align-items:flex-end;gap:3px;height:64px}
+.mbar{flex:1;border-radius:3px 3px 0 0;min-height:3px;cursor:pointer;transition:opacity .15s,filter .15s;position:relative}
+.mbar:hover{filter:brightness(1.3)}
+.mbar-lbl-row{display:flex;gap:3px;margin-top:4px}
+.mbar-lbl{flex:1;font-size:9px;color:var(--text3);text-align:center}
+
+/* --- HEATMAP --- */
+.heatmap-inner{padding:12px 16px 14px;display:grid;grid-template-columns:28px 1fr;gap:4px;align-items:start}
+.hm-y{display:flex;flex-direction:column;gap:2px;padding-top:18px}
+.hm-y-lbl{height:13px;font-size:9px;color:var(--text3);font-weight:700;text-align:right;display:flex;align-items:center;justify-content:flex-end}
+.hm-area{}
+.hm-x-row{display:flex;gap:2px;margin-bottom:4px}
+.hm-x-lbl{flex:1;font-size:8px;color:var(--text3);text-align:center}
+.hm-row{display:flex;gap:2px;margin-bottom:2px}
+.hm-cell{flex:1;height:13px;border-radius:2px;cursor:pointer;transition:filter .1s}
+.hm-cell:hover{filter:brightness(1.5);outline:1px solid rgba(255,255,255,.3)}
+.hm-legend{display:flex;align-items:center;gap:8px;padding:4px 16px 10px;justify-content:flex-end}
+.hm-legend-lbl{font-size:10px;color:var(--text3)}
+.hm-legend-bar{display:flex;gap:1px}
+.hm-legend-step{width:16px;height:8px;border-radius:1px}
+
+/* --- EVENTS --- */
 .ev-row{display:flex;align-items:center;gap:10px;padding:8px 18px;border-bottom:1px solid var(--border)}
+.ev-row:last-child{border-bottom:none}
+.ev-av{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;flex-shrink:0;background:var(--bg4);border:1px solid var(--border2);object-fit:cover}
 .ev-time{font-size:10px;color:var(--text3);min-width:90px;font-family:var(--mono)}
 .ev-user{flex:1;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.badge-premium{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;letter-spacing:.03em}
-.badge-premium.join{background:rgba(34,197,94,.1);color:var(--green);border:1px solid rgba(34,197,94,.2)}
-.badge-premium.leave{background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.2)}
+.badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;letter-spacing:.03em}
+.badge.join{background:rgba(34,197,94,.1);color:var(--green);border:1px solid rgba(34,197,94,.2)}
+.badge.leave{background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.2)}
 
-/* ── PANEL ── */
+/* --- GROWTH CHART --- */
+#growthCanvas{width:100%!important;height:120px!important}
+#msgTypeCanvas{width:100%!important;height:160px!important}
+
+/* --- USER PANEL --- */
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;opacity:0;pointer-events:none;transition:opacity .25s;backdrop-filter:blur(4px)}
 .overlay.show{opacity:1;pointer-events:all}
 .user-panel{position:fixed;right:-520px;top:0;bottom:0;width:500px;background:var(--bg1);border-left:1px solid var(--border2);z-index:201;overflow-y:auto;transition:right .3s cubic-bezier(.32,.72,0,1);box-shadow:var(--shadow-lg);display:flex;flex-direction:column}
 .user-panel.open{right:0}
+
 .up-header{padding:20px 24px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg1);z-index:10;backdrop-filter:blur(20px)}
-.up-avatar{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;border:3px solid;flex-shrink:0}
+.up-header-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px}
+.up-close{background:var(--bg3);border:1px solid var(--border2);color:var(--text2);width:32px;height:32px;border-radius:8px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;line-height:1;flex-shrink:0}
+.up-close:hover{background:var(--bg4);color:var(--text)}
+.up-avatar-wrap{display:flex;align-items:center;gap:14px}
+.up-avatar{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;border:3px solid;flex-shrink:0;background:var(--bg4);object-fit:cover}
+.up-display-name{font-size:18px;font-weight:900;letter-spacing:-.02em;line-height:1.2}
+.up-username{font-size:12px;color:var(--text2);margin-top:2px;font-family:var(--mono)}
+.up-uid{font-size:10px;color:var(--text3);margin-top:1px;font-family:var(--mono)}
+.up-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.up-badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;border:1px solid;letter-spacing:.04em}
+
 .up-body{padding:20px 24px;flex:1}
+.up-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px}
 .up-stat{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px 14px;text-align:center}
+.up-stat .sv{font-size:20px;font-weight:900;letter-spacing:-.03em}
+.up-stat .sl{font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-top:3px}
+
+.up-section{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.up-section::after{content:'';flex:1;height:1px;background:var(--border)}
+
+.up-info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px}
 .up-info-item{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.up-info-item .ik{font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.up-info-item .iv{font-size:12px;font-weight:600;color:var(--text);font-family:var(--mono)}
 
-/* ── HEATMAP ── */
-.heatmap-inner{padding:12px 16px 14px;display:grid;grid-template-columns:28px 1fr;gap:4px;align-items:start}
-.hm-row{display:flex;gap:2px;margin-bottom:2px}
-.hm-cell{flex:1;height:13px;border-radius:2px;cursor:pointer;transition:filter .1s}
-.hm-cell:hover{filter:brightness(1.5);outline:1px solid rgba(255,255,255,.3)}
+#userTimelineCanvas{width:100%!important;height:100px!important}
+.up-type-wrap{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;align-items:center}
+.up-type-legend{display:flex;flex-direction:column;gap:6px}
+.tleg-row{display:flex;align-items:center;gap:8px}
+.tleg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.tleg-label{font-size:11px;color:var(--text2);flex:1}
+.tleg-val{font-size:11px;font-weight:700}
+#userDonutCanvas{width:100%!important;height:140px!important}
+
+.topic-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border)}
+.topic-name{font-size:12px;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topic-bar-track{width:80px;height:4px;background:var(--border2);border-radius:2px}
+.topic-bar-fill{height:4px;border-radius:2px;background:var(--blue);transition:width .4s}
+.topic-count{font-size:11px;font-weight:700;color:var(--text2);min-width:30px;text-align:right;font-family:var(--mono)}
+
+.msg-item{padding:8px 0;border-bottom:1px solid var(--border)}
+.msg-meta{display:flex;align-items:center;gap:6px;margin-bottom:3px}
+.msg-time{font-size:10px;color:var(--text3);font-family:var(--mono)}
+.msg-type-badge{font-size:9px;font-weight:700;padding:1px 6px;border-radius:4px;background:var(--bg4);color:var(--text2)}
+.msg-text{font-size:11px;color:var(--text2);line-height:1.5;word-break:break-word}
+
+.ev-scroll{max-height:360px;overflow-y:auto}
+
+@media(max-width:1100px){.kpi-grid{grid-template-columns:repeat(3,1fr)}.main-grid{grid-template-columns:1fr}}
 </style>
+</head>
+<body>
 
-<!-- OVERLAY for user panel -->
 <div class="overlay" id="overlay" onclick="closePanel()"></div>
 
 <!-- USER DETAIL PANEL -->
 <div class="user-panel" id="userPanel">
   <div class="up-header">
-    <div class="d-flex justify-content-between align-items-start mb-3">
-        <div class="d-flex align-items-center gap-3">
-          <div id="panelAvatar" class="up-avatar">?</div>
-          <div>
-            <div id="panelName" class="h5 fw-900 mb-0">Wird geladen...</div>
-            <div id="panelUsername" class="small text-secondary fw-700">@username</div>
-            <div id="panelUid" class="small text-muted" style="font-size:9px">UID: —</div>
-          </div>
+    <div class="up-header-top">
+      <div class="up-avatar-wrap">
+        <img src="" id="panelAvatar" class="up-avatar" onerror="this.src='https://ui-avatars.com/api/?name=User&background=random'">
+        <div class="up-name-block">
+          <div class="up-display-name" id="panelName">—</div>
+          <div class="up-username" id="panelUsername">—</div>
+          <div class="up-uid" id="panelUid">—</div>
         </div>
-        <button class="btn btn-sm btn-dark" onclick="closePanel()">×</button>
+      </div>
+      <button class="up-close" onclick="closePanel()">×</button>
     </div>
-    <div id="panelBadges" class="d-flex flex-wrap gap-2"></div>
+    <div class="up-badges" id="panelBadges"></div>
   </div>
-
   <div class="up-body">
-    <div class="row g-2 mb-4">
-      <div class="col-4"><div class="up-stat"><div id="ps-msgs" class="h4 fw-900 text-blue mb-0">0</div><div class="small text-secondary fw-700 text-uppercase" style="font-size:9px">Messages</div></div></div>
-      <div class="col-4"><div class="up-stat"><div id="ps-media" class="h4 fw-900 text-purple mb-0">0</div><div class="small text-secondary fw-700 text-uppercase" style="font-size:9px">Media</div></div></div>
-      <div class="col-4"><div class="up-stat"><div id="ps-days" class="h4 fw-900 text-green mb-0">0</div><div class="small text-secondary fw-700 text-uppercase" style="font-size:9px">Active</div></div></div>
+    <div class="up-stats">
+      <div class="up-stat"><div class="sv" id="ps-msgs" style="color:var(--blue)">0</div><div class="sl">Msgs</div></div>
+      <div class="up-stat"><div class="sv" id="ps-media" style="color:var(--purple)">0</div><div class="sl">Medien</div></div>
+      <div class="up-stat"><div class="sv" id="ps-days" style="color:var(--green)">0</div><div class="sl">Tage</div></div>
     </div>
-
-    <div class="small text-uppercase text-secondary fw-800 mb-2 ls-1" style="font-size:9px">Profil-Details</div>
-    <div class="row g-2 mb-4">
-      <div class="col-6"><div class="up-info-item"><div class="small text-muted text-uppercase fw-700" style="font-size:8px">Beigetreten</div><div id="pi-joined" class="small fw-600">—</div></div></div>
-      <div class="col-6"><div class="up-info-item"><div class="small text-muted text-uppercase fw-700" style="font-size:8px">Zuletzt Aktiv</div><div id="pi-last" class="small fw-600">—</div></div></div>
+    <div class="up-section">Profil-Details</div>
+    <div class="up-info-grid">
+      <div class="up-info-item"><div class="ik">Beigetreten</div><div class="iv" id="pi-joined">—</div></div>
+      <div class="up-info-item"><div class="ik">Zuletzt aktiv</div><div class="iv" id="pi-last">—</div></div>
+      <div class="up-info-item"><div class="ik">Avg. / Tag</div><div class="iv" id="pi-avg">—</div></div>
+      <div class="up-info-item"><div class="ik">Rang</div><div class="iv" id="pi-rank">—</div></div>
+      <div class="up-info-item"><div class="ik">Warnungen</div><div class="iv" id="pi-warns">—</div></div>
+      <div class="up-info-item"><div class="ik">Sprache</div><div class="iv" id="pi-lang">—</div></div>
     </div>
-
-    <div class="small text-uppercase text-secondary fw-800 mb-2 ls-1" style="font-size:9px">Tages-Aktivität (14 Tage)</div>
-    <div class="card-premium p-3 mb-4"><canvas id="userTimelineCanvas" height="100"></canvas></div>
-
-    <div class="small text-uppercase text-secondary fw-800 mb-2 ls-1" style="font-size:9px">Häufigste Themen</div>
-    <div id="panelTopics" class="mb-4"></div>
+    <div class="up-section">Aktivität (14 Tage)</div>
+    <div style="height:100px"><canvas id="userTimelineCanvas"></canvas></div>
+    <div class="up-section" style="margin-top:20px">Nachrichtentypen</div>
+    <div class="up-type-wrap">
+      <canvas id="userDonutCanvas"></canvas>
+      <div class="up-type-legend" id="donutLegend"></div>
+    </div>
+    <div class="up-section">Aktivste Themen</div>
+    <div id="panelTopics"></div>
+    <div class="up-section" style="margin-top:20px">Letzte Nachrichten</div>
+    <div id="panelMessages"></div>
   </div>
+</div>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <a href="/id-finder" class="back-btn">← Dashboard</a>
+    <div class="topbar-title">ID-FINDER <em>ANALYTICS</em></div>
+    <div class="live-pill"><div class="live-dot"></div> LIVE</div>
+  </div>
+  <div class="topbar-right">
+    <div class="topbar-stat">
+      <div class="val" style="color:var(--blue)">{{ stats.total_users }}</div>
+      <div class="lbl">Nutzer</div>
+    </div>
+    <button class="btn-sm primary" onclick="location.reload()">⟳ Reload</button>
+  </div>
+</div>
+
+<div class="filterbar">
+  <span class="filter-label">Zeitraum:</span>
+  <a href="?days=7" class="chip {{ 'on' if filter_days == 7 }}">7 Tage</a>
+  <a href="?days=30" class="chip {{ 'on' if filter_days == 30 }}">30 Tage</a>
+  <a href="?days=90" class="chip {{ 'on' if filter_days == 90 }}">90 Tage</a>
+  <div class="filter-sep"></div>
+  <form style="display:flex;gap:4px">
+    <select name="month" class="f-select">
+      <option value="0">Monat</option>
+      {% for m in range(1,13) %}<option value="{{m}}" {{ 'selected' if filter_month == m }}>{{m}}</option>{% endfor %}
+    </select>
+    <select name="year" class="f-select">
+      <option value="2025" {{ 'selected' if filter_year == 2025 }}>2025</option>
+      <option value="2026" {{ 'selected' if filter_year == 2026 }}>2026</option>
+    </select>
+    <button class="btn-sm primary">Laden</button>
+  </form>
 </div>
 
 <div class="main-wrap">
-  <!-- TOPBAR -->
-  <div class="topbar mx-n4">
-    <div class="topbar-left">
-      <div class="topbar-title">ID-Finder-Analyse <em>LIVE</em></div>
-      <div class="live-pill"><div class="live-dot"></div>PRO</div>
+<div class="content">
+  <div class="section-head"><h2>KPI Überblick</h2></div>
+  <div class="kpi-grid">
+    <div class="kpi" style="--c:var(--blue)">
+      <div class="lbl">Total Messages</div>
+      <div class="val">{{ stats.total_messages }}</div>
+      <div class="meta">Gesamtverlauf</div>
+      <div class="kpi-icon">💬</div>
     </div>
-    <div class="topbar-right">
-      <div class="topbar-stat">
-        <div class="val text-blue">{{ stats.msgs }}</div>
-        <div class="lbl">Aktivitäten</div>
-      </div>
-      <button class="btn btn-sm btn-primary px-3" onclick="window.location.reload()">⟳ REFRESH</button>
+    <div class="kpi" style="--c:var(--purple)">
+      <div class="lbl">Aktive Nutzer</div>
+      <div class="val">{{ stats.active_users }}</div>
+      <div class="meta">Im Zeitraum</div>
+      <div class="kpi-icon">👥</div>
+    </div>
+    <div class="kpi" style="--c:var(--teal)">
+      <div class="lbl">Medien-Anteil</div>
+      <div class="val">{{ (stats.total_media / stats.total_messages * 100)|round(1) if stats.total_messages > 0 else 0 }}%</div>
+      <div class="meta">{{ stats.total_media }} Medien</div>
+      <div class="kpi-icon">🖼️</div>
+    </div>
+    <div class="kpi" style="--c:var(--amber)">
+      <div class="lbl">Netto Wachstum</div>
+      <div class="val">{{ activity.growth.net|sum }}</div>
+      <div class="meta">Zuwachs / Abgang</div>
+      <div class="kpi-icon">📈</div>
+    </div>
+    <div class="kpi" style="--c:var(--green)">
+      <div class="lbl">Avg. Msgs / Tag</div>
+      <div class="val">{{ stats.avg_per_day }}</div>
+      <div class="meta">Frequenz</div>
+      <div class="kpi-icon">⏱️</div>
     </div>
   </div>
 
-  <div class="content">
-    <!-- KPI ROW -->
-    <div class="kpi-grid">
-      <div class="kpi" style="--c:var(--blue)">
-        <div class="lbl">Interaktionen (30T)</div>
-        <div class="val">{{ stats.msgs }}</div>
-        <div class="meta"><span class="text-green">↑ Realtime</span></div>
-      </div>
-      <div class="kpi" style="--c:var(--green)">
-        <div class="lbl">Aktive User (30T)</div>
-        <div class="val">{{ stats.active_users }}</div>
-        <div class="meta">Basis: Letzter Kontakt</div>
-      </div>
-      <div class="kpi" style="--c:var(--purple)">
-        <div class="lbl">Medien-Anteil</div>
-        <div class="val">{{ stats.media_share }}</div>
-        <div class="meta">Bilder / Videos</div>
-      </div>
-      <div class="kpi" style="--c:var(--amber)">
-        <div class="lbl">Netto-Wachstum</div>
-        <div class="val {% if stats.growth_net >= 0 %}text-green{% else %}text-red{% endif %}">
-          {% if stats.growth_net > 0 %}+{% endif %}{{ stats.growth_net }}
+  <div class="section-head"><h2>Aktivität & Rangliste</h2></div>
+  <div class="main-grid">
+    <div class="card">
+      <div class="card-head">
+        <div class="card-head-left"><div class="card-h">Timeline Vergleich</div><div class="card-sub">Namen klicken zum Vergleichen</div></div>
+        <div class="card-actions">
+          <button class="ca-btn on" onclick="setLineType('line',this)">Linie</button>
+          <button class="ca-btn" onclick="setLineType('bar',this)">Balken</button>
+          <button class="ca-btn" onclick="clearComp()">↺ Reset</button>
         </div>
-        <div class="meta">Joins vs. Leaves</div>
       </div>
-      <div class="kpi" style="--c:var(--teal)">
-        <div class="lbl">Ø / Tag</div>
-        <div class="val">{{ stats.avg_msgs_per_day }}</div>
-        <div class="meta">Trend der Woche</div>
-      </div>
+      <div class="pills-wrap" id="pills"></div>
+      <div class="chart-wrap"><canvas id="timelineCanvas"></canvas></div>
     </div>
-
-    <!-- MAIN GRID (Timeline + Leaderboard) -->
-    <div class="row g-3 mb-4">
-      <div class="col-lg-8">
-        <div class="card-premium h-100">
-          <div class="card-head">
-            <div>
-              <div class="card-h">Aktivitäts-Trend</div>
-              <div class="card-sub">Basierend auf Nachrichten & User-Events</div>
-            </div>
-            <div class="btn-group btn-group-sm">
-                <button class="btn btn-outline-secondary" onclick="window.location.href='?days=7'">7T</button>
-                <button class="btn btn-outline-secondary" onclick="window.location.href='?days=30'">30T</button>
-            </div>
-          </div>
-          <div class="p-4" style="min-height:250px;"><canvas id="timelineCanvas"></canvas></div>
-        </div>
-      </div>
-      <div class="col-lg-4">
-        <div class="card-premium h-100">
-          <div class="card-head"><div class="card-h">Leaderboard</div></div>
-          <div class="lb-scroll">
-            {% for u in leaderboard %}
-            <div class="lb-row" onclick="openPanel('{{ u.uid }}')">
-              <span class="lb-rank text-muted">#{{ loop.index }}</span>
-              <img src="/api/avatar/{{ u.uid }}" class="lb-av" onerror="this.src='https://ui-avatars.com/api/?name={{ u.name }}&background=random'">
-              <div class="lb-info">
-                <div class="lb-name">{{ u.name }}</div>
-                <div class="lb-uid">@{{ u.username }}</div>
-              </div>
-              <div class="lb-msgs text-blue">{{ u.msgs }}</div>
-            </div>
-            {% endfor %}
-            {% if not leaderboard %}
-            <div class="p-4 text-center text-muted small">Noch keine Daten vorhanden</div>
-            {% endif %}
-          </div>
-        </div>
-      </div>
+    <div class="card">
+      <div class="card-head"><div class="card-h">Top-Nutzer</div><div class="card-sub">Liste der aktivsten Mitglieder</div></div>
+      <div class="lb-scroll" id="leaderboard"></div>
     </div>
-
-    <!-- BOTTOM GRID (Heatmap + Events + Growth) -->
-    <div class="row g-3 mb-4">
-      <div class="col-lg-5">
-        <div class="card-premium h-100">
-          <div class="card-head"><div class="card-h">Heatmap (24h)</div></div>
-          <div class="heatmap-inner">
-             <div class="text-secondary fw-700" style="font-size:9px; line-height:1.6">
-               Mo<br>Di<br>Mi<br>Do<br>Fr<br>Sa<br>So
-             </div>
-             <div class="hm-area">
-                {% for day_row in heatmap %}
-                <div class="hm-row">
-                  {% for cell in day_row %}
-                  {% set alpha = (cell / 20.0) if cell < 20 else 1.0 %}
-                  <div class="hm-cell" style="background: rgba(79, 142, 247, {{ alpha }});" title="{{ cell }} Msgs"></div>
-                  {% endfor %}
-                </div>
-                {% endfor %}
-             </div>
-          </div>
-        </div>
-      </div>
-      <div class="col-lg-4">
-        <div class="card-premium h-100">
-          <div class="card-head"><div class="card-h">Letzte Ereignisse</div></div>
-          <div class="lb-scroll" style="max-height: 250px;">
-            {% for ev in joins_leaves %}
-            <div class="ev-row" style="padding: 12px 18px; align-items: center;">
-              <img src="/api/avatar/{{ ev.telegram_user_id }}" class="lb-av" style="width:36px;height:36px;" onerror="this.src='https://ui-avatars.com/api/?name={{ ev.username }}&background=random'">
-              <div class="ev-info flex-grow-1">
-                <div class="fw-800 text-light" style="font-size:13px">@{{ ev.username }}</div>
-                <div class="mt-1 fw-600" style="font-size:11px">
-                  {% if 'beigetreten' in ev.action or 'letsgo' in ev.action %}
-                    <span class="text-green">hat die Gruppe betreten</span>
-                  {% elif 'verlassen' in ev.action %}
-                    <span class="text-red">hat die Gruppe verlassen</span>
-                  {% elif 'entfernt' in ev.action %}
-                    <span class="text-red">wurde entfernt</span>
-                  {% else %}
-                    <span class="text-secondary">{{ ev.action }}</span>
-                  {% endif %}
-                </div>
-              </div>
-              <div class="text-muted text-end" style="font-size:10px; font-family:var(--mono);">
-                {{ ev.timestamp.strftime('%d.%m') }}<br>{{ ev.timestamp.strftime('%H:%M') }}
-              </div>
-            </div>
-            {% endfor %}
-            {% if not joins_leaves %}
-            <div class="p-4 text-center text-muted small">Keine aktuellen Ereignisse</div>
-            {% endif %}
-          </div>
-        </div>
-      </div>
-      <div class="col-lg-3">
-        <div class="card-premium h-100">
-          <div class="card-head"><div class="card-h">Wachstum</div></div>
-          <div class="p-3"><canvas id="growthCanvas" height="200"></canvas></div>
-        </div>
-      </div>
-    </div>
-
   </div>
+
+  <div class="section-head"><h2>Metriken & Muster</h2></div>
+  <div class="bottom-grid">
+    <div class="card">
+      <div class="card-head"><div class="card-h">Hourly Peaks</div></div>
+      <div class="mini-chart"><div class="mini-bars" id="hourBars"></div><div class="mbar-lbl-row" id="hourLabels"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-h">Daily Activity</div></div>
+      <div class="mini-chart"><div class="mini-bars" id="dayBars"></div><div class="mbar-lbl-row" id="dayLabels"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-h">Message Types</div></div>
+      <div class="chart-wrap" style="height:180px"><canvas id="msgTypeCanvas"></canvas></div>
+    </div>
+  </div>
+
+  <div class="section-head"><h2>Heatmap & Events</h2></div>
+  <div class="bottom-grid-2">
+    <div class="card">
+      <div class="card-head"><div class="card-h">Heatmap</div><div class="card-sub">Wochentag x Stunde</div></div>
+      <div class="heatmap-inner" id="heatmapWrap"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-h">Kommen & Gehen</div></div>
+      <div class="ev-scroll" id="eventList"></div>
+    </div>
+  </div>
+
+  <div class="section-head"><h2>Mitgliederwachstum</h2></div>
+  <div class="card"><div class="chart-wrap"><canvas id="growthCanvas"></canvas></div></div>
+
+</div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script>
-let timelineChart = null, growthChart = null, userTimeChart = null;
+const ACTIVITY = {{ activity|tojson }};
+const PALETTE = ['#4f8ef7','#a855f7','#ec4899','#22c55e','#f59e0b','#ef4444','#14b8a6','#8b5cf6','#f97316','#06b6d4'];
 
-function initCharts() {
-    const tctx = document.getElementById('timelineCanvas').getContext('2d');
-    timelineChart = new Chart(tctx, {
-        type: 'line',
-        data: {
-            labels: {{ activity.timeline.labels|tojson }},
-            datasets: [{
-                label: 'Aktivität',
-                data: {{ activity.timeline.total|tojson }},
-                borderColor: '#4f8ef7',
-                backgroundColor: 'rgba(79, 142, 247, 0.1)',
-                borderWidth: 2,
-                fill: true,
-                tension: 0.4,
-                pointRadius: 2
-            }]
-        },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-                y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#4a5568', font: {size: 10} } },
-                x: { grid: { display : false }, ticks: { color: '#4a5568', font: {size: 10} } }
-            }
-        }
-    });
+let timelineChart, activeUsers=new Map();
 
-    const gctx = document.getElementById('growthCanvas').getContext('2d');
-    growthChart = new Chart(gctx, {
-        type: 'bar',
-        data: {
-            labels: {{ activity.growth.labels|tojson }},
-            datasets: [
-                { label: 'Beitritte', data: {{ activity.growth.joins|tojson }}, backgroundColor: '#22c55e99', borderRadius: 4 },
-                { label: 'Austritte', data: {{ activity.growth.leaves|tojson }}, backgroundColor: '#ef444499', borderRadius: 4 }
-            ]
-        },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-                y: { stacked: false, grid: { display: false } },
-                x: { stacked: true, grid: { display: false }, ticks: { display: false } }
-            }
-        }
-    });
+function initTimeline(){
+  const ctx=document.getElementById('timelineCanvas').getContext('2d');
+  timelineChart=new Chart(ctx,{
+    type:'line',
+    data:{labels:ACTIVITY.timeline.labels,datasets:[{label:'Gesamt',data:ACTIVITY.timeline.total,borderColor:'rgba(255,255,255,.1)',backgroundColor:'rgba(255,255,255,.03)',fill:true,tension:.4,borderWidth:2,pointRadius:0}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#4a5568'}},x:{grid:{display:false},ticks:{color:'#4a5568',maxRotation:0}}}}
+  });
 }
 
-function openPanel(uid) {
-    const panel = document.getElementById('userPanel');
-    const overlay = document.getElementById('overlay');
+async function addUserTimeline(uid, name){
+  if(activeUsers.has(String(uid)) || activeUsers.size >= 5) return;
+  const res = await fetch(`/api/id-finder/user-history/${uid}`);
+  const data = await res.json();
+  const color = PALETTE[activeUsers.size + 1];
+  timelineChart.data.datasets.push({label:name,data:data.history,borderColor:color,backgroundColor:color+'18',fill:true,tension:.4,borderWidth:2,pointRadius:2,_uid:String(uid)});
+  timelineChart.update();
+  activeUsers.set(String(uid),{name,color});
+  renderPills();
+}
+
+function removeUser(uid){
+  activeUsers.delete(String(uid));
+  timelineChart.data.datasets=timelineChart.data.datasets.filter(d=>d._uid!==String(uid));
+  timelineChart.update();
+  document.querySelectorAll(`.lb-row[data-uid="${uid}"]`).forEach(r=>r.classList.remove('sel'));
+  renderPills();
+}
+
+function clearComp(){
+  activeUsers.clear();
+  timelineChart.data.datasets=[timelineChart.data.datasets[0]];
+  timelineChart.update();
+  document.querySelectorAll('.lb-row').forEach(r=>r.classList.remove('sel'));
+  renderPills();
+}
+
+function renderPills(){
+  const c=document.getElementById('pills');c.innerHTML='';
+  activeUsers.forEach((d,uid)=>{
+    c.innerHTML+=`<div class="upill" style="border-color:${d.color};color:${d.color}"><span>${d.name}</span><span class="x" onclick="removeUser('${uid}');event.stopPropagation()">×</span></div>`;
+  });
+}
+
+function setLineType(type,btn){
+  document.querySelectorAll('.ca-btn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  timelineChart.config.type=type;
+  timelineChart.update();
+}
+
+function initLeaderboard(){
+  const lb=document.getElementById('leaderboard');
+  const mx=ACTIVITY.leaderboard.length > 0 ? ACTIVITY.leaderboard[0].msgs : 1;
+  ACTIVITY.leaderboard.forEach((u,i)=>{
+    const pct=Math.round(u.msgs/mx*100);
+    const row=document.createElement('div');
+    row.className='lb-row';
+    row.dataset.uid=String(u.uid);
+    row.innerHTML=`<span class="lb-rank">#${u.rank}</span>
+      <img src="/api/avatar/${u.uid}" class="lb-av" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=random'">
+      <div class="lb-info"><div class="lb-name">${u.name}</div><div class="lb-uid">${u.username}</div></div>
+      <div class="lb-right"><div class="lb-msgs">${u.msgs}</div><div class="lb-bar-track"><div class="lb-bar-fill" style="width:${pct}%;background:${PALETTE[i%10]}"></div></div></div>
+      <button class="ca-btn" style="margin-left:8px;font-size:16px" onclick="openPanel('${u.uid}');event.stopPropagation()">›</button>`;
     
-    // Reset contents
-    document.getElementById('panelName').textContent = "Lade Daten...";
-    document.getElementById('panelUsername').textContent = "...";
-    
-    overlay.classList.add('show');
-    panel.classList.add('open');
-
-    // Fetch Details
-    fetch(`/api/id-finder/user-details/${uid}`)
-        .then(r => r.json())
-        .then(data => {
-            document.getElementById('panelName').textContent = data.name;
-            document.getElementById('panelUsername').textContent = "@" + data.username;
-            document.getElementById('panelUid').textContent = "UID: " + data.uid;
-            
-            const av = document.getElementById('panelAvatar');
-            av.textContent = data.name.substring(0,2).toUpperCase();
-            av.style.borderColor = "#4f8ef7"; av.style.color = "#4f8ef7";
-            
-            document.getElementById('ps-msgs').textContent = data.msgs;
-            document.getElementById('ps-media').textContent = data.media;
-            document.getElementById('ps-days').textContent = data.active_days || data.days;
-            
-            document.getElementById('pi-joined').textContent = data.joined;
-            document.getElementById('pi-last').textContent = data.last_active;
-            
-            // Topic bars
-            const topicsDiv = document.getElementById('panelTopics');
-            topicsDiv.innerHTML = '';
-            data.topics.forEach(t => {
-                topicsDiv.innerHTML += `
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                        <div class="small fw-700 text-light">${t.name}</div>
-                        <div class="small text-blue fw-900">${t.count}</div>
-                    </div>
-                    <div class="progress bg-dark mb-2" style="height:4px">
-                        <div class="progress-bar bg-blue" style="width:${(t.count/data.msgs*100) || 0}%"></div>
-                    </div>
-                `;
-            });
-            
-            // Mini Timeline
-            if(userTimeChart) userTimeChart.destroy();
-            const utctx = document.getElementById('userTimelineCanvas').getContext('2d');
-            userTimeChart = new Chart(utctx, {
-                type: 'line',
-                data: {
-                    labels: data.timeline.labels,
-                    datasets: [{
-                        data: data.timeline.data,
-                        borderColor: '#4f8ef7',
-                        borderWidth: 2,
-                        fill: false,
-                        tension: 0.4,
-                        pointRadius: 0
-                    }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: { y: { display: false }, x: { display: false } }
-                }
-            });
-        });
+    row.addEventListener('click', () => {
+      const uidStr = String(u.uid);
+      if(row.classList.contains('sel')) {
+        removeUser(uidStr);
+        row.classList.remove('sel');
+      } else {
+        addUserTimeline(uidStr, u.name);
+        row.classList.add('sel');
+      }
+    });
+    lb.appendChild(row);
+  });
 }
 
-function closePanel() {
-    document.getElementById('userPanel').classList.remove('open');
-    document.getElementById('overlay').classList.remove('show');
+function initHourBars(){
+  const b=document.getElementById('hourBars'),l=document.getElementById('hourLabels'),mx=Math.max(...ACTIVITY.busiest_hours,1);
+  ACTIVITY.busiest_hours.forEach((v,i)=>{
+    const bar=document.createElement('div');bar.className='mbar';bar.style.height=Math.round(v/mx*60)+'px';
+    bar.style.background=v===mx?'var(--amber)':'var(--blue)';b.appendChild(bar);
+    if(i%4===0){const lbl=document.createElement('div');lbl.className='mbar-lbl';lbl.textContent=i+'h';l.appendChild(lbl);}
+  });
 }
 
-window.onload = initCharts;
+function initDayBars(){
+  const b=document.getElementById('dayBars'),l=document.getElementById('dayLabels'),mx=Math.max(...ACTIVITY.busiest_days,1);
+  const days=['Mo','Di','Mi','Do','Fr','Sa','So'];
+  ACTIVITY.busiest_days.forEach((v,i)=>{
+    const bar=document.createElement('div');bar.className='mbar';bar.style.height=Math.round(v/mx*60)+'px';
+    bar.style.background='var(--purple)';b.appendChild(bar);
+    const lbl=document.createElement('div');lbl.className='mbar-lbl';lbl.textContent=days[i];l.appendChild(lbl);
+  });
+}
+
+function initHeatmap(){
+  const wrap=document.getElementById('heatmapWrap');
+  const DAYS=['Mo','Di','Mi','Do','Fr','Sa','So'];
+  const yCol=document.createElement('div');yCol.className='hm-y';
+  DAYS.forEach(d=>{const l=document.createElement('div');l.className='hm-y-lbl';l.textContent=d;yCol.appendChild(l);});
+  wrap.appendChild(yCol);
+  const grid=document.createElement('div');grid.className='hm-area';
+  const xr=document.createElement('div');xr.className='hm-x-row';
+  for(let h=0;h<24;h++) if(h%4===0){const l=document.createElement('div');l.className='hm-x-lbl';l.textContent=h+'h';xr.appendChild(l);}
+  grid.appendChild(xr);
+  ACTIVITY.heatmap.forEach((row,di)=>{
+    const r=document.createElement('div');r.className='hm-row';
+    row.forEach((v,h)=>{
+      const c=document.createElement('div');c.className='hm-cell';
+      c.style.background=`rgba(79,142,247,${Math.min(1,v/10)})`;r.appendChild(c);
+    });
+    grid.appendChild(r);
+  });
+  wrap.appendChild(grid);
+}
+
+function initGrowthChart(){
+  new Chart(document.getElementById('growthCanvas').getContext('2d'),{
+    type:'bar',
+    data:{labels:ACTIVITY.growth.labels,datasets:[{data:ACTIVITY.growth.net,backgroundColor:ACTIVITY.growth.net.map(v=>v>=0?'#22c55e':'#ef4444')}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}
+  });
+}
+
+function initMsgTypeChart(){
+  new Chart(document.getElementById('msgTypeCanvas').getContext('2d'),{
+    type:'doughnut',
+    data:{labels:ACTIVITY.msg_types.map(m=>m.type),datasets:[{data:ACTIVITY.msg_types.map(m=>m.val),backgroundColor:ACTIVITY.msg_types.map(m=>m.color)}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'70%',plugins:{legend:{position:'right',labels:{color:'#94a3b8',boxWidth:10,usePointStyle:true}}}}
+  });
+}
+
+let userTimeChart, userDonutChart;
+async function openPanel(uid){
+  const res=await fetch(`/api/id-finder/user-detail/${uid}`);
+  const u=await res.json();
+  const color=PALETTE[rnd(0,9)];
+  document.getElementById('panelAvatar').src=u.avatar_url;
+  document.getElementById('panelName').textContent=u.name;
+  document.getElementById('panelUsername').textContent=u.username;
+  document.getElementById('panelUid').textContent='ID: '+u.uid;
+  document.getElementById('panelBadges').innerHTML=`<span class="up-badge" style="color:#4f8ef7;border-color:#4f8ef7">${u.status.toUpperCase()}</span>`;
+  document.getElementById('ps-msgs').textContent=u.total_msgs;
+  document.getElementById('ps-media').textContent=u.total_media;
+  document.getElementById('ps-days').textContent=u.active_days;
+  document.getElementById('pi-joined').textContent=u.joined_at;
+  document.getElementById('pi-last').textContent=u.last_active;
+  document.getElementById('pi-avg').textContent=u.avg_per_day;
+  document.getElementById('pi-rank').textContent='#'+u.rank;
+  document.getElementById('pi-warns').textContent=u.warnings;
+  document.getElementById('pi-lang').textContent=u.language;
+
+  if(userTimeChart) userTimeChart.destroy();
+  userTimeChart=new Chart(document.getElementById('userTimelineCanvas').getContext('2d'),{
+    type:'line',data:{labels:u.timeline_labels,datasets:[{data:u.timeline_14d,borderColor:color,fill:true,tension:.4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}
+  });
+
+  if(userDonutChart) userDonutChart.destroy();
+  const utypes=Object.keys(u.msg_types).map((k,i)=>({type:k,val:u.msg_types[k],color:PALETTE[i%10]}));
+  userDonutChart=new Chart(document.getElementById('userDonutCanvas').getContext('2d'),{
+    type:'doughnut',data:{labels:utypes.map(t=>t.type),datasets:[{data:utypes.map(t=>t.val),backgroundColor:utypes.map(t=>t.color)}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'70%',plugins:{legend:{display:false}}}
+  });
+  const legend=document.getElementById('donutLegend');legend.innerHTML='';
+  utypes.forEach(t=>legend.innerHTML+=`<div class="tleg-row"><div class="tleg-dot" style="background:${t.color}"></div><span class="tleg-label">${t.type}</span><span class="tleg-val">${t.val}</span></div>`);
+
+  const pt=document.getElementById('panelTopics');pt.innerHTML='';
+  u.topics.forEach(t=>pt.innerHTML+=`<div class="topic-row"><span class="topic-name">${t.name}</span><div class="topic-bar-track"><div class="topic-bar-fill" style="width:50%"></div></div><span class="topic-count">${t.count}</span></div>`);
+
+  const pm=document.getElementById('panelMessages');pm.innerHTML='';
+  u.recent_messages.forEach(m=>{
+    let mediaHtml = '';
+    if(m.type === 'photo' && m.file_id) {
+       mediaHtml = `<div class="msg-media"><img src="/api/media/${m.file_id}" class="msg-img" onclick="window.open(this.src)"></div>`;
+    } else if(m.type === 'video' && m.file_id) {
+       mediaHtml = `<div class="msg-media"><video src="/api/media/${m.file_id}" controls class="msg-video"></video></div>`;
+    }
+    pm.innerHTML += `
+      <div class="msg-item">
+        <div class="msg-meta"><span class="msg-time">${m.time}</span><span class="msg-type-badge">${m.type}</span></div>
+        ${m.preview ? `<div class="msg-text">${m.preview}</div>` : ''}
+        ${mediaHtml}
+      </div>`;
+  });
+
+  document.getElementById('overlay').classList.add('show');
+  document.getElementById('userPanel').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+
+function closePanel(){
+  document.getElementById('overlay').classList.remove('show');
+  document.getElementById('userPanel').classList.remove('open');
+  document.body.style.overflow='';
+}
+
+function rnd(a,b){return Math.floor(Math.random()*(b-a+1))+a;}
+
+window.onload=()=>{
+  initTimeline();initGrowthChart();initMsgTypeChart();initLeaderboard();initHourBars();initDayBars();initHeatmap();
+  ACTIVITY.events.forEach(e=>{
+    document.getElementById('eventList').innerHTML+=`
+      <div class="ev-row">
+        <img src="/api/avatar/${e.uid}" class="ev-av" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(e.user)}&background=random'">
+        <span class="ev-time">${e.time}</span>
+        <span class="ev-user">@${e.user}</span>
+        <span class="badge ${e.type}">${e.type==='join'?'Beitritt':'Austritt'}</span>
+      </div>`;
+  });
+};
 </script>
-{% endblock %}
+</body>
+</html>

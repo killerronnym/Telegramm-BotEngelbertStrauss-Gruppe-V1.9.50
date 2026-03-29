@@ -938,368 +938,229 @@ def id_finder_update_admin_permissions():
             flash('Berechtigungen erfolgreich aktualisiert.', 'success')
     return redirect(url_for('dashboard.id_finder_admin_panel'))
 
+
+
+
 @bp.route('/id-finder/analytics')
 @login_required
 def id_finder_analytics():
-    sys.stdout.write("--- [DEBUG] Entered id_finder_analytics ---\n")
+    sys.stdout.write("--- [DEBUG] Entered new id_finder_analytics ---\n")
     sys.stdout.flush()
-    from ..models import InviteLog
-
-    def fmt_dt(d):
-        if not d: return ""
-        try:
-            if isinstance(d, datetime):
-                return d.strftime('%d.%m')
-            if isinstance(d, str):
-                if '-' in d and len(d) >= 10:
-                    y, m, d_val = d.split('-')[:3]
-                    return f"{d_val[:2]}.{m}"
-                return d
-            return str(d)
-        except: return ""
     try:
-        now = datetime.utcnow()
-        cutoff = now - timedelta(days=365) # Fallback for growth
-        try:
-            days = int(request.args.get('days') or 7)
-        except ValueError:
-            days = 7
-        if days > 0:
-            cutoff = now - timedelta(days=days)
-
-        try:
-            month = int(request.args.get('month') or 0)
-            year = int(request.args.get('year') or 0)
-        except ValueError:
-            month = 0
-            year = 0
-
-        query_filter = true()
+        from ..models import IDFinderMessage, IDFinderUser, IDFinderAdmin, InviteLog
         
-        # Handle time filtering
+        PALETTE=['#4f8ef7','#a855f7','#ec4899','#22c55e','#f59e0b','#ef4444','#14b8a6','#8b5cf6','#f97316','#06b6d4']
+        
+        days = int(request.args.get('days') or 30)
+        month = int(request.args.get('month') or 0)
+        year = int(request.args.get('year') or 0)
+
+        now = datetime.utcnow()
+        cutoff = now - timedelta(days=days)
+
         if year > 0 and month > 0:
             query_filter = (extract('year', IDFinderMessage.timestamp) == year) & (extract('month', IDFinderMessage.timestamp) == month)
+            cutoff = datetime(year, month, 1)
         elif year > 0:
             query_filter = extract('year', IDFinderMessage.timestamp) == year
-        elif days > 0:
+            cutoff = datetime(year, 1, 1)
+        else:
             query_filter = IDFinderMessage.timestamp >= cutoff
-        sys.stdout.write(f"--- [DEBUG] Filter set. Days={days}, Month={month}, Year={year} ---\n")
-        sys.stdout.flush()
-        total_users = IDFinderUser.query.count()
-        total_messages = IDFinderMessage.query.count()
-        total_media = IDFinderMessage.query.filter(IDFinderMessage.content_type != 'text').count()
 
-        # Leaderboard with extra info
-        leaderboard = []
+        total_users = IDFinderUser.query.count()
+        total_messages = IDFinderMessage.query.filter(query_filter).count()
+        total_media = IDFinderMessage.query.filter(query_filter, IDFinderMessage.content_type != 'text').count()
+        
+        active_users_sq = db.session.query(IDFinderMessage.telegram_user_id).filter(query_filter).distinct().subquery()
+        active_users = db.session.query(func.count(active_users_sq.c.telegram_user_id)).scalar()
+
+        leaderboard_raw = []
         if total_messages > 0:
-            leaderboard_query = db.session.query(
+            leaderboard_raw = db.session.query(
                 IDFinderUser.telegram_id,
                 IDFinderUser.first_name,
                 IDFinderUser.username,
-                IDFinderUser.first_contact,
+                IDFinderUser.photo_url,
+                IDFinderUser.created_at if hasattr(IDFinderUser, 'created_at') else getattr(IDFinderUser, 'first_contact', None),
                 func.count(IDFinderMessage.id).label('msg_count'),
                 func.sum(case((IDFinderMessage.content_type != 'text', 1), else_=0)).label('media_count')
             ).join(IDFinderMessage, IDFinderUser.telegram_id == IDFinderMessage.telegram_user_id) \
              .filter(query_filter) \
-             .group_by(IDFinderUser.telegram_id, IDFinderUser.first_name, IDFinderUser.username, IDFinderUser.first_contact) \
+             .group_by(IDFinderUser.telegram_id, IDFinderUser.first_name,
+                       IDFinderUser.username, IDFinderUser.photo_url,
+                       IDFinderUser.created_at if hasattr(IDFinderUser, 'created_at') else getattr(IDFinderUser, 'first_contact', None)) \
              .order_by(text('msg_count DESC')).limit(10).all()
 
-            for row in leaderboard_query:
-                leaderboard.append({
-                    "uid": str(row.telegram_id),
-                    "name": row.first_name or "Unknown",
-                    "username": row.username or "Unbekannt",
-                    "msgs": int(row.msg_count),
-                    "media": int(row.media_count or 0),
-                    "joined_at": row.first_contact.strftime('%d.%m.%Y') if row.first_contact else "Unbekannt"
-                })
-        else:
-            # Fallback wrapper if message db is empty but connection is live
-            recent_users = IDFinderUser.query.order_by(IDFinderUser.last_contact.desc()).limit(10).all()
-            for u in recent_users:
-                leaderboard.append({
-                    "uid": str(u.telegram_id),
-                    "name": u.first_name or "Unknown",
-                    "username": u.username or "Unbekannt",
-                    "msgs": 0,
-                    "media": 0,
-                    "joined_at": u.first_contact.strftime('%d.%m.%Y') if u.first_contact else "Unbekannt"
-                })
-        
-        sys.stdout.write(f"--- [DEBUG] Leaderboard ready: {len(leaderboard)} entries ---\n")
-        sys.stdout.flush()
+        admins = {str(a.telegram_id) for a in IDFinderAdmin.query.all()}
+        leaderboard = []
+        for i, row in enumerate(leaderboard_raw):
+            c_date = row[4]
+            leaderboard.append({
+                "uid": str(row.telegram_id),
+                "name": row.first_name or "Unbekannt",
+                "username": f"@{row.username}" if row.username else "—",
+                "avatar_url": f"/api/avatar/{row.telegram_id}",
+                "msgs": int(row.msg_count),
+                "media": int(row.media_count or 0),
+                "joined_at": c_date.strftime('%d.%m.%Y') if c_date and hasattr(c_date, 'strftime') else "—",
+                "rank": i + 1,
+                "status": "admin" if str(row.telegram_id) in admins else "member",
+            })
 
-        # Timeline (Messages per day)
-        date_expr = func.date(IDFinderMessage.timestamp)
-        timeline_query = db.session.query(
-            date_expr.label('date'),
-            func.count(IDFinderMessage.id).label('count')
-        ).filter(query_filter).group_by(date_expr).order_by(date_expr).all()
-        
-        # Fallback for empty messages: use InviteLog for trend
-        if not total_messages:
-            sys.stdout.write("--- [DEBUG] No messages found, using InviteLog for activity trend ---\n")
-            sys.stdout.flush()
-            date_expr = func.date(InviteLog.timestamp)
-            timeline_query = db.session.query(
-                date_expr.label('date'),
-                func.count(InviteLog.id).label('count')
-            ).filter(InviteLog.timestamp >= cutoff).group_by(date_expr).order_by(date_expr).all()
-        
-        timeline_labels = []
-        total_data = []
-        
-        # Consistent labels for the chart even if data is missing on some days
+        if total_messages == 0 and total_users > 0:
+            recent_users = IDFinderUser.query.order_by(IDFinderUser.last_contact.desc()).limit(10).all()
+            for i, u in enumerate(recent_users):
+                c_date = getattr(u, 'created_at', getattr(u, 'first_contact', None))
+                leaderboard.append({
+                    "uid": str(u.telegram_id), "name": u.first_name or "Unbekannt", "username": f"@{u.username}" if u.username else "—",
+                    "avatar_url": f"/api/avatar/{u.telegram_id}", "msgs": 0, "media": 0, "joined_at": c_date.strftime('%d.%m.%Y') if c_date and hasattr(c_date, 'strftime') else "—",
+                    "rank": i + 1, "status": "admin" if str(u.telegram_id) in admins else "member"
+                })
+
+        timeline_query = db.session.query(func.date(IDFinderMessage.timestamp).label('date'), func.count(IDFinderMessage.id).label('count')).filter(query_filter).group_by('date').order_by('date').all()
+        def fmt_dt(d):
+            if not d: return ""
+            try: return d.strftime('%d.%m') if hasattr(d, 'strftime') else d if isinstance(d, str) and '.' in d else f"{str(d).split('-')[2][:2]}.{str(d).split('-')[1]}"
+            except: return str(d)
+
         date_map = {fmt_dt(row.date): row.count for row in timeline_query if row.date}
-        for i in range(days-1, -1, -1):
+        timeline_labels, total_data = [], []
+        for i in range(days - 1, -1, -1):
             d = now - timedelta(days=i)
             d_str = d.strftime('%d.%m')
             timeline_labels.append(d_str)
             total_data.append(date_map.get(d_str, 0))
 
-        # Growth Data (Joins vs Leaves)
-        growth_labels = []
-        joins_data = []
-        leaves_data = []
-        
-        growth_query = db.session.query(
-            func.date(InviteLog.timestamp).label('date'),
-            func.sum(case((InviteLog.action.ilike('%beigetreten%'), 1), else_=0)).label('joins'),
-            func.sum(case((InviteLog.action.ilike('%verlassen%'), 1), else_=0)).label('leaves')
-        ).filter(InviteLog.timestamp >= cutoff).group_by(func.date(InviteLog.timestamp)).all()
-        
-        growth_map = {fmt_dt(row.date): (row.joins or 0, row.leaves or 0) for row in growth_query if row.date}
-        for i in range(days-1, -1, -1):
-            d = now - timedelta(days=i)
-            d_str = d.strftime('%d.%m')
-            growth_labels.append(d_str)
-            j, l = growth_map.get(d_str, (0, 0))
-            joins_data.append(int(j))
-            leaves_data.append(int(l))
-
-        # Events (Joins/Leaves List)
-        joins_leaves = InviteLog.query.filter(
-            InviteLog.action.ilike('%beigetreten%') | 
-            InviteLog.action.ilike('%verlassen%') | 
-            InviteLog.action.ilike('%entfernt%') |
-            InviteLog.action.ilike('%Regeln%') |
-            InviteLog.action.ilike('%letsgo%')
-        ).order_by(InviteLog.timestamp.desc()).limit(30).all()
-
-        # Stats for KPIs
-        stats = {
-            "msgs": total_messages if total_messages > 0 else InviteLog.query.count(),
-            "active_users": IDFinderUser.query.filter(IDFinderUser.last_contact >= cutoff).count(),
-            "media_share": f"{(total_media / total_messages * 100):.1f}%" if total_messages > 0 else "0.0%",
-            "growth_net": sum(joins_data) - sum(leaves_data),
-            "avg_msgs_per_day": round(total_messages / days, 1) if days > 0 else 0
-        }
-
-        # Hours distribution
-        hour_expr = extract('hour', IDFinderMessage.timestamp)
-        hours_query = db.session.query(
-            hour_expr.label('hour'),
-            func.count(IDFinderMessage.id).label('count')
-        ).filter(query_filter).group_by(hour_expr).all()
-        
+        hours_query = db.session.query(extract('hour', IDFinderMessage.timestamp).label('hour'), func.count(IDFinderMessage.id).label('count')).filter(query_filter).group_by('hour').all()
         busiest_hours = [0] * 24
         for row in hours_query:
-            if row.hour is not None:
-                busiest_hours[int(row.hour)] = row.count
+            if row.hour is not None: busiest_hours[int(row.hour)] = int(row.count)
 
-        # Weekdays distribution
         engine_name = db.engine.dialect.name
-        if engine_name == 'mysql':
-            dow_expr = func.dayofweek(IDFinderMessage.timestamp)
-        else:
-            dow_expr = extract('dow', IDFinderMessage.timestamp)
-
-        dow_query = db.session.query(
-            dow_expr.label('dow'),
-            func.count(IDFinderMessage.id).label('count')
-        ).filter(query_filter).group_by(dow_expr).all()
-
+        dow_expr = func.dayofweek(IDFinderMessage.timestamp) if engine_name == 'mysql' else extract('dow', IDFinderMessage.timestamp)
+        dow_query = db.session.query(dow_expr.label('dow'), func.count(IDFinderMessage.id).label('count')).filter(query_filter).group_by('dow').all()
         busiest_days = [0] * 7
         for row in dow_query:
             if row.dow is not None:
-                try:
-                    val = int(row.dow)
-                    if engine_name == 'mysql':
-                        py_dow = (val + 5) % 7
-                    else:
-                        py_dow = (val + 6) % 7
-                    busiest_days[py_dow] = row.count
-                except: pass
+                py_dow = (int(row.dow) + 5) % 7 if engine_name == 'mysql' else (int(row.dow) + 6) % 7
+                busiest_days[py_dow] = int(row.count)
 
-        # Growth Data (Joins vs Leaves)
-        from ..models import InviteLog
+        type_query = db.session.query(IDFinderMessage.content_type, func.count(IDFinderMessage.id).label('count')).filter(query_filter).group_by(IDFinderMessage.content_type).all()
+        msg_types_dict = {row.content_type: int(row.count) for row in type_query}
+        msg_types = [{"type": k.capitalize() if k else "Unbekannt", "val": v, "color": PALETTE[i%10]} for i, (k,v) in enumerate(msg_types_dict.items())]
+
+        heatmap_query = db.session.query(dow_expr.label('dow'), extract('hour', IDFinderMessage.timestamp).label('hour'), func.count(IDFinderMessage.id).label('count')).filter(query_filter).group_by('dow', 'hour').all()
+        heatmap_matrix = [[0] * 24 for _ in range(7)]
+        for row in heatmap_query:
+            if row.dow is not None and row.hour is not None:
+                py_dow = (int(row.dow) + 5) % 7 if engine_name == 'mysql' else (int(row.dow) + 6) % 7
+                heatmap_matrix[py_dow][int(row.hour)] = int(row.count)
+
         growth_query = db.session.query(
             func.date(InviteLog.timestamp).label('date'),
             func.sum(case((InviteLog.action.ilike('%beigetreten%'), 1), else_=0)).label('joins'),
             func.sum(case((InviteLog.action.ilike('%verlassen%') | InviteLog.action.ilike('%entfernt%'), 1), else_=0)).label('leaves')
-        ).filter(InviteLog.timestamp >= cutoff) \
-         .group_by(func.date(InviteLog.timestamp)).order_by(func.date(InviteLog.timestamp)).all()
+        ).filter(InviteLog.timestamp >= cutoff).group_by('date').order_by('date').all()
 
-        growth_labels = []
-        growth_net = []
-        
-        date_map_joins = {fmt_dt(row.date): (row.joins or 0) for row in growth_query if row.date}
-        date_map_leaves = {fmt_dt(row.date): (row.leaves or 0) for row in growth_query if row.date}
-        
-        for i in range(days-1, -1, -1):
+        growth_labels, growth_net = [], []
+        g_joins = {fmt_dt(r.date): int(r.joins) for r in growth_query if r.date}
+        g_leaves = {fmt_dt(r.date): int(r.leaves) for r in growth_query if r.date}
+        for i in range(days - 1, -1, -1):
             d = now - timedelta(days=i)
             d_str = d.strftime('%d.%m')
             growth_labels.append(d_str)
-            net = date_map_joins.get(d_str, 0) - date_map_leaves.get(d_str, 0)
-            growth_net.append(net)
+            growth_net.append(g_joins.get(d_str, 0) - g_leaves.get(d_str, 0))
 
-        # Activity Heatmap (Day x Hour)
-        heatmap_query = db.session.query(
-            dow_expr.label('dow'),
-            hour_expr.label('hour'),
-            func.count(IDFinderMessage.id).label('count')
-        ).filter(query_filter).group_by(dow_expr, hour_expr).all()
+        joins_leaves = InviteLog.query.filter(InviteLog.action.ilike('%beigetreten%') | InviteLog.action.ilike('%verlassen%') | InviteLog.action.ilike('%entfernt%')).order_by(InviteLog.timestamp.desc()).limit(30).all()
+        events_list = [{"time": e.timestamp.strftime('%d.%m %H:%M') if hasattr(e.timestamp, 'strftime') else str(e.timestamp), "user": e.username or f"id{e.telegram_user_id}", "uid": str(e.telegram_user_id), "type": "join" if "beigetreten" in str(e.action) else "leave"} for e in joins_leaves]
 
-        # Matrix: 7 days x 24 hours
-        heatmap_matrix = [[0 for _ in range(24)] for _ in range(7)]
-        for row in heatmap_query:
-            if row.dow is not None and row.hour is not None:
-                try:
-                    val = int(row.dow)
-                    if engine_name == 'mysql': py_dow = (val + 5) % 7
-                    else: py_dow = (val + 6) % 7
-                    heatmap_matrix[py_dow][int(row.hour)] = row.count
-                except: pass
-
-        sys.stdout.write("--- [DEBUG] Everything ready. Rendering template. ---\n")
-        sys.stdout.flush()
-        
-        joins_leaves = InviteLog.query.filter(
-            InviteLog.action.ilike('%beigetreten%') | 
-            InviteLog.action.ilike('%verlassen%') | 
-            InviteLog.action.ilike('%entfernt%') |
-            InviteLog.action.ilike('%Regeln%') |
-            InviteLog.action.ilike('%letsgo%')
-        ).order_by(InviteLog.timestamp.desc()).limit(50).all()
-
-        return render_template('id_finder_analytics.html', 
-                                stats=stats,
-                                leaderboard=leaderboard,
-                                joins_leaves=joins_leaves,
-                                heatmap=heatmap_matrix,
-                                activity={
-                                    'timeline': {'labels': timeline_labels, 'total': total_data}, 
-                                    'growth': {'labels': growth_labels, 'joins': joins_data, 'leaves': leaves_data}
-                                })
+        return render_template('id_finder_analytics.html',
+            stats={'total_users': total_users, 'total_messages': total_messages, 'total_media': total_media, 'active_users': active_users, 'avg_per_day': round(total_messages / max(days, 1), 1)},
+            activity={'timeline': {'labels': timeline_labels, 'total': total_data}, 'leaderboard': leaderboard, 'busiest_hours': busiest_hours, 'busiest_days': busiest_days, 'msg_types': msg_types, 'heatmap': heatmap_matrix, 'growth': {'labels': growth_labels, 'net': growth_net}, 'events': events_list},
+            filter_days=days, filter_month=month, filter_year=year)
     except Exception as e:
-        import traceback
-        err_msg = f"\n--- Analytics Error [{datetime.now()}] ---\n{traceback.format_exc()}\n"
-        sys.stderr.write(err_msg)
-        # Try to write to a visible place
-        try:
-            with open("analytics_error.log", "a", encoding="utf-8") as f:
-                f.write(err_msg)
-        except: pass
-        return f"Internal Server Error: {str(e)}", 500
+        import traceback; sys.stderr.write(f"ERROR: {e}\n{traceback.format_exc()}\n")
+        return f"Fehler: {e}", 500
 
-@bp.route('/api/id-finder/user-details/<int:uid>')
-def id_finder_user_details(uid):
+@bp.route('/api/id-finder/user-detail/<int:uid>')
+@login_required
+def id_finder_user_detail_api(uid):
     try:
-        from ..models import IDFinderUser, IDFinderMessage, TopicMapping
-        user = IDFinderUser.query.filter_by(telegram_id=uid).first()
-        if not user:
-            return jsonify({'error': 'User not found', 'uid': str(uid), 'name': 'Unbekannt'}), 200
-        
-        # Stats
+        from ..models import IDFinderUser, IDFinderMessage, TopicMapping, IDFinderAdmin, BotSettings
+        user = IDFinderUser.query.filter_by(telegram_id=uid).first_or_404()
         total_msgs = IDFinderMessage.query.filter_by(telegram_user_id=uid).count()
-        total_media = IDFinderMessage.query.filter(IDFinderMessage.telegram_user_id == uid, IDFinderMessage.content_type != 'text').count()
-        
-        try:
-            active_days_query = db.session.query(func.date(IDFinderMessage.timestamp)).filter_by(telegram_user_id=uid).distinct().all()
-            active_days = len(active_days_query) or 1
-        except: active_days = 0
-        
-        # Timeline (14 days)
+        total_media = IDFinderMessage.query.filter(IDFinderMessage.telegram_user_id==uid, IDFinderMessage.content_type != 'text').count()
+        active_days = db.session.query(func.count(func.distinct(func.date(IDFinderMessage.timestamp)))).filter_by(telegram_user_id=uid).scalar() or 0
+
+        subq = db.session.query(IDFinderMessage.telegram_user_id, func.count(IDFinderMessage.id).label('cnt')).group_by(IDFinderMessage.telegram_user_id).subquery()
+        rank_result = db.session.query(func.count()).filter(subq.c.cnt > db.session.query(subq.c.cnt).filter(subq.c.telegram_user_id == uid).scalar_subquery()).scalar()
+        rank = (rank_result or 0) + 1
+
         now = datetime.utcnow()
-        tl_labels = []; tl_data = []
-        try:
-            cutoff_14 = now - timedelta(days=14)
-            tl_query = db.session.query(
-                func.date(IDFinderMessage.timestamp).label('date'),
-                func.count(IDFinderMessage.id).label('count')
-            ).filter(IDFinderMessage.telegram_user_id == uid, IDFinderMessage.timestamp >= cutoff_14) \
-             .group_by(func.date(IDFinderMessage.timestamp)).all()
-            
-            tl_map = {}
-            for row in tl_query:
-                d_str = row.date # SQLite returns 'YYYY-MM-DD'
-                if isinstance(d_str, str) and '-' in d_str:
-                    parts = d_str.split('-')
-                    d_key = f"{parts[2][:2]}.{parts[1]}"
-                    tl_map[d_key] = row.count
-                elif hasattr(d_str, 'strftime'):
-                    tl_map[d_str.strftime('%d.%m')] = row.count
+        cutoff_14 = now - timedelta(days=14)
+        tl_query = db.session.query(func.date(IDFinderMessage.timestamp).label('date'), func.count(IDFinderMessage.id).label('count')).filter(IDFinderMessage.telegram_user_id == uid, IDFinderMessage.timestamp >= cutoff_14).group_by('date').order_by('date').all()
+        tl_map = {r.date.strftime('%d.%m') if hasattr(r.date, 'strftime') else str(r.date)[:10].split('-')[2]+'.'+str(r.date)[:10].split('-')[1]: r.count for r in tl_query if r.date}
+        timeline_labels, timeline_data = [], []
+        for i in range(13, -1, -1):
+            lbl = (now - timedelta(days=i)).strftime('%d.%m')
+            timeline_labels.append(lbl); timeline_data.append(tl_map.get(lbl, 0))
 
-            for i in range(13, -1, -1):
-                d_str = (now - timedelta(days=i)).strftime('%d.%m')
-                tl_labels.append(d_str); tl_data.append(tl_map.get(d_str, 0))
-        except: pass
-            
-        # Topics
-        topics = []
-        try:
-            topic_query = db.session.query(IDFinderMessage.topic_id, func.count(IDFinderMessage.id).label('count')) \
-                           .filter_by(telegram_user_id=uid).group_by(IDFinderMessage.topic_id).order_by(text('count DESC')).limit(5).all()
-            for tid, count in topic_query:
-                t_name = TopicMapping.query.filter_by(topic_id=str(tid)).first().topic_name if tid and TopicMapping.query.filter_by(topic_id=str(tid)).first() else f"Topic {tid}" if tid else "Hauptgruppe"
-                topics.append({'name': t_name, 'count': count})
-        except: pass
-            
-        # Recent messages
-        msgs = []
-        try:
-            recent = IDFinderMessage.query.filter_by(telegram_user_id=uid).order_by(IDFinderMessage.timestamp.desc()).limit(5).all()
-            msgs = [{'text': (m.text[:100] + '...') if m.text and len(m.text) > 100 else (m.text or f"[{m.content_type}]"), 'time': m.timestamp.strftime('%d.%m. %H:%M'), 'type': m.content_type or 'text'} for m in recent]
-        except: pass
+        types_query = db.session.query(IDFinderMessage.content_type, func.count(IDFinderMessage.id).label('count')).filter_by(telegram_user_id=uid).group_by(IDFinderMessage.content_type).all()
+        msg_types = {r.content_type: int(r.count) for r in types_query}
+
+        topic_query = db.session.query(IDFinderMessage.message_thread_id, func.count(IDFinderMessage.id).label('count')).filter(IDFinderMessage.telegram_user_id == uid, IDFinderMessage.message_thread_id != None).group_by(IDFinderMessage.message_thread_id).order_by(text('count DESC')).limit(5).all()
+        topic_map = {t.topic_id: t.topic_name for t in TopicMapping.query.all()}
+        topics = [{"name": topic_map.get(str(r.message_thread_id), f"Topic {r.message_thread_id}"), "count": int(r.count)} for r in topic_query]
+
+        recent = IDFinderMessage.query.filter_by(telegram_user_id=uid).order_by(IDFinderMessage.timestamp.desc()).limit(10).all()
+        recent_msgs = [{"time": m.timestamp.strftime('%H:%M') if hasattr(m.timestamp, 'strftime') else '—', "type": m.content_type or 'text', "preview": m.text or m.text_preview or "", "file_id": m.file_id} for m in recent]
+
+        is_admin = IDFinderAdmin.query.filter_by(telegram_id=uid).first() is not None
+        c_date = getattr(user, 'created_at', getattr(user, 'first_contact', None))
+
+        from ..models import IDFinderWarning
+        warnings = IDFinderWarning.query.filter_by(telegram_user_id=uid).count()
         
-        # Rank
-        rank = 0
-        try:
-           rank_query = db.session.query(IDFinderMessage.telegram_user_id, func.count(IDFinderMessage.id).label('c')).group_by(IDFinderMessage.telegram_user_id).order_by(text('c DESC')).all()
-           rank = next((i + 1 for i, r in enumerate(rank_query) if r.telegram_user_id == uid), 0)
-        except: pass
-
-        joined_str = "—"
-        try:
-            if user.first_contact:
-                if hasattr(user.first_contact, 'strftime'): joined_str = user.first_contact.strftime('%d.%m.%Y')
-                else: joined_str = str(user.first_contact)[:10]
-        except: pass
-
         return jsonify({
-            'name': user.first_name or "Unbekannt", 
-            'username': user.username or f"id{uid}", 
-            'uid': str(uid),
-            'msgs': total_msgs, 
-            'media': total_media, 
-            'days': active_days, 
-            'rank': rank,
-            'joined': joined_str,
-            'last_active': msgs[0]['time'] if msgs else "—",
-            'timeline': {'labels': tl_labels, 'data': tl_data},
-            'topics': topics, 
-            'recent': msgs
+            "uid": str(uid), "name": user.first_name or "Unbekannt", "username": f"@{user.username}" if user.username else "—",
+            "language": user.language_code or "—", "status": "admin" if is_admin else "member", "avatar_url": f"/api/avatar/{uid}",
+            "total_msgs": total_msgs, "total_media": total_media, "active_days": active_days,
+            "joined_at": c_date.strftime('%d.%m.%Y') if c_date and hasattr(c_date, 'strftime') else "—",
+            "last_active": user.last_contact.strftime('%d.%m. %H:%M') if user.last_contact and hasattr(user.last_contact, 'strftime') else "—",
+            "avg_per_day": round(total_msgs / max(active_days, 1), 1),
+            "rank": rank, "warnings": warnings, "timeline_14d": timeline_data, "timeline_labels": timeline_labels,
+            "msg_types": msg_types, "topics": topics, "recent_messages": recent_msgs
         })
     except Exception as e:
-        import traceback
-        sys.stderr.write(f"CRITICAL ERROR in user-details API: {e}\n{traceback.format_exc()}\n")
-        return jsonify({
-            'name': 'System-Fehler', 'username': 'error', 'uid': str(uid),
-            'msgs': 0, 'media': 0, 'days': 0, 'rank': 0,
-            'joined': '—', 'last_active': '—',
-            'timeline': {'labels': [], 'data': []},
-            'topics': [], 'recent': []
-        }), 200
+        import traceback; sys.stderr.write(f"API Error {e}\n{traceback.format_exc()}\n"); return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/api/id-finder/user-history/<int:uid>')
+@login_required
+def id_finder_user_history_api(uid):
+    try:
+        from ..models import IDFinderMessage
+        from sqlalchemy import func
+        from datetime import datetime, timedelta
+        
+        days = request.args.get('days', 30, type=int)
+        now = datetime.utcnow()
+        cutoff = now - timedelta(days=days)
+        
+        history_query = db.session.query(func.date(IDFinderMessage.timestamp).label('date'), func.count(IDFinderMessage.id).label('count')).filter(IDFinderMessage.telegram_user_id == uid, IDFinderMessage.timestamp >= cutoff).group_by('date').order_by('date').all()
+        
+        # Format labels consistency
+        tl_map = {row.date.strftime('%d.%m') if hasattr(row.date, 'strftime') else f"{str(row.date).split('-')[2][:2]}.{str(row.date).split('-')[1]}": row.count for row in history_query if row.date}
+        
+        history_data = []
+        for i in range(days - 1, -1, -1):
+            lbl = (now - timedelta(days=i)).strftime('%d.%m')
+            history_data.append(tl_map.get(lbl, 0))
+            
+        return jsonify({"history": history_data})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 @bp.route('/id-finder/profiles')
 @login_required
@@ -1345,22 +1206,27 @@ def delete_profile(pid):
 @bp.route('/api/telegram-image/<file_id>')
 @login_required
 def telegram_image(file_id):
-    # Einfacher Proxy für Telegram-Bilder
+    # Proxy für Telegram-Bilder
     import requests
-    token = os.environ.get('TELEGRAM_BOT_TOKEN')
+    from ..models import BotSettings
+    settings = BotSettings.query.filter_by(bot_name='id_finder').first()
+    if not settings: return "No Settings", 500
+    config = json.loads(settings.config_json)
+    token = config.get('bot_token')
     if not token: return "No Token", 500
     
-    # Get File path
     try:
         r = requests.get(f"https://api.telegram.org/bot{token}/getFile?file_id={file_id}", timeout=5)
-        path = r.json().get('result', {}).get('file_path')
+        res_data = r.json()
+        if not res_data.get('ok'): return "Telegram Error", 500
+        path = res_data.get('result', {}).get('file_path')
         if not path: return "No Path", 404
         
         # Stream image
         img_resp = requests.get(f"https://api.telegram.org/file/bot{token}/{path}", stream=True, timeout=10)
-        return (img_resp.content, 200, {'Content-Type': img_resp.headers.get('Content-Type')})
-    except:
-        return "Proxy Error", 500
+        return (img_resp.content, 200, {'Content-Type': img_resp.headers.get('Content-Type', 'image/jpeg')})
+    except Exception as e:
+        return f"Proxy Error: {str(e)}", 500
 
 # --- USER MANAGEMENT ---
 @bp.route('/users')

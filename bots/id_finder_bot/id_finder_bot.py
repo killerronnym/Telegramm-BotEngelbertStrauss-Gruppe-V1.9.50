@@ -54,6 +54,53 @@ except ImportError:
 
 from shared_bot_utils import get_bot_config
 
+async def download_user_avatar(bot, user_id):
+    """Downloads the user's profile photo and saves it to static/avatars/."""
+    try:
+        from web_dashboard.app.models import db, IDFinderUser
+        from shared_bot_utils import get_shared_flask_app
+        
+        flask_app = get_shared_flask_app()
+        # AVATAR_DIR path: documents/bot t/web_dashboard/app/static/avatars/
+        current_dir = os.path.dirname(os.path.abspath(__file__)) # c:\...\bots\id_finder_bot
+        project_root = os.path.dirname(os.path.dirname(current_dir))
+        AVATAR_DIR = os.path.join(project_root, 'web_dashboard', 'app', 'static', 'avatars')
+        os.makedirs(AVATAR_DIR, exist_ok=True)
+
+        with flask_app.app_context():
+            user = IDFinderUser.query.filter_by(telegram_id=user_id).first()
+            if not user: return None
+            
+            now = datetime.utcnow()
+            # If cached recently (last 24h), skip
+            if user.photo_cached_at and (now - user.photo_cached_at).total_seconds() < 86400:
+                if os.path.exists(os.path.join(AVATAR_DIR, f"{user_id}.jpg")):
+                    return user.photo_url
+
+            # Fetch profile photos
+            photos = await bot.get_user_profile_photos(user_id, limit=1)
+            if not photos or not photos.photos:
+                user.photo_url = f"https://ui-avatars.com/api/?name={user.first_name or 'U'}&background=random"
+                user.photo_cached_at = now
+                db.session.commit()
+                return user.photo_url
+            
+            # Get largest version
+            file_id = photos.photos[0][-1].file_id
+            file = await bot.get_file(file_id)
+            
+            dest_path = os.path.join(AVATAR_DIR, f"{user_id}.jpg")
+            await file.download_to_drive(dest_path)
+            
+            user.photo_file_id = file_id
+            user.photo_url = f"/static/avatars/{user_id}.jpg"
+            user.photo_cached_at = now
+            db.session.commit()
+            return user.photo_url
+    except Exception as e:
+        logger.error(f"Error downloading avatar for {user_id}: {e}")
+        return None
+
 # --- Config Management ---
 def get_config_from_db():
     try:
@@ -252,7 +299,8 @@ def db_log_message_sync(user_dict, chat_dict, msg_dict, config):
                     chat_id=chat_dict['id'], message_thread_id=msg_dict.get('thread_id'),
                     chat_type=chat_dict['type'], text=msg_dict['text'],
                     content_type=msg_dict['content_type'], file_id=msg_dict['file_id'],
-                    is_command=msg_dict['is_command'], timestamp=now
+                    is_command=msg_dict['is_command'], timestamp=now,
+                    text_preview=msg_dict['text'][:190] if msg_dict['text'] else f"[{msg_dict['content_type']}]"
                 )
                 db.session.add(db_msg)
                 logger.info(f"✅ Message {msg_dict['id']} from {user_dict['id']} saved to DB.")
@@ -354,6 +402,9 @@ async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, db_log_message_sync, user_dict, chat_dict, msg_dict, config)
+    
+    # Trigger avatar download in background
+    asyncio.create_task(download_user_avatar(context.bot, user.id))
 
 # --- Commands ---
 async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):

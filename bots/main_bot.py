@@ -311,8 +311,32 @@ def main():
         except Exception as e:
             logger.error(f"Error logging message for analytics: {e}")
 
-    from telegram.ext import TypeHandler
+    async def global_chat_member_logger(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Log all membership changes to InviteLog for analytics."""
+        if not update.chat_member:
+            return
+            
+        user = update.chat_member.new_chat_member.user
+        status = update.chat_member.new_chat_member.status
+        old_status = update.chat_member.old_chat_member.status
+        
+        if status == old_status:
+            return
+            
+        action = None
+        if status == 'member' and old_status in ['left', 'kicked', 'restricted']:
+            action = "Mitglied ist der Gruppe beigetreten."
+        elif status in ['left', 'kicked']:
+            action = f"Mitglied hat die Gruppe verlassen ({status})."
+            
+        if action:
+            from shared_bot_utils import log_user_interaction
+            log_user_interaction(user.id, user.username or user.first_name, action)
+            logger.info(f"Global Analytics: {user.id} -> {action}")
+
+    from telegram.ext import TypeHandler, ChatMemberHandler
     app.add_handler(TypeHandler(Update, global_block_check), group=-100)
+    app.add_handler(ChatMemberHandler(global_chat_member_logger, ChatMemberHandler.CHAT_MEMBER), group=-2)
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, global_message_logger), group=0)
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, auto_admin_on_join), group=-1)
     app.add_handler(CommandHandler("activate", activate_command))

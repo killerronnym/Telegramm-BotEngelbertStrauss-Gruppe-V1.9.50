@@ -92,9 +92,11 @@ class IDFinderUser(db.Model):
     language_code = db.Column(db.String(10))
     is_bot = db.Column(db.Boolean, default=False)
     avatar_file_id = db.Column(db.String(255))
+    photo_file_id = db.Column(db.String(200), nullable=True)
+    photo_url = db.Column(db.String(500), nullable=True)
+    photo_cached_at = db.Column(db.DateTime, nullable=True)
     first_contact = db.Column(db.DateTime, default=datetime.utcnow)
     last_contact = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
     # Relationship to messages
     messages = db.relationship('IDFinderMessage', backref='user', lazy=True, cascade="all, delete-orphan")
     # Relationship to warnings
@@ -113,6 +115,7 @@ class IDFinderMessage(db.Model):
     is_command = db.Column(db.Boolean, default=False)
     is_deleted = db.Column(db.Boolean, default=False)
     deletion_reason = db.Column(db.Text)
+    text_preview = db.Column(db.String(200), nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
 class IDFinderWarning(db.Model):
