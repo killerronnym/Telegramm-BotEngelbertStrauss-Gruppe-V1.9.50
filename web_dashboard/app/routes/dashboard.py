@@ -1135,31 +1135,6 @@ def id_finder_analytics():
         except: pass
         raise e
 
-@bp.route('/api/id-finder/user-activity/<int:uid>')
-def id_finder_user_activity(uid):
-    try:
-        try:
-            days = int(request.args.get('days') or 7)
-        except ValueError:
-            days = 7
-
-        now = datetime.utcnow()
-        cutoff = now - timedelta(days=days)
-        timeline_query = db.session.query(
-            func.date(IDFinderMessage.timestamp).label('date'),
-            func.count(IDFinderMessage.id).label('count')
-        ).filter(IDFinderMessage.telegram_user_id == uid, IDFinderMessage.timestamp >= cutoff) \
-         .group_by('date').order_by('date').all()
-        date_map = {row.date.strftime('%d.%m') if hasattr(row.date, 'strftime') else str(row.date): row.count for row in timeline_query if row.date}
-        total_data = []
-        for i in range(days-1, -1, -1):
-            d_str = (now - timedelta(days=i)).strftime('%d.%m')
-            total_data.append(date_map.get(d_str, 0))
-        return jsonify({"timeline": total_data})
-    except Exception as e:
-        sys.stderr.write(f"Error in user-activity API: {e}\n")
-        return jsonify({'error': str(e)}), 500
-
 @bp.route('/api/id-finder/user-details/<int:uid>')
 def id_finder_user_details(uid):
     try:
