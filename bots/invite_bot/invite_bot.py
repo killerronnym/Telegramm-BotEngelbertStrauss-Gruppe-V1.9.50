@@ -376,6 +376,15 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             # Alter gültig -> speichern als Steckbrief-Wert
             context.user_data['answers'][field['id']] = f"{age_val} Jahre"
             logger.info(f"handle_answer: Birthday-Alters-Rückfrage gespeichert: {age_val} Jahre")
+            
+            if context.user_data.get('is_editing'):
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔄 Weiter bearbeiten", callback_data="edit_more_yes"),
+                     InlineKeyboardButton("✅ Bearbeitung beenden", callback_data="edit_more_no")]
+                ])
+                await update.message.reply_text(f"✅ Deinen neuen Wert für {field.get('display_name')} habe ich gespeichert.", reply_markup=keyboard)
+                return ASKING_QUESTIONS
+                
             return await next_question(update, context)
 
         # Bestätigt (JA): Datum mit Jahrgang validieren (Jahrgang ist Pflicht)
@@ -1536,9 +1545,9 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         except: pass
 
     # Menü anzeigen
-    return await show_edit_menu(update, context)
+    return await show_edit_menu(update, context, force_new_msg=True)
 
-async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, force_new_msg=False) -> int:
     config = get_bot_config('invite')
     fields = [f for f in config.get('form_fields', []) if f.get('enabled')]
     
@@ -1555,10 +1564,13 @@ async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         "Wähle oben eine Kategorie aus, um den Inhalt zu aktualisieren."
     )
     
-    if update.callback_query:
-        await update.callback_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+    if update.callback_query and not force_new_msg:
+        try:
+            await update.callback_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        except Exception:
+            await context.bot.send_message(update.effective_chat.id, text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
     else:
-        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        await context.bot.send_message(update.effective_chat.id, text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
     
     return ASKING_QUESTIONS
 
