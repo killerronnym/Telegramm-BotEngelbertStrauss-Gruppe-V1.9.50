@@ -177,13 +177,12 @@ async def letsgo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         # Wir loggen nur, ob jemand bereits im System ist
         existing_app = InviteApplication.query.filter_by(telegram_user_id=update.effective_user.id).first()
         if existing_app and existing_app.status in ['completed', 'accepted']:
-            logger.info(f"letsgo: User {update.effective_user.id} startet eine neue Bewerbung (alter Status: {existing_app.status})")
+            logger.info(f"letsgo: User {update.effective_user.id} startet Edit-Abfrage (alter Status: {existing_app.status})")
             keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("✏️ Steckbrief bearbeiten", callback_data="start_edit")],
-                [InlineKeyboardButton("🗑️ Löschen & Neu starten", callback_data="start_restart")]
+                [InlineKeyboardButton("✏️ Ja, Steckbrief bearbeiten", callback_data="start_edit")]
             ])
             await update.message.reply_text(
-                "Du hast bereits einen Steckbrief erstellt! Was möchtest du tun?",
+                "Du hast bereits einen Steckbrief erstellt! Möchtest du deinen alten Steckbrief bearbeiten?",
                 reply_markup=keyboard
             )
             return ASKING_QUESTIONS
@@ -236,57 +235,7 @@ async def handle_letsgo_choice(update: Update, context: ContextTypes.DEFAULT_TYP
     if query.data == "start_edit":
         return await bearbeiten(update, context)
         
-    elif query.data == "start_restart":
-        user = update.effective_user
-        with flask_app.app_context():
-            app = InviteApplication.query.filter_by(telegram_user_id=user.id).first()
-            if app:
-                old_msg = app.profile_message_id
-                old_chat = app.profile_chat_id
-                db.session.delete(app)
-                db.session.commit()
-                
-                # Alten Steckbrief sofort aus Gruppe löschen
-                if old_msg and old_chat:
-                    try:
-                        await context.bot.delete_message(chat_id=old_chat, message_id=old_msg)
-                    except Exception as e:
-                        logger.warning(f"Letsgo Restart: Konnte alten Steckbrief nicht löschen: {e}")
-                
-        config = get_bot_config('invite')
-        fields = [f for f in config.get('form_fields', []) if f.get('enabled', True)]
-        
-        if not fields:
-            await query.edit_message_text("Keine Fragen konfiguriert. Admin kontaktieren.")
-            return ConversationHandler.END
-            
-        context.user_data.clear()
-        context.user_data.update({'fields': fields, 'current_field_index': 0, 'answers': {}})
-        
-        first_field = fields[0]
-        username = user.username or "Nutzer"
-        label = first_field.get('label', 'Frage?')
-        label = label.replace('{username}', f"@{username}")
-        
-        keyboard = None
-        ftype = first_field.get('type', 'text').lower()
-        if ftype in ['boolean_buttons', 'header_name', 'pm_contact', 'birthday']:
-            if ftype == 'header_name':
-                label = "Soll dein Telegram-Name im Steckbrief angezeigt werden?"
-            elif ftype == 'pm_contact':
-                label = "Darf man dich privat anschreiben?"
-            elif ftype == 'birthday':
-                label = "Möchtest du dein Geburtsdatum hinzufügen? (Für Glückwünsche, nur dein Alter wird im Steckbrief gezeigt)"
-                
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ JA", callback_data="bool_ans_yes"),
-                 InlineKeyboardButton("❌ NEIN", callback_data="bool_ans_no")]
-            ])
-        elif not first_field.get('required'):
-            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏭️ Überspringen / Nein", callback_data="skip_field")]])
-            
-        await query.edit_message_text(f"Dein alter Steckbrief wurde gelöscht. Lass uns von vorne beginnen!\n\n{label}", reply_markup=keyboard, parse_mode="HTML")
-        return ASKING_QUESTIONS
+    return ASKING_QUESTIONS
 
 
 async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
