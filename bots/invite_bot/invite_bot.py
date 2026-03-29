@@ -1314,6 +1314,9 @@ async def handle_existing_member_callback(update: Update, context: ContextTypes.
                 'answers': raw_answers
             }
 
+            old_msg_id = application.profile_message_id
+            old_chat_id = application.profile_chat_id
+            
             # Steckbrief posten
             try:
                 msg = await post_profile(context.bot, reconstructed_profile)
@@ -1321,6 +1324,14 @@ async def handle_existing_member_callback(update: Update, context: ContextTypes.
                 
                 application.profile_message_id = msg.message_id
                 application.profile_chat_id = target_chat_id
+                
+                # Delete the old one NOW that we posted the new one
+                if action == "accept" and old_msg_id and old_chat_id:
+                    try: 
+                        await context.bot.delete_message(chat_id=old_chat_id, message_id=old_msg_id)
+                        logger.info(f"Alter Steckbrief {old_msg_id} gelöscht nach Update.")
+                    except Exception as e:
+                        logger.warning(f"Konnte alten Steckbrief {old_msg_id} nicht löschen: {e}")
                 
                 success_msg = config.get('profile_posted_message', "Dein Steckbrief wurde gepostet!")
                 if action == "accept":
@@ -1660,62 +1671,34 @@ async def handle_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     elif data == "edit_more_no" or data == "edit_finish":
         # Vorschau zeigen
         user = update.effective_user
-        config = get_bot_config('invite')
         fields = context.user_data.get('fields', [])
         answers = context.user_data.get('answers', {})
         
-        preview_text = "<b>DEINE AKTUALISIERTE VORSCHAU:</b>\n\n"
-        
-        text_lines = []
-        photo_id = None
-        for f in fields:
-            if not f.get('enabled'): continue
-            val = answers.get(f['id'])
-            if val and val != 'n/a':
-                emoji = f.get('emoji', '🔹')
-                name = f.get('display_name', f['id'])
-                if f['type'] == 'photo':
-                    photo_id = val
-                    continue # Foto kommt in die Caption
-                
-                if f['type'] == 'boolean_buttons':
-                    val_str = "Ja" if val else "Nein"
-                elif isinstance(val, list): # Social Media
-                    formatted_socials = []
-                    for entry in val:
-                        if isinstance(entry, dict):
-                            formatted_socials.append(f'<a href="{entry["url"]}">{entry["name"]}</a>')
-                        else:
-                            formatted_socials.append(str(entry))
-                    val_str = ", ".join(formatted_socials)
-                else:
-                    val_str = str(val)
-                text_lines.append(f"{emoji} <b>{name}:</b> {val_str}")
-        
-        preview_text += "\n".join(text_lines)
+        profile_text, _ = generate_profile_text(user, answers, fields)
+        preview_text = f"<b>DEINE AKTUALISIERTE VORSCHAU:</b>\n\n{profile_text}"
         preview_text += "\n\n<b>Möchtest du diese Änderungen jetzt übernehmen?</b>"
         
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("🚀 Jetzt aktualisieren", callback_data="edit_confirm_final")],
             [InlineKeyboardButton("🔄 Weiter bearbeiten", callback_data="edit_more_yes")]
         ])
-        
-        # Falls Foto vorhanden: Als Photo senden, sonst als Text
-        if photo_id and photo_id != 'n/a':
-            await query.message.reply_photo(
-                photo=photo_id,
-                caption=preview_text[:1024],
-                reply_markup=keyboard,
-                parse_mode="HTML"
-            )
-            # Alte Auswahl-Nachricht löschen um Chat sauber zu halten
+        photo_id = None
+        for f in fields:
+            if f['type'] == 'photo' and answers.get(f['id']):
+                photo_id = answers[f['id']]
+                if photo_id == 'n/a': photo_id = None
+                break
+                
+        if photo_id:
+            caption_text = preview_text[:1000] + "..." if len(preview_text) > 1024 else preview_text
+            await query.edit_message_reply_markup(reply_markup=None) # remove old buttons
+            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=photo_id, caption=caption_text, reply_markup=keyboard, parse_mode="HTML")
             try: await query.message.delete()
             except: pass
         else:
             await query.edit_message_text(preview_text, reply_markup=keyboard, parse_mode="HTML", disable_web_page_preview=True)
             
         return ASKING_QUESTIONS
-
     elif data == "edit_confirm_final":
         return await finalize_profile(update, context)
 
@@ -1743,6 +1726,7 @@ async def finalize_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         'photo_id': photo_file_id if photo_file_id != 'n/a' else None,
         'target_chat_id': context.user_data.get('old_chat_id') or config.get('main_chat_id'),
         'topic_id': config.get('topic_id'),
+        'whitelist_approval_topic_id': config.get('whitelist_approval_topic_id'),
         'user_id': user.id,
         'full_name': user.full_name,
         'username': user.username,
