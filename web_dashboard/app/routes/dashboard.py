@@ -946,13 +946,15 @@ def id_finder_analytics():
     def fmt_dt(d):
         if not d: return ""
         try:
+            if isinstance(d, datetime):
+                return d.strftime('%d.%m')
             if isinstance(d, str):
-                if '-' in d and len(d) >= 10: # YYYY-MM-DD...
-                    parts = d.split('-')
-                    return f"{parts[2][:2]}.{parts[1]}"
+                if '-' in d and len(d) >= 10:
+                    y, m, d_val = d.split('-')[:3]
+                    return f"{d_val[:2]}.{m}"
                 return d
-            return d.strftime('%d.%m')
-        except: return str(d)
+            return str(d)
+        except: return ""
     try:
         now = datetime.utcnow()
         cutoff = now - timedelta(days=365) # Fallback for growth
@@ -1116,7 +1118,11 @@ def id_finder_analytics():
         sys.stdout.flush()
         
         joins_leaves = InviteLog.query.filter(
-            InviteLog.action.ilike('%beigetreten%') | InviteLog.action.ilike('%verlassen%') | InviteLog.action.ilike('%entfernt%')
+            InviteLog.action.ilike('%beigetreten%') | 
+            InviteLog.action.ilike('%verlassen%') | 
+            InviteLog.action.ilike('%entfernt%') |
+            InviteLog.action.ilike('%Regeln%') |
+            InviteLog.action.ilike('%letsgo%')
         ).order_by(InviteLog.timestamp.desc()).limit(50).all()
 
         return render_template('id_finder_analytics.html', 
@@ -1151,52 +1157,84 @@ def id_finder_user_details(uid):
     try:
         from ..models import IDFinderUser, IDFinderMessage, TopicMapping
         user = IDFinderUser.query.filter_by(telegram_id=uid).first()
-        if not user: return jsonify({'error': 'User not found'}), 404
+        if not user:
+            return jsonify({'error': 'User not found', 'uid': str(uid), 'name': 'Unbekannt'}), 200
         
         # Stats
         total_msgs = IDFinderMessage.query.filter_by(telegram_user_id=uid).count()
         total_media = IDFinderMessage.query.filter(IDFinderMessage.telegram_user_id == uid, IDFinderMessage.content_type != 'text').count()
-        active_days = db.session.query(func.date(IDFinderMessage.timestamp)).filter_by(telegram_user_id=uid).distinct().count() or 1
+        
+        try:
+            active_days_query = db.session.query(func.date(IDFinderMessage.timestamp)).filter_by(telegram_user_id=uid).distinct().all()
+            active_days = len(active_days_query) or 1
+        except: active_days = 0
         
         # Timeline (14 days)
         now = datetime.utcnow()
-        cutoff_14 = now - timedelta(days=14)
-        tl_query = db.session.query(
-            func.date(IDFinderMessage.timestamp).label('date'),
-            func.count(IDFinderMessage.id).label('count')
-        ).filter(IDFinderMessage.telegram_user_id == uid, IDFinderMessage.timestamp >= cutoff_14) \
-         .group_by('date').all()
-        tl_map = {row.date.strftime('%d.%m') if hasattr(row.date, 'strftime') else str(row.date): row.count for row in tl_query}
         tl_labels = []; tl_data = []
-        for i in range(13, -1, -1):
-            d_str = (now - timedelta(days=i)).strftime('%d.%m')
-            tl_labels.append(d_str); tl_data.append(tl_map.get(d_str, 0))
+        try:
+            cutoff_14 = now - timedelta(days=14)
+            tl_query = db.session.query(
+                func.date(IDFinderMessage.timestamp).label('date'),
+                func.count(IDFinderMessage.id).label('count')
+            ).filter(IDFinderMessage.telegram_user_id == uid, IDFinderMessage.timestamp >= cutoff_14) \
+             .group_by(func.date(IDFinderMessage.timestamp)).all()
+            
+            tl_map = {}
+            for row in tl_query:
+                d_str = row.date # SQLite returns 'YYYY-MM-DD'
+                if isinstance(d_str, str) and '-' in d_str:
+                    parts = d_str.split('-')
+                    d_key = f"{parts[2][:2]}.{parts[1]}"
+                    tl_map[d_key] = row.count
+                elif hasattr(d_str, 'strftime'):
+                    tl_map[d_str.strftime('%d.%m')] = row.count
+
+            for i in range(13, -1, -1):
+                d_str = (now - timedelta(days=i)).strftime('%d.%m')
+                tl_labels.append(d_str); tl_data.append(tl_map.get(d_str, 0))
+        except: pass
             
         # Topics
-        topic_query = db.session.query(IDFinderMessage.topic_id, func.count(IDFinderMessage.id).label('count')) \
-                       .filter_by(telegram_user_id=uid).group_by(IDFinderMessage.topic_id).order_by(text('count DESC')).limit(5).all()
         topics = []
-        for tid, count in topic_query:
-            t_name = TopicMapping.query.filter_by(topic_id=str(tid)).first().topic_name if tid and TopicMapping.query.filter_by(topic_id=str(tid)).first() else f"Topic {tid}" if tid else "Hauptgruppe"
-            topics.append({'name': t_name, 'count': count})
+        try:
+            topic_query = db.session.query(IDFinderMessage.topic_id, func.count(IDFinderMessage.id).label('count')) \
+                           .filter_by(telegram_user_id=uid).group_by(IDFinderMessage.topic_id).order_by(text('count DESC')).limit(5).all()
+            for tid, count in topic_query:
+                t_name = TopicMapping.query.filter_by(topic_id=str(tid)).first().topic_name if tid and TopicMapping.query.filter_by(topic_id=str(tid)).first() else f"Topic {tid}" if tid else "Hauptgruppe"
+                topics.append({'name': t_name, 'count': count})
+        except: pass
             
         # Recent messages
-        recent = IDFinderMessage.query.filter_by(telegram_user_id=uid).order_by(IDFinderMessage.timestamp.desc()).limit(5).all()
-        msgs = [{'text': (m.text[:100] + '...') if m.text and len(m.text) > 100 else (m.text or f"[{m.content_type}]"), 'time': m.timestamp.strftime('%d.%m. %H:%M'), 'type': m.content_type or 'text'} for m in recent]
+        msgs = []
+        try:
+            recent = IDFinderMessage.query.filter_by(telegram_user_id=uid).order_by(IDFinderMessage.timestamp.desc()).limit(5).all()
+            msgs = [{'text': (m.text[:100] + '...') if m.text and len(m.text) > 100 else (m.text or f"[{m.content_type}]"), 'time': m.timestamp.strftime('%d.%m. %H:%M'), 'type': m.content_type or 'text'} for m in recent]
+        except: pass
         
         # Rank
-        rank_query = db.session.query(IDFinderMessage.telegram_user_id, func.count(IDFinderMessage.id).label('c')).group_by(IDFinderMessage.telegram_user_id).order_by(text('c DESC')).all()
-        rank = next((i + 1 for i, r in enumerate(rank_query) if r.telegram_user_id == uid), 0)
+        rank = 0
+        try:
+           rank_query = db.session.query(IDFinderMessage.telegram_user_id, func.count(IDFinderMessage.id).label('c')).group_by(IDFinderMessage.telegram_user_id).order_by(text('c DESC')).all()
+           rank = next((i + 1 for i, r in enumerate(rank_query) if r.telegram_user_id == uid), 0)
+        except: pass
+
+        joined_str = "—"
+        try:
+            if user.first_contact:
+                if hasattr(user.first_contact, 'strftime'): joined_str = user.first_contact.strftime('%d.%m.%Y')
+                else: joined_str = str(user.first_contact)[:10]
+        except: pass
 
         return jsonify({
             'name': user.first_name or "Unbekannt", 
-            'username': user.username or f"ID: {uid}", 
+            'username': user.username or f"id{uid}", 
             'uid': str(uid),
             'msgs': total_msgs, 
             'media': total_media, 
             'days': active_days, 
             'rank': rank,
-            'joined': user.first_contact.strftime('%d.%m.%Y') if user.first_contact else "—",
+            'joined': joined_str,
             'last_active': msgs[0]['time'] if msgs else "—",
             'timeline': {'labels': tl_labels, 'data': tl_data},
             'topics': topics, 
@@ -1204,14 +1242,14 @@ def id_finder_user_details(uid):
         })
     except Exception as e:
         import traceback
-        sys.stderr.write(f"Error in user-details API: {e}\n{traceback.format_exc()}\n")
+        sys.stderr.write(f"CRITICAL ERROR in user-details API: {e}\n{traceback.format_exc()}\n")
         return jsonify({
-            'name': 'Fehler', 'username': 'error', 'uid': str(uid),
+            'name': 'System-Fehler', 'username': 'error', 'uid': str(uid),
             'msgs': 0, 'media': 0, 'days': 0, 'rank': 0,
             'joined': '—', 'last_active': '—',
             'timeline': {'labels': [], 'data': []},
             'topics': [], 'recent': []
-        }), 200 # Return 200 with empty data to avoid JS crash
+        }), 200
 
 @bp.route('/id-finder/profiles')
 @login_required
