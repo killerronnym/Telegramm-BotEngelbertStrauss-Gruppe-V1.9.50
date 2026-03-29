@@ -173,13 +173,20 @@ async def letsgo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     log_user_interaction(update.effective_user.id, update.effective_user.username, "/letsgo command aufgerufen")
 
-    # Wir erlauben das Neustarten jederzeit. Falls bereits eine Bewerbung existiert, 
-    # wird diese am Ende des Prozesses (nach den Regeln) einfach überschrieben.
     with flask_app.app_context():
         # Wir loggen nur, ob jemand bereits im System ist
         existing_app = InviteApplication.query.filter_by(telegram_user_id=update.effective_user.id).first()
-        if existing_app:
+        if existing_app and existing_app.status in ['completed', 'accepted']:
             logger.info(f"letsgo: User {update.effective_user.id} startet eine neue Bewerbung (alter Status: {existing_app.status})")
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✏️ Steckbrief bearbeiten", callback_data="start_edit")],
+                [InlineKeyboardButton("🗑️ Löschen & Neu starten", callback_data="start_restart")]
+            ])
+            await update.message.reply_text(
+                "Du hast bereits einen Steckbrief erstellt! Was möchtest du tun?",
+                reply_markup=keyboard
+            )
+            return ASKING_QUESTIONS
 
     logger.info(f"letsgo: Starte Bewerbung für User {update.effective_user.id}")
     fields = [f for f in config.get('form_fields', []) if f.get('enabled', True)]
@@ -195,7 +202,6 @@ async def letsgo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     first_field = fields[0]
     username = update.effective_user.username or "Nutzer"
     label = first_field.get('label', 'Frage?')
-    username = update.effective_user.username or "Nutzer"
     label = label.replace('{username}', f"@{username}")
     
     keyboard = None
@@ -217,8 +223,64 @@ async def letsgo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏭️ Überspringen / Nein", callback_data="skip_field")]])
     
     logger.info(f"letsgo: Sende erste Frage (Index 0): {label}")
-    await update.message.reply_text(label, reply_markup=keyboard, parse_mode="HTML")
+    if update.callback_query:
+        await update.callback_query.edit_message_text(label, reply_markup=keyboard, parse_mode="HTML")
+    else:
+        await update.message.reply_text(label, reply_markup=keyboard, parse_mode="HTML")
     return ASKING_QUESTIONS
+
+async def handle_letsgo_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "start_edit":
+        return await bearbeiten(update, context)
+        
+    elif query.data == "start_restart":
+        user = update.effective_user
+        with flask_app.app_context():
+            app = InviteApplication.query.filter_by(telegram_user_id=user.id).first()
+            if app:
+                context.user_data['old_msg_id'] = app.profile_message_id
+                context.user_data['old_chat_id'] = app.profile_chat_id
+                db.session.delete(app)
+                db.session.commit()
+                
+        config = get_bot_config('invite')
+        fields = [f for f in config.get('form_fields', []) if f.get('enabled', True)]
+        
+        if not fields:
+            await query.edit_message_text("Keine Fragen konfiguriert. Admin kontaktieren.")
+            return ConversationHandler.END
+            
+        context.user_data.clear()
+        context.user_data.update({'fields': fields, 'current_field_index': 0, 'answers': {}})
+        
+        first_field = fields[0]
+        username = user.username or "Nutzer"
+        label = first_field.get('label', 'Frage?')
+        label = label.replace('{username}', f"@{username}")
+        
+        keyboard = None
+        ftype = first_field.get('type', 'text').lower()
+        if ftype in ['boolean_buttons', 'header_name', 'pm_contact', 'birthday']:
+            if ftype == 'header_name':
+                label = "Soll dein Telegram-Name im Steckbrief angezeigt werden?"
+            elif ftype == 'pm_contact':
+                label = "Darf man dich privat anschreiben?"
+            elif ftype == 'birthday':
+                label = "Möchtest du dein Geburtsdatum hinzufügen? (Für Glückwünsche, nur dein Alter wird im Steckbrief gezeigt)"
+                
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ JA", callback_data="bool_ans_yes"),
+                 InlineKeyboardButton("❌ NEIN", callback_data="bool_ans_no")]
+            ])
+        elif not first_field.get('required'):
+            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏭️ Überspringen / Nein", callback_data="skip_field")]])
+            
+        await query.edit_message_text(f"Dein alter Steckbrief wurde gelöscht. Lass uns von vorne beginnen!\n\n{label}", reply_markup=keyboard, parse_mode="HTML")
+        return ASKING_QUESTIONS
+
 
 async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.effective_user
@@ -931,6 +993,7 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
         # Check ob Whitelist für Updates aktiv sein soll
         # Wenn Whitelist generell AUS ist, können Bestandskunden/Edits sofort posten.
         whitelist_active = config.get('whitelist_enabled', False)
+        is_editing = context.user_data.get('is_editing', False)
 
         if (is_already_member or is_editing) and whitelist_active:
             approval_chat_id_str = fix_chat_id(config.get('whitelist_approval_chat_id', ''))
@@ -1049,9 +1112,8 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
 
             await update.message.reply_text(config.get('whitelist_pending_message', 'Dein Steckbrief wird überprüft, bitte warte.'), parse_mode="HTML")
         else:
-            # Whitelist ist AUS -> Sofort Link senden
+            # Whitelist ist AUS -> Sofort Link senden oder direkt updaten
             with flask_app.app_context():
-                # In Datenbank als 'accepted' markieren (damit Join-Logik den Steckbrief postet)
                 existing = InviteApplication.query.filter_by(telegram_user_id=user.id).first()
                 if existing:
                     existing.status = 'accepted'
@@ -1069,13 +1131,40 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
                     db.session.add(new_app)
                 db.session.commit()
             
-            # Link generieren (Wichtig: Link TTL beachten falls gewünscht, hier Standard)
-            try:
-                link = await context.bot.create_chat_invite_link(chat_id=target_chat_id, member_limit=1)
-                await update.message.reply_text(f"Danke! Deine Anmeldung ist abgeschlossen. Hier ist dein Einladungslink zur Gruppe:\n\n{link.invite_link}")
-            except Exception as e:
-                logger.error(f"Fehler bei Link-Generierung (Chat ID: {target_chat_id}): {e}")
-                await update.message.reply_text(f"❌ Fehler bei Link-Generierung (ID: {target_chat_id}): {e}")
+            if is_already_member or is_editing:
+                # Sofort aktualisieren
+                try:
+                    reconstructed_profile = profile_data.copy()
+                    msg = await post_profile(context.bot, reconstructed_profile)
+                    
+                    old_msg_id = context.user_data.get('old_msg_id')
+                    old_chat_id = context.user_data.get('old_chat_id')
+                    
+                    if msg:
+                        with flask_app.app_context():
+                            app_upd = InviteApplication.query.filter_by(telegram_user_id=user.id).first()
+                            if app_upd:
+                                app_upd.profile_message_id = msg.message_id
+                                app_upd.profile_chat_id = target_chat_id
+                                db.session.commit()
+                    
+                    # Delete the old one NOW that we posted the new one
+                    if old_msg_id and old_chat_id:
+                        try: await context.bot.delete_message(chat_id=old_chat_id, message_id=old_msg_id)
+                        except: pass
+                        
+                    if reply_target: await reply_target.reply_text("Dein Steckbrief wurde erfolgreich aktualisiert!")
+                except Exception as e:
+                    logger.error(f"Fehler beim Update (Whitelist OFF): {e}")
+                    if reply_target: await reply_target.reply_text(f"❌ Fehler beim Posten: {e}")
+            else:
+                # Link generieren für neue User
+                try:
+                    link = await context.bot.create_chat_invite_link(chat_id=target_chat_id, member_limit=1)
+                    if reply_target: await reply_target.reply_text(f"Danke! Deine Anmeldung ist abgeschlossen. Hier ist dein Einladungslink zur Gruppe:\n\n{link.invite_link}")
+                except Exception as e:
+                    logger.error(f"Fehler bei Link-Generierung (Chat ID: {target_chat_id}): {e}")
+                    if reply_target: await reply_target.reply_text(f"❌ Fehler bei Link-Generierung (ID: {target_chat_id}): {e}")
 
         return ConversationHandler.END
 
@@ -1284,16 +1373,23 @@ async def handle_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 async def handle_member_left(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Löscht automatisch den Steckbrief wenn ein User die Gruppe verlässt."""
-    if not update.chat_member or not update.chat_member.new_chat_member:
-        return
+    user_id = None
+    username = None
     
-    new_status = update.chat_member.new_chat_member.status
-    # "left" = freiwillig, "kicked" = gebannt
-    if new_status not in ["left", "kicked"]:
+    # Check if called from ChatMemberHandler
+    if update.chat_member and update.chat_member.new_chat_member:
+        new_status = update.chat_member.new_chat_member.status
+        if new_status in ["left", "kicked"]:
+            user_id = update.chat_member.new_chat_member.user.id
+            username = update.chat_member.new_chat_member.user.username or str(user_id)
+            
+    # Check if called from MessageHandler (Service Message)
+    elif update.message and update.message.left_chat_member:
+        user_id = update.message.left_chat_member.id
+        username = update.message.left_chat_member.username or str(user_id)
+        
+    if not user_id:
         return
-    
-    user_id = update.chat_member.new_chat_member.user.id
-    username = update.chat_member.new_chat_member.user.username or str(user_id)
     
     logger.info(f"handle_member_left: User @{username} ({user_id}) hat die Gruppe verlassen. Prüfe Steckbrief...")
     
@@ -1440,7 +1536,15 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         if msg: context.user_data['edit_entry_msg_id'] = msg.message_id
     except Exception as e:
         logger.error(f"bearbeiten: Fehler bei der Vorschau-Erstellung für User {user.id}: {e}")
-        await update.message.reply_text("🔎 <b>DEIN AKTUELLER STECKBRIEF:</b> (Fehler beim Laden der grafischen Vorschau, bitte nutze das Menü unten)")
+        if update.callback_query:
+            await update.callback_query.edit_message_text("🔎 <b>DEIN AKTUELLER STECKBRIEF:</b> (Fehler beim Laden der grafischen Vorschau, bitte nutze das Menü unten)")
+        else:
+            await update.message.reply_text("🔎 <b>DEIN AKTUELLER STECKBRIEF:</b> (Fehler beim Laden der grafischen Vorschau, bitte nutze das Menü unten)")
+
+    # Alte Auswahl-Nachricht löschen wenn über Callback (start_edit)
+    if update.callback_query:
+        try: await update.callback_query.message.delete()
+        except: pass
 
     # Menü anzeigen
     return await show_edit_menu(update, context)
@@ -1584,16 +1688,6 @@ async def finalize_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         'fields': fields
     }
 
-    # Alte Nachricht löschen falls vorhanden
-    old_msg_id = context.user_data.get('old_msg_id')
-    old_chat_id = context.user_data.get('old_chat_id')
-    if old_msg_id and old_chat_id:
-        try:
-            await context.bot.delete_message(chat_id=old_chat_id, message_id=old_msg_id)
-            logger.info(f"finalize_profile: Alte Nachricht {old_msg_id} gelöscht.")
-        except Exception as e:
-            logger.warning(f"finalize_profile: Konnte alte Nachricht nicht löschen: {e}")
-
     # Whitelist Logik nutzen
     return await handle_rules_confirmation(update, context, force_profile_data=profile_data)
 
@@ -1618,8 +1712,8 @@ def get_handlers():
                 CommandHandler("datenschutz", datenschutz),
                 CallbackQueryHandler(handle_skip, pattern=r'^skip_field$'),
                 CallbackQueryHandler(handle_answer, pattern=r'^bool_ans_'),
-                CallbackQueryHandler(handle_edit_callback, pattern=r'^edit_field_'),
-                CallbackQueryHandler(handle_edit_callback, pattern=r'^edit_finish'),
+                CallbackQueryHandler(handle_edit_callback, pattern=r'^edit_'),
+                CallbackQueryHandler(handle_letsgo_choice, pattern=r'^start_'),
                 MessageHandler(filters.PHOTO | (filters.TEXT & filters.ChatType.PRIVATE & ~filters.COMMAND), handle_answer)
             ],
             CONFIRMING_RULES: [
@@ -1658,6 +1752,7 @@ def get_handlers():
         (CallbackQueryHandler(handle_existing_member_callback, pattern=r'^existing_'), 0),
         (ChatMemberHandler(handle_new_member, ChatMemberHandler.CHAT_MEMBER), 0),
         (ChatMemberHandler(handle_member_left, ChatMemberHandler.CHAT_MEMBER), 0),  # Auto-Löschen bei Austritt
+        (MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, handle_member_left), 0), # Fallback via Service Message
         (MessageHandler(filters.COMMAND, handle_custom_commands), 0)
     ]
 
