@@ -285,9 +285,40 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             user_answer = "Ja" if answer_val == "yes" else "Nein"
             context.user_data['answers'][field['id']] = user_answer
             await update.callback_query.answer()
-            await update.callback_query.edit_message_text(f"✅ Gespeichert: {user_answer}")
-            logger.info(f"handle_answer: Callback '{cb_data}' für Feld '{field['id']}' -> {user_answer}")
-            return await next_question(update, context)
+            
+            if context.user_data.get('is_editing'):
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔄 Weiter bearbeiten", callback_data="edit_more_yes"),
+                     InlineKeyboardButton("✅ Bearbeitung beenden", callback_data="edit_more_no")]
+                ])
+                await update.callback_query.edit_message_text(
+                    f"✅ Deinen neuen Wert für {field.get('display_name', field['id'])} habe ich gespeichert: {user_answer}",
+                    reply_markup=keyboard
+                )
+                return ASKING_QUESTIONS
+            else:
+                await update.callback_query.edit_message_text(f"✅ Gespeichert: {user_answer}")
+                logger.info(f"handle_answer: Callback '{cb_data}' für Feld '{field['id']}' -> {user_answer}")
+                return await next_question(update, context)
+                
+        if cb_data == "skip_field":
+            context.user_data['answers'][field['id']] = "Nicht angegeben"
+            
+            if context.user_data.get('is_editing'):
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔄 Weiter bearbeiten", callback_data="edit_more_yes"),
+                     InlineKeyboardButton("✅ Bearbeitung beenden", callback_data="edit_more_no")]
+                ])
+                await update.callback_query.edit_message_text(
+                    f"✅ Feld {field.get('display_name', field['id'])} geleert.",
+                    reply_markup=keyboard
+                )
+                return ASKING_QUESTIONS
+            else:
+                await update.callback_query.answer("Übersprungen")
+                await update.callback_query.edit_message_text("⏭️ Übersprungen.")
+                return await next_question(update, context)
+                
         # Unbekannter Callback in diesem State - ignorieren
         await update.callback_query.answer()
         return ASKING_QUESTIONS
@@ -1447,6 +1478,8 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         await update.message.reply_text("❌ Ein Systemfehler ist aufgetreten. Bitte versuche es später erneut.")
         return ConversationHandler.END
 
+    message_target = update.message if update.message else update.callback_query.message
+
     # --- NEU: AKTUELLEN STECKBRIEF ANZEIGEN (Vorschau vor Edit) ---
     try:
         config = get_bot_config('invite')
@@ -1456,7 +1489,7 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         
         if not has_data:
             logger.warning(f"bearbeiten: Steckbrief von User {user.id} existiert zwar, hat aber keine verwertbaren Daten. answers={context.user_data['answers']}")
-            await update.message.reply_text(
+            await message_target.reply_text(
                 "🔎 <b>Hinweis:</b> Dein gespeicherter Steckbrief scheint sehr alt zu sein oder enthält keine aktuellen Informationen mehr.\n\n"
                 "Um sicherzugehen, dass alles korrekt ist, erstelle bitte einen neuen Steckbrief mit dem Befehl /letsgo. Das dauert nur ein paar Minuten!",
                 parse_mode="HTML"
@@ -1470,7 +1503,7 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                 current_photo_id = context.user_data['answers'][f['id']]
                 if current_photo_id != 'n/a': break
 
-        await update.message.reply_text("🔎 <b>DEIN AKTUELLER STECKBRIEF:</b>", parse_mode="HTML")
+        await message_target.reply_text("🔎 <b>DEIN AKTUELLER STECKBRIEF:</b>", parse_mode="HTML")
         
         msg = None
         if current_photo_id and current_photo_id != 'n/a':
@@ -1480,13 +1513,13 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                 caption_text = caption_text[:1000] + "..." # Etwas Puffer für Tags lassen
                 
             try:
-                msg = await update.message.reply_photo(photo=current_photo_id, caption=caption_text, parse_mode="HTML")
+                msg = await message_target.reply_photo(photo=current_photo_id, caption=caption_text, parse_mode="HTML")
             except Exception as e:
                 logger.warning(f"bearbeiten: Konnte Foto mit Caption nicht senden (HTML?), sende Separater Text: {e}")
-                msg = await update.message.reply_photo(photo=current_photo_id)
-                await update.message.reply_text(current_text, parse_mode="HTML")
+                msg = await message_target.reply_photo(photo=current_photo_id)
+                await message_target.reply_text(current_text, parse_mode="HTML")
         else:
-            msg = await update.message.reply_text(current_text, parse_mode="HTML")
+            msg = await message_target.reply_text(current_text, parse_mode="HTML")
         
         # Message ID speichern um sie später evtl zu löschen
         if msg: context.user_data['edit_entry_msg_id'] = msg.message_id
@@ -1494,7 +1527,7 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         logger.error(f"bearbeiten: Fehler bei der Vorschau-Erstellung für User {user.id}: {e}")
         if update.callback_query:
             await update.callback_query.edit_message_text("🔎 <b>DEIN AKTUELLER STECKBRIEF:</b> (Fehler beim Laden der grafischen Vorschau, bitte nutze das Menü unten)")
-        else:
+        elif update.message:
             await update.message.reply_text("🔎 <b>DEIN AKTUELLER STECKBRIEF:</b> (Fehler beim Laden der grafischen Vorschau, bitte nutze das Menü unten)")
 
     # Alte Auswahl-Nachricht löschen wenn über Callback (start_edit)
