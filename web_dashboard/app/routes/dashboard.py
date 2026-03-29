@@ -985,12 +985,12 @@ def id_finder_analytics():
             IDFinderUser.telegram_id,
             IDFinderUser.first_name,
             IDFinderUser.username,
-            IDFinderUser.created_at,
+            IDFinderUser.first_contact,
             func.count(IDFinderMessage.id).label('msg_count'),
             func.sum(case((IDFinderMessage.content_type != 'text', 1), else_=0)).label('media_count')
         ).join(IDFinderMessage, IDFinderUser.telegram_id == IDFinderMessage.telegram_user_id) \
          .filter(query_filter) \
-         .group_by(IDFinderUser.telegram_id, IDFinderUser.first_name, IDFinderUser.username, IDFinderUser.created_at) \
+         .group_by(IDFinderUser.telegram_id, IDFinderUser.first_name, IDFinderUser.username, IDFinderUser.first_contact) \
          .order_by(text('msg_count DESC')).limit(10).all()
 
         leaderboard = []
@@ -1001,7 +1001,7 @@ def id_finder_analytics():
                 "username": row.username or "Unbekannt",
                 "msgs": int(row.msg_count),
                 "media": int(row.media_count or 0),
-                "joined_at": row.created_at.strftime('%d.%m.%Y') if row.created_at else "Unbekannt"
+                "joined_at": row.first_contact.strftime('%d.%m.%Y') if row.first_contact else "Unbekannt"
             })
         
         sys.stdout.write(f"--- [DEBUG] Leaderboard ready: {len(leaderboard)} entries ---\n")

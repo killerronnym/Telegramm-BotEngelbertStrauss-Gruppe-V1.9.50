@@ -137,7 +137,7 @@ def main():
     logger.info("Starte ApplicationBuilder...")
     persistence = PicklePersistence(filepath=os.path.join(BASE_DIR, "instance", "persistence.pickle"))
     allowed_updates = ["message", "callback_query", "chat_member", "my_chat_member", "inline_query"]
-    app = ApplicationBuilder().token(token).persistence(persistence).allowed_updates(allowed_updates)
+    app = ApplicationBuilder().token(token).persistence(persistence)
     app = app.post_init(main_post_init).post_shutdown(main_post_shutdown).build()
     
     global bot_app
@@ -317,7 +317,7 @@ def main():
     retry_count = 0
     while True:
         try:
-            app.run_polling(allowed_updates=Update.ALL_TYPES, close_loop=False)
+            app.run_polling(allowed_updates=["message", "callback_query", "chat_member", "my_chat_member", "inline_query"], close_loop=False)
             break # Normaler Exit
         except Exception as e:
             if "Conflict" in str(e):
