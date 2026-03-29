@@ -1008,10 +1008,11 @@ def id_finder_analytics():
         sys.stdout.flush()
 
         # Timeline (Messages per day)
+        date_expr = func.date(IDFinderMessage.timestamp)
         timeline_query = db.session.query(
-            func.date(IDFinderMessage.timestamp).label('date'),
+            date_expr.label('date'),
             func.count(IDFinderMessage.id).label('count')
-        ).filter(query_filter).group_by('date').order_by('date').all()
+        ).filter(query_filter).group_by(date_expr).order_by(date_expr).all()
 
         # Make sure timeline has continuous dates for the requested period if filtering by days
         timeline_labels = []
@@ -1030,10 +1031,11 @@ def id_finder_analytics():
             total_data = [row.count for row in timeline_query]
 
         # Hours distribution
+        hour_expr = extract('hour', IDFinderMessage.timestamp)
         hours_query = db.session.query(
-            extract('hour', IDFinderMessage.timestamp).label('hour'),
+            hour_expr.label('hour'),
             func.count(IDFinderMessage.id).label('count')
-        ).filter(query_filter).group_by('hour').all()
+        ).filter(query_filter).group_by(hour_expr).all()
         
         busiest_hours = [0] * 24
         for row in hours_query:
@@ -1050,7 +1052,7 @@ def id_finder_analytics():
         dow_query = db.session.query(
             dow_expr.label('dow'),
             func.count(IDFinderMessage.id).label('count')
-        ).filter(query_filter).group_by('dow').all()
+        ).filter(query_filter).group_by(dow_expr).all()
 
         busiest_days = [0] * 7
         for row in dow_query:
@@ -1071,13 +1073,13 @@ def id_finder_analytics():
             func.sum(case((InviteLog.action.ilike('%beigetreten%'), 1), else_=0)).label('joins'),
             func.sum(case((InviteLog.action.ilike('%verlassen%') | InviteLog.action.ilike('%entfernt%'), 1), else_=0)).label('leaves')
         ).filter(InviteLog.timestamp >= cutoff) \
-         .group_by('date').order_by('date').all()
+         .group_by(func.date(InviteLog.timestamp)).order_by(func.date(InviteLog.timestamp)).all()
 
         growth_labels = []
         growth_net = []
         
-        date_map_joins = {fmt_dt(row.date): row.joins for row in growth_query if row.date}
-        date_map_leaves = {fmt_dt(row.date): row.leaves for row in growth_query if row.date}
+        date_map_joins = {fmt_dt(row.date): (row.joins or 0) for row in growth_query if row.date}
+        date_map_leaves = {fmt_dt(row.date): (row.leaves or 0) for row in growth_query if row.date}
         
         for i in range(days-1, -1, -1):
             d = now - timedelta(days=i)
@@ -1089,9 +1091,9 @@ def id_finder_analytics():
         # Activity Heatmap (Day x Hour)
         heatmap_query = db.session.query(
             dow_expr.label('dow'),
-            extract('hour', IDFinderMessage.timestamp).label('hour'),
+            hour_expr.label('hour'),
             func.count(IDFinderMessage.id).label('count')
-        ).filter(query_filter).group_by('dow', 'hour').all()
+        ).filter(query_filter).group_by(dow_expr, hour_expr).all()
 
         # Matrix: 7 days x 24 hours
         heatmap_matrix = [[0 for _ in range(24)] for _ in range(7)]
@@ -1116,7 +1118,7 @@ def id_finder_analytics():
                                     'total_users': total_users,
                                     'total_messages': total_messages,
                                     'total_media': total_media,
-                                    'avg_msgs_day': round(total_messages / (days or 1), 1)
+                                    'avg_msgs_day': round(total_messages / (days or 1), 1) if total_messages and days else 0
                                 }, 
                                 joins_leaves=joins_leaves,
                                 activity={
@@ -1128,16 +1130,15 @@ def id_finder_analytics():
                                     'heatmap': heatmap_matrix
                                 })
     except Exception as e:
-        # LOG AND CRASH gracefully
+        import traceback
         err_msg = f"\n--- Analytics Error [{datetime.now()}] ---\n{traceback.format_exc()}\n"
         sys.stderr.write(err_msg)
-        error_file = os.path.join(PROJECT_ROOT, "logs", "dashboard_error.log")
+        # Try to write to a visible place
         try:
-            os.makedirs(os.path.dirname(error_file), exist_ok=True)
-            with open(error_file, "a", encoding="utf-8") as f:
+            with open("analytics_error.log", "a", encoding="utf-8") as f:
                 f.write(err_msg)
         except: pass
-        raise e
+        return f"Internal Server Error: {str(e)}", 500
 
 @bp.route('/api/id-finder/user-details/<int:uid>')
 def id_finder_user_details(uid):
