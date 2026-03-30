@@ -1410,6 +1410,15 @@ async def handle_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             application.status = 'completed'
             db.session.commit()
 
+            # --- NEU: Willkommens-PM senden (falls konfiguriert) ---
+            welcome_pm = config.get('welcome_pm_message')
+            if welcome_pm:
+                try:
+                    await context.bot.send_message(chat_id=user_id, text=welcome_pm, parse_mode="HTML")
+                    logger.info(f"handle_new_member: Willkommens-PM an {user_id} gesendet.")
+                except Exception as e:
+                    logger.warning(f"handle_new_member: Konnte keine Willkommens-PM an {user_id} senden: {e}")
+
 async def handle_member_left(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Löscht automatisch den Steckbrief wenn ein User die Gruppe verlässt."""
     user_id = None
@@ -1472,6 +1481,19 @@ async def handle_member_left(update: Update, context: ContextTypes.DEFAULT_TYPE)
             logger.info(f"Insgesamt {deleted_count} Steckbrief(e) für {username} entfernt.")
         else:
             logger.info("Keine aktiven Steckbrief-IDs zum Löschen gefunden.")
+
+    # --- NEU: Abschieds-PM senden (falls konfiguriert) ---
+    # Wir machen das außerhalb des DB-Contexts um Zeit zu sparen, 
+    # aber wir brauchen die config
+    config = get_bot_config('invite')
+    leave_pm = config.get('leave_pm_message')
+    if leave_pm:
+        try:
+            await context.bot.send_message(chat_id=user_id, text=leave_pm, parse_mode="HTML")
+            logger.info(f"handle_member_left: Abschieds-PM an {user_id} gesendet.")
+        except Exception as e:
+            # Oft scheitert dies, weil User den Bot blockiert haben beim Verlassen
+            logger.warning(f"handle_member_left: Konnte keine Abschieds-PM an {user_id} senden (evtl. Bot blockiert): {e}")
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Prozess abgebrochen.")

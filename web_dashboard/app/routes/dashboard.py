@@ -204,7 +204,11 @@ def bot_settings():
 def save_invite_content():
     s = BotSettings.query.filter_by(bot_name='invite').first()
     cfg = json.loads(s.config_json)
-    cfg.update({k: request.form.get(k, '') for k in ['start_message', 'rules_message', 'blocked_message', 'privacy_policy', 'whitelist_pending_message', 'whitelist_rejection_message', 'profile_posted_message']})
+    cfg.update({k: request.form.get(k, '') for k in [
+        'start_message', 'rules_message', 'blocked_message', 'privacy_policy', 
+        'whitelist_pending_message', 'whitelist_rejection_message', 'profile_posted_message',
+        'leave_pm_message', 'welcome_pm_message'
+    ]})
     s.config_json = json.dumps(cfg, ensure_ascii=True)
     db.session.commit()
     flash('Texte gespeichert.', 'success')

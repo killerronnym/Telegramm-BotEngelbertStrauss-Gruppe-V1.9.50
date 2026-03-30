@@ -460,7 +460,38 @@
                             <textarea class="form-control font-monospace" name="whitelist_rejection_message"
                                 rows="3">{{ config.whitelist_rejection_message or '' }}</textarea>
                             <div class="form-text small text-white-50">Wird an den User nach Klick auf "Ablehnen"
+                                <div class="form-text small text-white-50">Wird an den User nach Klick auf "Ablehnen"
                                 gesendet.</div>
+                        </div>
+
+                        <hr class="my-4 border-secondary">
+                        <h6 class="text-warning fw-bold mb-3"><i class="bi bi-envelope-paper-heart me-2"></i>Automatischer PM-Versand</h6>
+                        
+                        <div class="alert alert-info border-0 shadow-sm mb-4" style="background: rgba(34, 158, 240, 0.1);">
+                            <div class="d-flex gap-3">
+                                <i class="bi bi-info-circle-fill fs-4 text-info"></i>
+                                <div class="small">
+                                    <p class="mb-2 fw-bold text-info">💡 Info zu automatischen Nachrichten:</p>
+                                    <ul class="mb-0 ps-3">
+                                        <li><b>Begrüßungs-PM:</b> Wird gesendet, sobald ein Nutzer der Gruppe beitritt (nach Freischaltung). Ideal für den Hinweis auf <code>/letsgo</code> (zum Bearbeiten).</li>
+                                        <li><b>Abschieds-PM:</b> Wird gesendet, wenn ein Nutzer die Gruppe verlässt (egal ob freiwillig oder Kick).</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="small text-secondary fw-bold mb-1">Begrüßung im Privat-Chat (Join)</label>
+                            <textarea class="form-control font-monospace" name="welcome_pm_message"
+                                rows="4" placeholder="Willkommen in der Gruppe! Du kannst deinen Steckbrief jederzeit mit /letsgo bearbeiten...">{{ config.welcome_pm_message or '' }}</textarea>
+                            <div class="form-text small text-white-50">Wird an den User gesendet, sobald er die Gruppe erfolgreich betreten hat.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="small text-secondary fw-bold mb-1">Abschied im Privat-Chat (Leave)</label>
+                            <textarea class="form-control font-monospace" name="leave_pm_message"
+                                rows="4" placeholder="Schade, dass du uns verlassen hast... Dein Steckbrief wurde automatisch entfernt.">{{ config.leave_pm_message or '' }}</textarea>
+                            <div class="form-text small text-white-50">Wird beim Verlassen/Kick gesendet. Der Steckbrief wird gleichzeitig automatisch gelöscht.</div>
                         </div>
 
                         <button type="submit" class="btn-blue-action w-100 mt-4">TEXTE SPEICHERN</button>
