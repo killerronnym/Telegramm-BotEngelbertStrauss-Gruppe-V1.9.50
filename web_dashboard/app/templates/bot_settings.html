@@ -441,62 +441,53 @@
                         </div>
 
                         <hr class="my-4 border-secondary">
-                        <h6 class="text-info fw-bold mb-3">Texte nach Abschluss</h6>
-                        <div class="mb-3">
-                            <label class="small text-secondary fw-bold mb-1">Erfolgsmeldung nach Posten</label>
-                            <textarea class="form-control font-monospace" name="profile_posted_message"
-                                rows="3">{{ config.profile_posted_message or '' }}</textarea>
-                            <div class="form-text small text-white-50">Sichtbar für den User, sobald der Steckbrief in der Gruppe gepostet wurde. (Hier idealerweise den Hinweis auf /bearbeiten einfügen)</div>
-                        </div>
-                        <h6 class="text-info fw-bold mb-3">Texte für Whitelist-Modus</h6>
-                        <div class="mb-3">
-                            <label class="small text-secondary fw-bold mb-1">Warteschleifen-Nachricht</label>
-                            <textarea class="form-control font-monospace" name="whitelist_pending_message"
-                                rows="3">{{ config.whitelist_pending_message or '' }}</textarea>
-                            <div class="form-text small text-white-50">Wird an den User nach dem Absenden/Bearbeiten des Steckbriefs gesendet (während der Prüfung).</div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="small text-secondary fw-bold mb-1">Ablehnungs-Nachricht</label>
-                            <textarea class="form-control font-monospace" name="whitelist_rejection_message"
-                                rows="3">{{ config.whitelist_rejection_message or '' }}</textarea>
-                            <div class="form-text small text-white-50">Wird an den User nach Klick auf "Ablehnen"
-                                <div class="form-text small text-white-50">Wird an den User nach Klick auf "Ablehnen"
-                                gesendet.</div>
-                        </div>
-
-                        <hr class="my-4 border-secondary">
-                        <h6 class="text-warning fw-bold mb-3"><i class="bi bi-envelope-paper-heart me-2"></i>Automatischer PM-Versand</h6>
-                        
-                        <div class="alert alert-info border-0 shadow-sm mb-4" style="background: rgba(34, 158, 240, 0.1);">
-                            <div class="d-flex gap-3">
-                                <i class="bi bi-info-circle-fill fs-4 text-info"></i>
-                                <div class="small">
-                                    <p class="mb-2 fw-bold text-info">💡 Info zu automatischen Nachrichten:</p>
-                                    <ul class="mb-0 ps-3">
-                                        <li><b>Begrüßungs-PM:</b> Wird gesendet, sobald ein Nutzer der Gruppe beitritt (nach Freischaltung). Ideal für den Hinweis auf <code>/letsgo</code> (zum Bearbeiten).</li>
-                                        <li><b>Abschieds-PM:</b> Wird gesendet, wenn ein Nutzer die Gruppe verlässt (egal ob freiwillig oder Kick).</li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="small text-secondary fw-bold mb-1">Begrüßung im Privat-Chat (Join)</label>
-                            <textarea class="form-control font-monospace" name="welcome_pm_message"
-                                rows="4" placeholder="Willkommen in der Gruppe! Du kannst deinen Steckbrief jederzeit mit /letsgo bearbeiten...">{{ config.welcome_pm_message or '' }}</textarea>
-                            <div class="form-text small text-white-50">Wird an den User gesendet, sobald er die Gruppe erfolgreich betreten hat.</div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="small text-secondary fw-bold mb-1">Abschied im Privat-Chat (Leave)</label>
-                            <textarea class="form-control font-monospace" name="leave_pm_message"
-                                rows="4" placeholder="Schade, dass du uns verlassen hast... Dein Steckbrief wurde automatisch entfernt.">{{ config.leave_pm_message or '' }}</textarea>
-                            <div class="form-text small text-white-50">Wird beim Verlassen/Kick gesendet. Der Steckbrief wird gleichzeitig automatisch gelöscht.</div>
-                        </div>
-
                         <button type="submit" class="btn-blue-action w-100 mt-4">TEXTE SPEICHERN</button>
                     </form>
                 </div>
+            </div>
+
+            <div class="card mt-4 border-info border-opacity-25 shadow-lg">
+                <div class="card-header d-flex align-items-center gap-2 py-3">
+                    <i class="bi bi-envelope-check-fill text-info fs-5"></i>
+                    <h6 class="mb-0 fw-bold text-uppercase tracking-wider">Automatische Benachrichtigungen (PM)</h6>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info border-0 shadow-sm mb-4" style="background: rgba(34, 158, 240, 0.1);">
+                        <div class="d-flex gap-3">
+                            <i class="bi bi-info-circle-fill fs-4 text-info"></i>
+                            <div class="small">
+                                <p class="mb-2 fw-bold text-info">💡 Info zu automatischen Nachrichten:</p>
+                                <ul class="mb-0 ps-3">
+                                    <li><b>Begrüßungs-PM:</b> Wird gesendet, sobald ein Nutzer der Gruppe beitritt.</li>
+                                    <li><b>Abschieds-PM (Freiwillig):</b> Wird gesendet, wenn ein Nutzer die Gruppe verlässt (Austritt).</li>
+                                    <li><b>Abschieds-PM (Rauswurf):</b> Wird gesendet, wenn ein Nutzer gesperrt/entfernt wurde.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <form action="{{ url_for('dashboard.save_invite_content') }}" method="POST">
+                        <div class="mb-3">
+                            <label class="small text-secondary fw-bold mb-1">Begrüßung im Privat-Chat (Join)</label>
+                            <textarea class="form-control font-monospace" name="welcome_pm_message"
+                                rows="3" placeholder="Willkommen! Du kannst deinen Steckbrief mit /letsgo bearbeiten...">{{ config.welcome_pm_message or '' }}</textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="small text-secondary fw-bold mb-1">Abschied bei freiwilligem Austritt</label>
+                            <textarea class="form-control font-monospace" name="leave_pm_voluntary"
+                                rows="3" placeholder="Schade, dass du uns verlassen hast!">{{ config.leave_pm_voluntary or '' }}</textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="small text-secondary fw-bold mb-1">Abschied bei Rauswurf / Sperre</label>
+                            <textarea class="form-control font-monospace" name="leave_pm_kicked"
+                                rows="3" placeholder="Du wurdest leider aus der Gruppe entfernt.">{{ config.leave_pm_kicked or '' }}</textarea>
+                        </div>
+
+                        <button type="submit" class="btn btn-info btn-sm w-100 fw-bold text-white shadow-sm py-2">PM-EINSTELLUNGEN SPEICHERN</button>
+                    </form>
+                </div>
+            </div>
             </div>
         </div>
 
@@ -919,6 +910,7 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <form id="profileEditForm" method="POST">
+                <div class="modal-body">
                     <div class="row g-3">
                         <div class="col-lg-8">
                             <label class="small text-secondary fw-bold mb-1">Rohdaten (JSON System-Format)</label>

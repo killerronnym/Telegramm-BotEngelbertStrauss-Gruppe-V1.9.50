@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import sys
@@ -876,7 +877,8 @@ def generate_profile_text(user: User, answers: Dict[str, Any], ordered_fields: L
             continue 
         elif ftype == 'birthday':
             emoji = field.get('emoji', '🎂')
-            name_label = field.get('display_name', 'Alter')
+            # Erzwinge den Label-Namen 'Alter' für diesen Typ
+            name_label = 'Alter'
             answer_str = str(answer).strip()
 
             if 'jahre' in answer_str.lower() or answer_str.isdigit():
@@ -1482,18 +1484,22 @@ async def handle_member_left(update: Update, context: ContextTypes.DEFAULT_TYPE)
         else:
             logger.info("Keine aktiven Steckbrief-IDs zum Löschen gefunden.")
 
-    # --- NEU: Abschieds-PM senden (falls konfiguriert) ---
-    # Wir machen das außerhalb des DB-Contexts um Zeit zu sparen, 
-    # aber wir brauchen die config
+    # --- NEU: Abschieds-PM senden (Getrennt nach Austritt vs Kick) ---
     config = get_bot_config('invite')
-    leave_pm = config.get('leave_pm_message')
+    # Wir prüfen den Typ aus der action_type Variable die wir oben gesetzt haben
+    if "verlassen" in action_type:
+        leave_pm = config.get('leave_pm_voluntary')
+        reason = "Austritt"
+    else:
+        leave_pm = config.get('leave_pm_kicked')
+        reason = "Rauswurf"
+
     if leave_pm:
         try:
             await context.bot.send_message(chat_id=user_id, text=leave_pm, parse_mode="HTML")
-            logger.info(f"handle_member_left: Abschieds-PM an {user_id} gesendet.")
+            logger.info(f"handle_member_left: {reason}-PM an {user_id} gesendet.")
         except Exception as e:
-            # Oft scheitert dies, weil User den Bot blockiert haben beim Verlassen
-            logger.warning(f"handle_member_left: Konnte keine Abschieds-PM an {user_id} senden (evtl. Bot blockiert): {e}")
+            logger.warning(f"handle_member_left: Konnte keine {reason}-PM an {user_id} senden: {e}")
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Prozess abgebrochen.")
@@ -1657,10 +1663,32 @@ async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, for
     fields = [f for f in config.get('form_fields', []) if f.get('enabled')]
     
     keyboard = []
+    answers = context.user_data.get('answers', {})
+    
     for f in fields:
+        fid = f['id']
         emoji = f.get('emoji', '🔹')
-        name = f.get('display_name', f['id'])
-        keyboard.append([InlineKeyboardButton(f"{emoji} {name} bearbeiten", callback_data=f"edit_field_{f['id']}")])
+        name = f.get('display_name', fid)
+        answer = answers.get(fid)
+        
+        # Check if Social Media field
+        is_social = fid == 'instagram' or 'social' in fid.lower() or 'social' in f.get('display_name', '').lower() or 'insta' in f.get('display_name', '').lower()
+        
+        if is_social and isinstance(answer, list) and len(answer) > 0:
+            # Für jeden Eintrag einen eigenen Button
+            for i, entry in enumerate(answer):
+                platform_name = entry.get('name', 'Social Media')
+                keyboard.append([InlineKeyboardButton(f"📱 {platform_name}: {entry.get('url', '').split('/')[-1]}", callback_data=f"edit_social_entry_{fid}_{i}")])
+            
+            # Hinzufügen-Button
+            keyboard.append([InlineKeyboardButton(f"➕ Weiteres {name} hinzufügen", callback_data=f"edit_field_{fid}")])
+        else:
+            # Normales Feld oder leeres Social Media
+            status_text = "bearbeiten"
+            if not answer or (isinstance(answer, str) and answer.lower() in ['nein', 'n/a']):
+                status_text = "hinzufügen"
+            
+            keyboard.append([InlineKeyboardButton(f"{emoji} {name} {status_text}", callback_data=f"edit_field_{fid}")])
     
     keyboard.append([InlineKeyboardButton("✅ Bearbeitung beenden & Vorschau", callback_data="edit_finish")])
     
@@ -1679,13 +1707,64 @@ async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, for
     
     return ASKING_QUESTIONS
 
+async def handle_edit_social_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Zeigt Optionen für einen spezifischen Social Media Eintrag (Bearbeiten/Löschen)."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data # edit_social_entry_{fid}_{index}
+    
+    parts = data.split('_')
+    fid = parts[3]
+    idx = int(parts[4])
+    
+    answers = context.user_data.get('answers', {})
+    if fid in answers and isinstance(answers[fid], list) and idx < len(answers[fid]):
+        entry = answers[fid][idx]
+        context.user_data['edit_social_idx'] = idx
+        context.user_data['edit_social_fid'] = fid
+        
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✏️ Inhalt ändern", callback_data=f"edit_field_{fid}")],
+            [InlineKeyboardButton("🗑️ Eintrag löschen", callback_data=f"delete_social_entry")],
+            [InlineKeyboardButton("🔙 Zurück", callback_data="edit_more_yes")]
+        ])
+        
+        await query.edit_message_text(
+            f"Eintrag für <b>{entry.get('name', 'Social Media')}</b> verwalten:\n\n"
+            f"Aktueller Link: {entry.get('url', '-')}",
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+    else:
+        await query.edit_message_text("Fehler: Eintrag nicht gefunden.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Zurück", callback_data="edit_more_yes")]]))
+    
+    return ASKING_QUESTIONS
+
 async def handle_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     
     data = query.data
     
-    if data.startswith("edit_field_"):
+    if data.startswith("edit_social_entry_"):
+        return await handle_edit_social_entry(update, context)
+        
+    elif data == "delete_social_entry":
+        fid = context.user_data.get('edit_social_fid')
+        idx = context.user_data.get('edit_social_idx')
+        answers = context.user_data.get('answers', {})
+        
+        if fid in answers and isinstance(answers[fid], list) and idx is not None:
+            removed = answers[fid].pop(idx)
+            db.session.commit() # Wir speichern erst beim Finalisieren, aber Session-Daten sind wichtig
+            await query.edit_message_text(f"✅ Eintrag für {removed.get('name', 'Social Media')} gelöscht.")
+            # Kurz warten und Menü zeigen
+            import asyncio
+            await asyncio.sleep(1)
+            return await show_edit_menu(update, context)
+        return await show_edit_menu(update, context)
+
+    elif data.startswith("edit_field_"):
         field_id = data.replace("edit_field_", "")
         config = get_bot_config('invite')
         fields = config.get('form_fields', [])

@@ -207,7 +207,7 @@ def save_invite_content():
     cfg.update({k: request.form.get(k, '') for k in [
         'start_message', 'rules_message', 'blocked_message', 'privacy_policy', 
         'whitelist_pending_message', 'whitelist_rejection_message', 'profile_posted_message',
-        'leave_pm_message', 'welcome_pm_message'
+        'leave_pm_voluntary', 'leave_pm_kicked', 'welcome_pm_message'
     ]})
     s.config_json = json.dumps(cfg, ensure_ascii=True)
     db.session.commit()
