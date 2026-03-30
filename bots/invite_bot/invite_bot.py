@@ -269,13 +269,31 @@ async def letsgo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                 label = "Soll dein Telegram-Name im Steckbrief angezeigt werden?"
             elif ftype == 'pm_contact':
                 label = "Darf man dich privat anschreiben?"
-            elif ftype == 'birthday':
-                label = "Möchtest du dein Geburtsdatum hinzufügen? (Für Glückwünsche, nur dein Alter wird im Steckbrief gezeigt)"
+            
+            if ftype == 'birthday':
+                label = (
+                    "<b>Möchtest du dein Geburtsdatum hinzufügen?</b>\n\n"
+                    "🎂 <b>Vorteil:</b> Der Bot kann dir zum Geburtstag gratulieren!\n"
+                    "🔢 <b>Hinweis:</b> In deinem Steckbrief wird trotzdem <u>nur dein Alter</u> angezeigt (z.B. 'Alter: 25 Jahre').\n\n"
+                    "Was möchtest du tun?"
+                )
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🎂 Ja, Geburtsdatum", callback_data="bool_ans_yes")],
+                    [InlineKeyboardButton("🔢 Nein, nur mein Alter", callback_data="bool_ans_age")]
+                ])
+            else:
+                # Default boolean buttons for header_name, pm_contact, and boolean_buttons
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ JA", callback_data="bool_ans_yes"),
+                     InlineKeyboardButton("❌ NEIN", callback_data="bool_ans_no")]
+                ])
                 
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ JA", callback_data="bool_ans_yes"),
-                 InlineKeyboardButton("❌ NEIN", callback_data="bool_ans_no")]
-            ])
+            # Falls nicht Pflicht, zusätzlich Überspringen zulassen
+            if not first_field.get('required'):
+                if keyboard:
+                    keyboard.inline_keyboard.append([InlineKeyboardButton("⏭️ Überspringen", callback_data="skip_field")])
+                else:
+                    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏭️ Überspringen", callback_data="skip_field")]])
         elif not first_field.get('required'):
             keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏭️ Überspringen / Nein", callback_data="skip_field")]])
         
@@ -326,8 +344,23 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             # Spezialbehandlung für Geburtstags-Felder: zweistufig
             if ftype == 'birthday':
                 await update.callback_query.answer()
-                if answer_val == 'no':
-                    # NEIN -> Alters-Rückfrage stellen (kein Datum, aber Alter mit Mindestalter)
+                if answer_val in ['age', 'no']:
+                    # NUR ALTER oder NEIN -> Alters-Rückfrage stellen
+                    # Wenn 'no' gewählt wurde und das Feld NICHT required ist, dann skip.
+                    # Aber der User wünscht, dass NEIN auch zum Alter führt, falls wir im Birthday-Flow sind.
+                    if answer_val == 'no' and not field.get('required'):
+                        context.user_data['answers'][field['id']] = "Nicht angegeben"
+                        if context.user_data.get('is_editing'):
+                            keyboard = InlineKeyboardMarkup([
+                                [InlineKeyboardButton("🔄 Weiter bearbeiten", callback_data="edit_more_yes"),
+                                 InlineKeyboardButton("✅ Bearbeitung beenden", callback_data="edit_more_no")]
+                            ])
+                            await update.callback_query.edit_message_text(f"✅ Feld {field.get('display_name', field['id'])} auf 'Nicht angegeben' gesetzt.", reply_markup=keyboard)
+                            return ASKING_QUESTIONS
+                        else:
+                            await update.callback_query.edit_message_text("⏭️ Überspringen.")
+                            return await next_question(update, context)
+
                     context.user_data['birthday_age_fallback'] = True
                     await context.bot.send_message(
                         chat_id=update.effective_chat.id,
@@ -341,7 +374,7 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                     await context.bot.send_message(
                         chat_id=update.effective_chat.id,
                         text="Super! Bitte schreibe dein Geburtsdatum im Format: <b>TT.MM.JJJJ</b>\n\n"
-                             "<i>Hinweis: Das Datum wird nur für Glückwünsche gespeichert. Im Steckbrief erscheint nur dein Alter.</i>",
+                             "<i>Hinweis: Das Datum wird für Glückwünsche genutzt. Im Steckbrief erscheint nur dein Alter.</i>",
                         parse_mode="HTML"
                     )
                     return ASKING_QUESTIONS
@@ -535,13 +568,45 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             if edit_idx is not None and isinstance(context.user_data['answers'][field['id']], list) and edit_idx < len(context.user_data['answers'][field['id']]):
                 context.user_data['answers'][field['id']][edit_idx] = detected
                 logger.info(f"handle_answer: Ersetze Social Media an Index {edit_idx}")
+                # Reset edit context
+                context.user_data['edit_social_idx'] = None
+                context.user_data['edit_social_fid'] = None
             else:
                 context.user_data['answers'][field['id']].append(detected)
                 logger.info(f"handle_answer: Füge neuen Social Media Link hinzu.")
             
             return await ask_link_verification(update, context, detected)
         else:
-            # Kein Link -> Nach Plattform fragen (Möglichkeit B)
+            # Kein Link -> Falls wir editieren und Plattform kennen, direkt zu Verification
+            old_platform = context.user_data.get('edit_social_platform')
+            if old_platform and old_platform.lower() in [p.lower() for p in PLATFORMS]:
+                # Finde den Key
+                p_key = None
+                for k, v in PLATFORMS.items():
+                    if v['name'].lower() == old_platform.lower() or k.lower() == old_platform.lower():
+                        p_key = k
+                        break
+                
+                if p_key:
+                    base = PLATFORMS[p_key]["base_url"]
+                    final_url = f"{base}{answer.strip()}"
+                    detected = {"name": PLATFORMS[p_key]["name"], "url": final_url}
+                    
+                    # Store as answer
+                    edit_idx = context.user_data.get('edit_social_idx')
+                    if edit_idx is not None:
+                        context.user_data['answers'][field['id']][edit_idx] = detected
+                    else:
+                        context.user_data['answers'][field['id']].append(detected)
+                    
+                    # Reset context
+                    context.user_data['edit_social_idx'] = None
+                    context.user_data['edit_social_fid'] = None
+                    context.user_data['edit_social_platform'] = None
+                    
+                    return await ask_link_verification(update, context, detected)
+
+            # Nach Plattform fragen (Möglichkeit B)
             context.user_data['temp_social_name'] = answer_text
             keyboard = []
             keys = list(PLATFORMS.keys())
@@ -679,13 +744,23 @@ async def next_question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                 next_label = "Soll dein Telegram-Name im Steckbrief angezeigt werden?"
             elif ftype == 'pm_contact':
                 next_label = "Darf man dich privat anschreiben?"
-            elif ftype == 'birthday':
-                next_label = "Möchtest du dein Geburtsdatum hinzufügen? (Für Glückwünsche, nur dein Alter wird im Steckbrief gezeigt)"
             
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ JA", callback_data="bool_ans_yes"),
-                 InlineKeyboardButton("❌ NEIN", callback_data="bool_ans_no")]
-            ])
+            if ftype == 'birthday':
+                next_label = (
+                    "<b>Möchtest du dein Geburtsdatum hinzufügen?</b>\n\n"
+                    "🎂 <b>Vorteil:</b> Der Bot kann dir zum Geburtstag gratulieren!\n"
+                    "🔢 <b>Hinweis:</b> In deinem Steckbrief wird trotzdem <u>nur dein Alter</u> angezeigt (z.B. 'Alter: 25 Jahre').\n\n"
+                    "Was möchtest du tun?"
+                )
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🎂 Ja, Geburtsdatum", callback_data="bool_ans_yes")],
+                    [InlineKeyboardButton("🔢 Nein, nur mein Alter", callback_data="bool_ans_age")]
+                ])
+            else:
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ JA", callback_data="bool_ans_yes"),
+                     InlineKeyboardButton("❌ NEIN", callback_data="bool_ans_no")]
+                ])
         elif not next_field.get('required'):
             keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏭️ Überspringen / Nein", callback_data="skip_field")]])
             
@@ -924,7 +999,9 @@ def generate_profile_text(user: User, answers: Dict[str, Any], ordered_fields: L
                 formatted_socials = []
                 for entry in answers_list:
                     if isinstance(entry, dict):
-                        formatted_socials.append(f'<a href="{entry["url"]}">{entry["name"]}</a>')
+                        m_url = entry.get('url', '#')
+                        m_name = entry.get('name', 'Link')
+                        formatted_socials.append(f'<a href="{m_url}">{m_name}</a>')
                     else:
                         formatted_socials.append(str(entry))
                 answer = ", ".join(formatted_socials)
@@ -1371,75 +1448,112 @@ async def handle_existing_member_callback(update: Update, context: ContextTypes.
             application.status = 'rejected'
             db.session.commit()
 
+async def handle_chat_member_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Routet ChatMember-Updates an die entsprechenden Handler für Beitritt/Austritt."""
+    if not update.chat_member:
+        return
+    
+    status = update.chat_member.new_chat_member.status
+    if status == "member":
+        await handle_new_member(update, context)
+    elif status in ["left", "kicked"]:
+        await handle_member_left(update, context)
+
 async def handle_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not update.chat_member or not update.chat_member.new_chat_member or update.chat_member.new_chat_member.status != "member":
+    users_to_check = []
+    if update.chat_member and update.chat_member.new_chat_member:
+        if update.chat_member.new_chat_member.status == "member":
+            users_to_check.append(update.chat_member.new_chat_member.user)
+    elif update.message and update.message.new_chat_members:
+        users_to_check.extend(update.message.new_chat_members)
+
+    if not users_to_check:
         return
 
-    user_id = update.chat_member.new_chat_member.user.id
-    user_username = update.chat_member.new_chat_member.user.username or str(user_id)
-    
-    # Für Analytics (Dashboard) loggen:
-    log_user_interaction(user_id, user_username, "Mitglied ist der Gruppe beigetreten.")
-    
-    with flask_app.app_context():
-        application = InviteApplication.query.filter_by(telegram_user_id=user_id, status='accepted').first()
-        if application:
-            config = get_bot_config('invite')
-            raw_answers = application.answers
-            fields = [f for f in config.get('form_fields', []) if f.get('enabled')]
-            target_chat_id = application.profile_chat_id or fix_chat_id(config.get('main_chat_id', ''))
+    for user in users_to_check:
+        user_id = user.id
+        user_username = user.username or str(user_id)
+        
+        logger.info(f"handle_new_member: Process join for {user_id}")
+        # Für Analytics (Dashboard) loggen:
+        log_user_interaction(user_id, user_username, "Mitglied ist der Gruppe beigetreten.")
+        
+        with flask_app.app_context():
+            # Suche nach akzeptierten ODER bereits abgeschlossenen Bewerbungen (falls jemand wiederkommt)
+            application = InviteApplication.query.filter(
+                InviteApplication.telegram_user_id == user_id,
+                InviteApplication.status.in_(['accepted', 'completed'])
+            ).first()
             
-            # Profildaten rekonstruieren
-            try:
-                m_user = await context.bot.get_chat(user_id)
-            except:
-                m_user = None
-
-            final_text, _ = generate_profile_text(m_user, raw_answers, fields)
-            if not final_text:
-                logger.error(f"handle_new_member: Konnte Steckbrief für {user_id} nicht generieren (Text leer)")
-                return
-            
-            # Willkommens-Grüß anpassen
-            lines = final_text.split('\n')
-            if lines:
-                lines[0] = "🎉 Willkommen in der Gruppe!"
-            final_text = "\n".join(lines)
-
-            # Foto finden
-            photo_file_id = None
-            for f in fields:
-                if f.get('type') == 'photo' and raw_answers.get(f['id']):
-                    photo_file_id = raw_answers[f['id']]
-                    if photo_file_id != 'n/a': break
-
-            reconstructed_profile = {
-                'text': final_text,
-                'photo_id': photo_file_id,
-                'target_chat_id': target_chat_id,
-                'topic_id': config.get('topic_id'),
-                'whitelist_approval_topic_id': config.get('whitelist_approval_topic_id'),
-                'answers': raw_answers
-            }
-            
-            sent_msg = await post_profile(context.bot, reconstructed_profile)
-            # message_id speichern für späteres Auto-Löschen
-            if sent_msg and hasattr(sent_msg, 'message_id'):
-                application.profile_message_id = sent_msg.message_id
-                application.profile_chat_id = target_chat_id
-                logger.info(f"handle_new_member: Steckbrief message_id {sent_msg.message_id} gespeichert.")
+            if application:
+                config = get_bot_config('invite')
+                raw_answers = application.answers
+                fields = [f for f in config.get('form_fields', []) if f.get('enabled')]
+                target_chat_id = application.profile_chat_id or fix_chat_id(config.get('main_chat_id', ''))
                 
-            application.status = 'completed'
-            db.session.commit()
-
-            # --- NEU: Willkommens-PM senden (falls konfiguriert) ---
-            welcome_pm = config.get('welcome_pm_message')
-            if welcome_pm:
+                # Profildaten rekonstruieren
                 try:
-                    await context.bot.send_message(chat_id=user_id, text=welcome_pm, parse_mode="HTML")
-                    logger.info(f"handle_new_member: Willkommens-PM an {user_id} gesendet.")
+                    m_user = await context.bot.get_chat(user_id)
+                except:
+                    m_user = None
+
+                final_text, _ = generate_profile_text(m_user, raw_answers, fields)
+                if not final_text:
+                    logger.error(f"handle_new_member: Konnte Steckbrief für {user_id} nicht generieren (Text leer)")
+                    continue
+                
+                # Willkommens-Grüß anpassen
+                lines = final_text.split('\n')
+                if lines:
+                    lines[0] = "🎉 Willkommen in der Gruppe!"
+                final_text = "\n".join(lines)
+
+                # Foto finden
+                photo_file_id = None
+                for f in fields:
+                    if f.get('type') == 'photo' and raw_answers.get(f['id']):
+                        photo_file_id = raw_answers[f['id']]
+                        if photo_file_id != 'n/a': break
+
+                reconstructed_profile = {
+                    'text': final_text,
+                    'photo_id': photo_file_id,
+                    'target_chat_id': target_chat_id,
+                    'topic_id': config.get('topic_id'),
+                    'whitelist_approval_topic_id': config.get('whitelist_approval_topic_id'),
+                    'answers': raw_answers
+                }
+                
+                sent_msg = await post_profile(context.bot, reconstructed_profile)
+                # message_id speichern für späteres Auto-Löschen
+                if sent_msg and hasattr(sent_msg, 'message_id'):
+                    application.profile_message_id = sent_msg.message_id
+                    application.profile_chat_id = target_chat_id
+                    logger.info(f"handle_new_member: Steckbrief message_id {sent_msg.message_id} gespeichert.")
+                    
+                application.status = 'completed'
+                db.session.commit()
+
+                # --- NEU: Willkommens-Meldungen senden ---
+                success_msg = config.get('profile_posted_message', "Dein Steckbrief wurde erfolgreich in die Gruppe gepostet! 🎉")
+                try:
+                    await context.bot.send_message(chat_id=user_id, text=success_msg, parse_mode="HTML")
+                    await context.bot.send_message(
+                        chat_id=user_id, 
+                        text="ℹ️ Du kannst deinen Steckbrief jederzeit mit dem Befehl /bearbeiten aktualisieren oder Teile davon löschen.",
+                        parse_mode="HTML"
+                    )
+                    logger.info(f"handle_new_member: Erfolgsmeldung & Edit-Info an {user_id} gesendet.")
                 except Exception as e:
-                    logger.warning(f"handle_new_member: Konnte keine Willkommens-PM an {user_id} senden: {e}")
+                    logger.warning(f"handle_new_member: Konnte Erfolgsmeldung nicht an {user_id} senden: {e}")
+
+                welcome_pm = config.get('welcome_pm_message')
+                if welcome_pm:
+                    try:
+                        await context.bot.send_message(chat_id=user_id, text=welcome_pm, parse_mode="HTML")
+                        logger.info(f"handle_new_member: Willkommens-PM (custom) an {user_id} gesendet.")
+                    except Exception as e:
+                        logger.warning(f"handle_new_member: Konnte keine Willkommens-PM an {user_id} senden: {e}")
 
 async def handle_member_left(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Löscht automatisch den Steckbrief wenn ein User die Gruppe verlässt."""
@@ -1450,6 +1564,7 @@ async def handle_member_left(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # Check if called from ChatMemberHandler (Modern API)
     if update.chat_member:
         cm = update.chat_member
+        logger.info(f"handle_member_left: ChatMember Update - Status: {cm.old_chat_member.status} -> {cm.new_chat_member.status}")
         # Wir interessieren uns nur für Statusänderungen zu "left" oder "kicked"
         if cm.new_chat_member.status in ["left", "kicked"]:
             user_id = cm.new_chat_member.user.id
@@ -1520,6 +1635,27 @@ async def handle_member_left(update: Update, context: ContextTypes.DEFAULT_TYPE)
             logger.info(f"handle_member_left: {reason}-PM an {user_id} gesendet.")
         except Exception as e:
             logger.warning(f"handle_member_left: Konnte keine {reason}-PM an {user_id} senden: {e}")
+
+    # --- NEU: Admin-Gruppe benachrichtigen ---
+    admin_chat_id = config.get('whitelist_approval_chat_id')
+    admin_topic_id = config.get('whitelist_approval_topic_id')
+    if admin_chat_id:
+        admin_msg = (
+            f"👤 <b>Mitglied hat die Gruppe verlassen</b>\n\n"
+            f"<b>Nutzer:</b> @{username}\n"
+            f"<b>ID:</b> <code>{user_id}</code>\n"
+            f"<b>Aktion:</b> {action_type.capitalize()}"
+        )
+        try:
+            await context.bot.send_message(
+                chat_id=admin_chat_id,
+                text=admin_msg,
+                message_thread_id=int(admin_topic_id) if admin_topic_id and str(admin_topic_id).isdigit() else None,
+                parse_mode="HTML"
+            )
+            logger.info(f"handle_member_left: Admin-Gruppe benachrichtigt über Austritt von {username}.")
+        except Exception as e:
+            logger.warning(f"handle_member_left: Konnte Admin-Gruppe nicht benachrichtigen: {e}")
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Prozess abgebrochen.")
@@ -1594,6 +1730,7 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             # Daten in context laden
             try:
                 answers = json.loads(app.answers_json)
+                logger.info(f"bearbeiten: Answers loaded for user {user.id}")
                 
                 # REPARATUR-LOGIK: Falls fälschlicherweise das gesamte profile_data Objekt gespeichert wurde
                 if isinstance(answers, dict) and 'answers' in answers:
@@ -1625,7 +1762,11 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         config = get_bot_config('invite')
         # Robusterer Check auf 'enabled'
         fields = [f for f in config.get('form_fields', []) if f.get('enabled') is True or f.get('enabled') == 'true']
+        
+        # Generate profile preview
+        logger.info(f"bearbeiten: Generating profile text for user {user.id}")
         current_text, has_data = generate_profile_text(user, context.user_data['answers'], fields)
+        logger.info(f"bearbeiten: Profile text generated (len={len(current_text) if current_text else 0})")
         
         if not has_data:
             logger.warning(f"bearbeiten: Steckbrief von User {user.id} existiert zwar, hat aber keine verwertbaren Daten. answers={context.user_data['answers']}")
@@ -1660,6 +1801,7 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                 await message_target.reply_text(current_text, parse_mode="HTML")
         else:
             msg = await message_target.reply_text(current_text, parse_mode="HTML")
+            logger.info("bearbeiten: Profile message sent.")
         
         # Message ID speichern um sie später evtl zu löschen
         if msg: context.user_data['edit_entry_msg_id'] = msg.message_id
@@ -1678,9 +1820,16 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # Menü anzeigen
     return await show_edit_menu(update, context, force_new_msg=True)
 
-async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, force_new_msg=False) -> int:
+async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, force_new_msg=False, status_msg=None) -> int:
+    # Reset Social Edit Context when entering menu
+    if not update.callback_query or not update.callback_query.data.startswith("edit_social_entry_"):
+        context.user_data['edit_social_idx'] = None
+        context.user_data['edit_social_fid'] = None
+        
+    logger.info(f"show_edit_menu: Start (force_new_msg={force_new_msg})")
     config = get_bot_config('invite')
     fields = [f for f in config.get('form_fields', []) if f.get('enabled')]
+    logger.info(f"show_edit_menu: Found {len(fields)} enabled fields")
     
     keyboard = []
     answers = context.user_data.get('answers', {})
@@ -1697,8 +1846,16 @@ async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, for
         if is_social and isinstance(answer, list) and len(answer) > 0:
             # Für jeden Eintrag einen eigenen Button
             for i, entry in enumerate(answer):
-                platform_name = entry.get('name', 'Social Media')
-                keyboard.append([InlineKeyboardButton(f"📱 {platform_name}: {entry.get('url', '').split('/')[-1]}", callback_data=f"edit_social_entry_{fid}_{i}")])
+                platform_name = "Social Media"
+                display_val = "Link"
+                
+                if isinstance(entry, dict):
+                    platform_name = entry.get('name', 'Social Media')
+                    display_val = entry.get('url', '').split('/')[-1] or "Link"
+                else:
+                    display_val = str(entry).split('/')[-1] or "Link"
+                
+                keyboard.append([InlineKeyboardButton(f"📱 {platform_name}: {display_val}", callback_data=f"edit_social_entry_{fid}_{i}")])
             
             # Hinzufügen-Button
             keyboard.append([InlineKeyboardButton(f"➕ Weiteres {name} hinzufügen", callback_data=f"edit_field_{fid}")])
@@ -1716,15 +1873,20 @@ async def show_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, for
         "<b>Was möchtest du an deinem Steckbrief bearbeiten?</b>\n\n"
         "Wähle oben eine Kategorie aus, um den Inhalt zu aktualisieren."
     )
+    if status_msg:
+        text = f"{status_msg}\n\n{text}"
+    
+    logger.info(f"show_edit_menu: Keyboard built with {len(keyboard)} rows. Sending message...")
     
     if update.callback_query and not force_new_msg:
         try:
             await update.callback_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-        except Exception:
+            logger.info("show_edit_menu: Message edited.")
+        except Exception as e:
+            logger.warning(f"show_edit_menu: Edit failed: {e}. Sending new message.")
             await context.bot.send_message(update.effective_chat.id, text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
     else:
         await context.bot.send_message(update.effective_chat.id, text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-    
     return ASKING_QUESTIONS
 
 async def handle_edit_social_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1745,13 +1907,25 @@ async def handle_edit_social_entry(update: Update, context: ContextTypes.DEFAULT
         
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("✏️ Bearbeiten", callback_data=f"edit_field_{fid}")],
-            [InlineKeyboardButton("🗑️ Löschen", callback_data=f"delete_social_entry")],
+            [InlineKeyboardButton("🗑️ Löschen", callback_data=f"edit_delete_social")],
             [InlineKeyboardButton("🔙 Zurück", callback_data="edit_more_yes")]
         ])
         
+        entry_name = "Social Media"
+        entry_link = "-"
+        if isinstance(entry, dict):
+            entry_name = entry.get('name', 'Social Media')
+            entry_link = entry.get('url', '-')
+            # Store platform name to skip platform choice when editing
+            context.user_data['edit_social_platform'] = entry_name
+        else:
+            entry_name = str(entry)
+            entry_link = str(entry)
+            context.user_data['edit_social_platform'] = None # Unknown
+            
         await query.edit_message_text(
-            f"Eintrag für <b>{entry.get('name', 'Social Media')}</b> verwalten:\n\n"
-            f"Aktueller Link: {entry.get('url', '-')}\n\n"
+            f"Eintrag für <b>{entry_name}</b> verwalten:\n\n"
+            f"Aktueller Link: {entry_link}\n\n"
             f"Was möchtest du tun?",
             reply_markup=keyboard,
             parse_mode="HTML"
@@ -1770,19 +1944,30 @@ async def handle_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     if data.startswith("edit_social_entry_"):
         return await handle_edit_social_entry(update, context)
         
-    elif data == "delete_social_entry":
+    elif data == "edit_delete_social":
         fid = context.user_data.get('edit_social_fid')
         idx = context.user_data.get('edit_social_idx')
         answers = context.user_data.get('answers', {})
         
         if fid in answers and isinstance(answers[fid], list) and idx is not None:
             removed = answers[fid].pop(idx)
-            db.session.commit() # Wir speichern erst beim Finalisieren, aber Session-Daten sind wichtig
-            await query.edit_message_text(f"✅ Eintrag für {removed.get('name', 'Social Media')} gelöscht.")
-            # Kurz warten und Menü zeigen
-            import asyncio
-            await asyncio.sleep(1)
-            return await show_edit_menu(update, context)
+            
+            # Sofort in DB speichern für Konsistenz
+            with flask_app.app_context():
+                user_id = update.effective_user.id
+                app = InviteApplication.query.filter_by(telegram_user_id=user_id).first()
+                if app:
+                    app.answers_json = json.dumps(answers)
+                    db.session.commit()
+                    logger.info(f"delete_social_entry: DB updated for user {user_id}")
+            
+            entry_name = "Social Media"
+            if isinstance(removed, dict):
+                entry_name = removed.get('name', 'Social Media')
+            else:
+                entry_name = str(removed)
+            
+            return await show_edit_menu(update, context, status_msg=f"✅ Eintrag für {entry_name} wurde gelöscht.")
         return await show_edit_menu(update, context)
 
     elif data.startswith("edit_field_"):
@@ -1805,19 +1990,27 @@ async def handle_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYP
                     elif ftype == 'pm_contact':
                         label = "Darf man dich privat anschreiben?"
                     elif ftype == 'birthday':
-                        label = "Möchtest du dein Geburtsdatum hinzufügen? (Für Glückwünsche, nur dein Alter wird im Steckbrief gezeigt)"
+                        label = (
+                            "<b>Möchtest du dein Geburtsdatum hinzufügen?</b>\n\n"
+                            "🎂 <b>Vorteil:</b> Der Bot kann dir zum Geburtstag gratulieren!\n"
+                            "🔢 <b>Hinweis:</b> In deinem Steckbrief wird trotzdem <u>nur dein Alter</u> angezeigt.\n\n"
+                            "Was möchtest du tun?"
+                        )
                         
-                    keyboard = InlineKeyboardMarkup([
-                        [InlineKeyboardButton("✅ JA", callback_data="bool_ans_yes"),
-                         InlineKeyboardButton("❌ NEIN", callback_data="bool_ans_no")]
-                    ])
+                        keyboard = InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🎂 Ja, Geburtsdatum", callback_data="bool_ans_yes")],
+                            [InlineKeyboardButton("🔢 Nein, nur mein Alter", callback_data="bool_ans_age")]
+                        ])
+                        if not f.get('required'):
+                            keyboard.inline_keyboard.append([InlineKeyboardButton("⏭️ Überspringen", callback_data="bool_ans_no")])
                 elif not f.get('required'):
                     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏭️ Überspringen / Nein", callback_data="skip_field")]])
                     
                 # Spezial-Label für Social Media Edits
                 if context.user_data.get('edit_social_idx') is not None:
-                    label = "Schreibe den Usernamen oder die URL rein:"
-
+                    field_name = f.get('display_name', f['id'])
+                    label = f"Gib einen neuen Wert für <b>{field_name}</b> ein:\n(Username oder vollständiger Link)"
+                
                 # Frage stellen
                 await query.edit_message_text(
                     f"Bitte gib einen neuen Wert für <b>{f.get('display_name', f['id'])}</b> ein:\n\n{label}", 
@@ -1957,9 +2150,9 @@ def get_handlers():
         (CommandHandler("datenschutz", datenschutz), 0),
         (CallbackQueryHandler(handle_whitelist_callback, pattern=r'^whitelist_'), 0),
         (CallbackQueryHandler(handle_existing_member_callback, pattern=r'^existing_'), 0),
-        (ChatMemberHandler(handle_new_member, ChatMemberHandler.CHAT_MEMBER), 0),
-        (ChatMemberHandler(handle_member_left, ChatMemberHandler.CHAT_MEMBER), 0),  # Auto-Löschen bei Austritt
+        (ChatMemberHandler(handle_chat_member_router, ChatMemberHandler.CHAT_MEMBER), 0),
         (MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, handle_member_left), 0), # Fallback via Service Message
+        (MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_member), 0), # Fallback via Service Message
         (MessageHandler(filters.COMMAND, handle_custom_commands), 0)
     ]
 

@@ -28,7 +28,7 @@
         {
             "id": "age",
             "label": "Wie alt bist du?",
-            "type": "number",
+            "type": "birthday",
             "required": true,
             "enabled": true,
             "min_value": 12,

@@ -320,15 +320,21 @@ def main():
         status = update.chat_member.new_chat_member.status
         old_status = update.chat_member.old_chat_member.status
         
+        logger.info(f"DEBUG: Global ChatMemberUpdate - User={user.id} ({user.username}) - {old_status} -> {status} in {update.effective_chat.id}")
+        
         if status == old_status:
             return
             
         action = None
-        if status == 'member' and old_status in ['left', 'kicked', 'restricted']:
-            action = "Mitglied ist der Gruppe beigetreten."
-        elif status in ['left', 'kicked']:
+        reason = "freiwillig"
+        
+        if status == "member":
+            action = "Mitglied ist der Gruppe beigetreten (joined)."
+        elif status in ["left", "kicked"]:
             action = f"Mitglied hat die Gruppe verlassen ({status})."
-            
+            if status == "kicked":
+                reason = "entfernt"
+
         if action:
             try:
                 from web_dashboard.app.models import IDFinderUser
