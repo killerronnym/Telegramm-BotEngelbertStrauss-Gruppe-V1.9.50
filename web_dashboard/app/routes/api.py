@@ -194,10 +194,36 @@ def get_avatar(user_id):
     except Exception as e:
         print(f"Error in get_avatar: {e}")
     
-    from ..models import IDFinderUser
+    # Letzter Versuch: Aus InviteApplication-Antworten (Steckbrief-Foto) holen
+    try:
+        from ..models import InviteApplication
+        app_info = InviteApplication.query.filter_by(telegram_user_id=user_id).first()
+        if app_info:
+            answers = app_info.answers
+            # Suche nach Feld typ 'file' oder photo
+            photo_file_id = None
+            for key, val in answers.items():
+                if isinstance(val, str) and (val.startswith('AgA') or val.startswith('file_')):
+                    photo_file_id = val
+                    break
+            
+            if photo_file_id:
+                # Nutze existierende Stream-Logik (redirect zu media api)
+                return redirect(f"/api/media/{photo_file_id}")
+    except: pass
+    
+    from ..models import IDFinderUser, InviteApplication
     user = IDFinderUser.query.filter_by(telegram_id=user_id).first()
-    name = (user.first_name or user.username or str(user_id)) if user else str(user_id)
-    return redirect(f"https://ui-avatars.com/api/?name={encodeURIComponent(name)}&background=random&color=fff")
+    app_info = InviteApplication.query.filter_by(telegram_user_id=user_id).first()
+    
+    # Name determinieren für UI-Avatars Fallback
+    name = str(user_id)
+    if user:
+        name = (user.first_name or user.username or str(user_id))
+    elif app_info:
+        name = (app_info.full_name or app_info.username or str(user_id))
+        
+    return redirect(f"https://ui-avatars.com/api/?name={encodeURIComponent(name)}&background=random&color=fff&bold=true")
 
 def encodeURIComponent(s):
     import urllib.parse

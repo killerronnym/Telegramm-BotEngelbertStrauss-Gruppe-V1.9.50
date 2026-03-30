@@ -330,6 +330,25 @@ def main():
             action = f"Mitglied hat die Gruppe verlassen ({status})."
             
         if action:
+            try:
+                from web_dashboard.app.models import IDFinderUser
+                with flask_app.app_context():
+                    db_user = IDFinderUser.query.filter_by(telegram_id=user.id).first()
+                    if not db_user:
+                        db_user = IDFinderUser(
+                            telegram_id=user.id,
+                            username=user.username,
+                            first_name=user.first_name,
+                            last_name=user.last_name,
+                            language_code=user.language_code
+                        )
+                        db.session.add(db_user)
+                    else:
+                        db_user.last_contact = datetime.utcnow()
+                    db.session.commit()
+            except Exception as e:
+                logger.error(f"Error updating user on membership change: {e}")
+                
             from shared_bot_utils import log_user_interaction
             log_user_interaction(user.id, user.username or user.first_name, action)
             logger.info(f"Global Analytics: {user.id} -> {action}")

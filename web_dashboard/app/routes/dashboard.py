@@ -1072,7 +1072,21 @@ def id_finder_analytics():
             growth_net.append(g_joins.get(d_str, 0) - g_leaves.get(d_str, 0))
 
         joins_leaves = InviteLog.query.filter(InviteLog.action.ilike('%beigetreten%') | InviteLog.action.ilike('%verlassen%') | InviteLog.action.ilike('%entfernt%')).order_by(InviteLog.timestamp.desc()).limit(30).all()
-        events_list = [{"time": e.timestamp.strftime('%d.%m %H:%M') if hasattr(e.timestamp, 'strftime') else str(e.timestamp), "user": e.username or f"id{e.telegram_user_id}", "uid": str(e.telegram_user_id), "type": "join" if "beigetreten" in str(e.action) else "leave"} for e in joins_leaves]
+        
+        events_list = []
+        for e in joins_leaves:
+            # Versuche den echten Namen und Avatar aus der User-Tabelle zu holen
+            u_info = IDFinderUser.query.filter_by(telegram_id=e.telegram_user_id).first()
+            display_name = e.username or f"id{e.telegram_user_id}"
+            if u_info:
+                display_name = u_info.username or f"{u_info.first_name or ''} {u_info.last_name or ''}".strip() or display_name
+            
+            events_list.append({
+                "time": e.timestamp.strftime('%d.%m %H:%M') if hasattr(e.timestamp, 'strftime') else str(e.timestamp),
+                "user": display_name,
+                "uid": str(e.telegram_user_id),
+                "type": "join" if "beigetreten" in str(e.action) else "leave"
+            })
 
         return render_template('id_finder_analytics.html',
             stats={'total_users': total_users, 'total_messages': total_messages, 'total_media': total_media, 'active_users': active_users, 'avg_per_day': round(total_messages / max(days, 1), 1)},

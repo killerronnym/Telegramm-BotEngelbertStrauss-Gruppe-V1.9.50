@@ -143,6 +143,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     await update.message.reply_text(config.get('start_message', 'Willkommen! Schreibe /letsgo um zu starten.'))
     log_user_interaction(update.effective_user.id, update.effective_user.username, "/start command aufgerufen")
+    
+async def notify_admin_ban_attempt(context: ContextTypes.DEFAULT_TYPE, config: Dict[str, Any], user: User):
+    """Informiert die Admins über einen Startversuch eines gesperrten Nutzers."""
+    admin_chat_id = fix_chat_id(config.get('whitelist_approval_chat_id', ''))
+    if not admin_chat_id: return
+    
+    msg = (
+        f"⚠️ <b>Eingeschränkter Zugriff:</b>\n\n"
+        f"Der Nutzer {user.full_name} (ID: <code>{user.id}</code>, @{user.username or 'kein Username'}) "
+        f"hat versucht, den Steckbrief per /letsgo zu starten, obwohl er in der Hauptgruppe <b>gesperrt</b> ist."
+    )
+    
+    try:
+        topic_id = config.get('whitelist_approval_topic_id')
+        kwargs = {"chat_id": admin_chat_id, "text": msg, "parse_mode": "HTML"}
+        if topic_id and str(topic_id).isdigit():
+            kwargs["message_thread_id"] = int(topic_id)
+        
+        await context.bot.send_message(**kwargs)
+        logger.info(f"Admin-Alert: Gesperrter Nutzer {user.id} blockiert.")
+    except Exception as e:
+        logger.error(f"Fehler bei Admin-Benachrichtigung (Ban): {e}")
 
 async def datenschutz(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info(f"datenschutz: User {update.effective_user.id} aufgerufen")
@@ -174,15 +196,41 @@ async def letsgo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             await update.message.reply_text("Der Bot ist zur Zeit deaktiviert.")
             return ConversationHandler.END
 
-        # 3. Log Interaction
+        # 3. Check for Ban and Membership in Main Group
+        main_chat_id = fix_chat_id(config.get('main_chat_id', ''))
+        member = None
+        is_banned = False
+        is_member = False
+
+        if main_chat_id:
+            try:
+                member = await context.bot.get_chat_member(chat_id=main_chat_id, user_id=update.effective_user.id)
+                if member:
+                    if member.status == "kicked":
+                        is_banned = True
+                    elif member.status in ["member", "administrator", "creator"]:
+                        is_member = True
+            except Exception as e:
+                logger.debug(f"Konnte Member-Status nicht prüfen (Chat: {main_chat_id}): {e}")
+
+        # Block banned users
+        if is_banned:
+            log_user_interaction(update.effective_user.id, update.effective_user.username, "Blocked attempt: User is banned")
+            await notify_admin_ban_attempt(context, config, update.effective_user)
+            await update.message.reply_text(config.get('blocked_message', 'Du bist leider gesperrt. Bitte wende dich an einen Administrator.'))
+            return ConversationHandler.END
+
+        # Log Interaction for valid starts
         log_user_interaction(update.effective_user.id, update.effective_user.username, "/letsgo command aufgerufen")
 
-        # 4. Check for existing app
+        # 4. Check for existing app - Offer EDIT only if currently a group member
         logger.info("DEBUG: letsgo: entering flask context...")
         with flask_app.app_context():
             logger.info(f"DEBUG: letsgo: checking InviteApplication for {update.effective_user.id}")
             existing_app = InviteApplication.query.filter_by(telegram_user_id=update.effective_user.id).first()
-            if existing_app and existing_app.status in ['completed', 'accepted']:
+            
+            # Nur Bearbeiten erlauben, wenn Nutzer bereits in der Gruppe ist
+            if existing_app and existing_app.status in ['completed', 'accepted'] and is_member:
                 logger.info(f"letsgo: User {update.effective_user.id} starts edit flow (status: {existing_app.status})")
                 keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton("✏️ Ja, Steckbrief bearbeiten", callback_data="start_edit")]
@@ -192,6 +240,8 @@ async def letsgo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                     reply_markup=keyboard
                 )
                 return ASKING_QUESTIONS
+            elif existing_app and not is_member:
+                logger.info(f"letsgo: User {update.effective_user.id} left group, starting NEW application.")
         
         # 5. Start new Application
         logger.info(f"letsgo: Starte Bewerbung für User {update.effective_user.id}")
@@ -1452,6 +1502,24 @@ async def bearbeiten(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     
     logger.info(f"bearbeiten: Nutzer {user.id} (@{user.username}) möchte seinen Steckbrief bearbeiten.")
     
+    # Check for Membership in Main Group before allowing edit
+    config = get_bot_config('invite')
+    main_chat_id = fix_chat_id(config.get('main_chat_id', ''))
+    is_member = False
+    if main_chat_id:
+        try:
+            member = await context.bot.get_chat_member(chat_id=main_chat_id, user_id=user.id)
+            if member and member.status in ["member", "administrator", "creator"]:
+                is_member = True
+        except: pass
+        
+    if not is_member:
+        logger.info(f"bearbeiten: Nutzer {user.id} ist kein Mitglied, verweigere Edit-Mode.")
+        await update.message.reply_text(
+            "Du bist aktuell kein Mitglied der Hauptgruppe. Um deinen Steckbrief zu aktualisieren oder dich erneut vorzustellen, nutze bitte den Befehl /letsgo!"
+        )
+        return ConversationHandler.END
+
     # Sicherstellen, dass wir eine saubere Session haben
     context.user_data.clear()
     
