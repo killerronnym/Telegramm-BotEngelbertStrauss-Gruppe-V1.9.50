@@ -529,7 +529,15 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         if detected:
             if field['id'] not in context.user_data['answers']:
                 context.user_data['answers'][field['id']] = []
-            context.user_data['answers'][field['id']].append(detected)
+            
+            # --- NEU: Falls wir Editieren, ersetzen statt Anhängen ---
+            edit_idx = context.user_data.get('edit_social_idx')
+            if edit_idx is not None and isinstance(context.user_data['answers'][field['id']], list) and edit_idx < len(context.user_data['answers'][field['id']]):
+                context.user_data['answers'][field['id']][edit_idx] = detected
+                logger.info(f"handle_answer: Ersetze Social Media an Index {edit_idx}")
+            else:
+                context.user_data['answers'][field['id']].append(detected)
+                logger.info(f"handle_answer: Füge neuen Social Media Link hinzu.")
             
             return await ask_link_verification(update, context, detected)
         else:
@@ -600,7 +608,14 @@ async def handle_link_verification(update: Update, context: ContextTypes.DEFAULT
     field_id = fields[idx]['id']
     
     if action == 'yes':
-        # Link works! Now ask if they want another one.
+        # Link works! 
+        # Check if we were editing a single one
+        if context.user_data.get('edit_social_idx') is not None:
+             context.user_data.pop('edit_social_idx', None)
+             context.user_data.pop('edit_social_fid', None)
+             await query.edit_message_text("✅ Link erfolgreich aktualisiert!")
+             return await show_edit_menu(update, context)
+
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("Ja, noch einen", callback_data="social_add_yes"),
              InlineKeyboardButton("Nein, das reicht", callback_data="social_add_no")]
@@ -717,9 +732,14 @@ async def handle_social_platform_selection(update: Update, context: ContextTypes
         context.user_data['answers'][field_id] = []
     elif not isinstance(context.user_data['answers'][field_id], list):
         context.user_data['answers'][field_id] = [context.user_data['answers'][field_id]]
-        
-    context.user_data['answers'][field_id].append({"name": platform_data["name"], "url": url})
     
+    # --- NEU: Falls wir Editieren, ersetzen statt Anhängen ---
+    edit_idx = context.user_data.get('edit_social_idx')
+    if edit_idx is not None and isinstance(context.user_data['answers'][field_id], list) and edit_idx < len(context.user_data['answers'][field_id]):
+        context.user_data['answers'][field_id][edit_idx] = {"name": platform_data["name"], "url": url}
+    else:
+        context.user_data['answers'][field_id].append({"name": platform_data["name"], "url": url})
+        
     return await ask_link_verification(update, context, {"name": platform_data["name"], "url": url})
 
 async def handle_social_decision_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1724,14 +1744,15 @@ async def handle_edit_social_entry(update: Update, context: ContextTypes.DEFAULT
         context.user_data['edit_social_fid'] = fid
         
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✏️ Inhalt ändern", callback_data=f"edit_field_{fid}")],
-            [InlineKeyboardButton("🗑️ Eintrag löschen", callback_data=f"delete_social_entry")],
+            [InlineKeyboardButton("✏️ Bearbeiten", callback_data=f"edit_field_{fid}")],
+            [InlineKeyboardButton("🗑️ Löschen", callback_data=f"delete_social_entry")],
             [InlineKeyboardButton("🔙 Zurück", callback_data="edit_more_yes")]
         ])
         
         await query.edit_message_text(
             f"Eintrag für <b>{entry.get('name', 'Social Media')}</b> verwalten:\n\n"
-            f"Aktueller Link: {entry.get('url', '-')}",
+            f"Aktueller Link: {entry.get('url', '-')}\n\n"
+            f"Was möchtest du tun?",
             reply_markup=keyboard,
             parse_mode="HTML"
         )
@@ -1793,6 +1814,10 @@ async def handle_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYP
                 elif not f.get('required'):
                     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏭️ Überspringen / Nein", callback_data="skip_field")]])
                     
+                # Spezial-Label für Social Media Edits
+                if context.user_data.get('edit_social_idx') is not None:
+                    label = "Schreibe den Usernamen oder die URL rein:"
+
                 # Frage stellen
                 await query.edit_message_text(
                     f"Bitte gib einen neuen Wert für <b>{f.get('display_name', f['id'])}</b> ein:\n\n{label}", 
