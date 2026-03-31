@@ -880,16 +880,22 @@ async def post_profile(bot, profile_data: Dict[str, Any], is_approval_post: bool
         kwargs["message_thread_id"] = int(topic_id)
 
     try:
+        # Robustere Text-Verarbeitung
+        raw_text = profile_data.get('text') or ""
+        final_text = raw_text.strip()
+        if not final_text:
+            final_text = "<i>(Kein Text verfügbar)</i>"
+
         if profile_data.get('photo_id'):
             kwargs.update({
                 "photo": profile_data['photo_id'],
-                "caption": profile_data['text'][:1024],
+                "caption": final_text[:1024],
                 "parse_mode": "HTML"
             })
             msg = await bot.send_photo(**kwargs)
         else:
             kwargs.update({
-                "text": profile_data['text'],
+                "text": final_text,
                 "parse_mode": "HTML"
             })
             msg = await bot.send_message(**kwargs)
@@ -1009,12 +1015,16 @@ def generate_profile_text(user: User, answers: Dict[str, Any], ordered_fields: L
             steckbrief_lines.append(f"{emoji} <b>{name}:</b> {answer}")
     
     # Header + optionaler Telegram-Username
-    header = "<b>NEUER STECKBRIEF</b>\n"
+    header = "<b>Profil-Steckbrief</b>"
     if share_username_choice == "Ja" and user:
         display_name = f"@{user.username}" if user.username else user.first_name
         steckbrief_lines.insert(0, f"📱 <b>Telegram Name:</b> {display_name}")
     
-    final_text = header + "\n" + "\n".join(steckbrief_lines)
+    # Ensure there is at least something to show
+    if not steckbrief_lines and not has_actual_data:
+        steckbrief_lines.append("<i>(Keine Informationen hinterlegt)</i>")
+
+    final_text = f"<b>{header}</b>\n\n" + "\n".join(steckbrief_lines)
     
     if pm_allowed_status:
         banner_emoji = "📩"
@@ -1166,7 +1176,9 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
                 if reply_target: await reply_target.reply_text(f"❌ Fehler bei der Freigabe-Anfrage: {e}")
                 return ConversationHandler.END
 
-            if reply_target: await reply_target.reply_text(config.get('whitelist_pending_message', 'Deine Änderung wird überprüft, bitte warte.'), parse_mode="HTML")
+            if reply_target: 
+                pending_msg = config.get('whitelist_pending_message') or 'Deine Änderungen wurden zur Überprüfung an die Administratoren gesendet. Bitte habe einen Moment Geduld. 🙏'
+                await reply_target.reply_text(pending_msg, parse_mode="HTML")
             return ConversationHandler.END
 
         if whitelist_active:
@@ -1227,7 +1239,8 @@ async def handle_rules_confirmation(update: Update, context: ContextTypes.DEFAUL
                 await update.message.reply_text(f"❌ Fehler bei der Freischaltungs-Anfrage: {e}")
                 return ConversationHandler.END
 
-            await update.message.reply_text(config.get('whitelist_pending_message', 'Dein Steckbrief wird überprüft, bitte warte.'), parse_mode="HTML")
+            pending_msg = config.get('whitelist_pending_message') or 'Dein Steckbrief wurde zur Überprüfung an die Administratoren gesendet. Bitte habe einen Moment Geduld. 🙏'
+            await update.message.reply_text(pending_msg, parse_mode="HTML")
         else:
             # Whitelist ist AUS -> Sofort Link senden oder direkt updaten
             with flask_app.app_context():
@@ -1420,9 +1433,12 @@ async def handle_existing_member_callback(update: Update, context: ContextTypes.
                     except Exception as e:
                         logger.warning(f"Konnte alten Steckbrief {old_msg_id} nicht löschen: {e}")
                 
-                success_msg = config.get('profile_posted_message', "Dein Steckbrief wurde gepostet!")
                 if action == "accept":
-                    await context.bot.send_message(user_id, success_msg)
+                    success_msg = config.get('profile_posted_message') or "✅ Dein Steckbrief wurde erfolgreich in die Gruppe gepostet! 🎉"
+                    try:
+                        await context.bot.send_message(user_id, success_msg, parse_mode="HTML")
+                    except Exception as e:
+                        logger.warning(f"Konnte Erfolgsmeldung nicht an User {user_id} senden: {e}")
                 
                 keyboard = InlineKeyboardMarkup([[
                     InlineKeyboardButton("🔄 Erneut abschicken", callback_data=f"existing_resend_{user_id}")
