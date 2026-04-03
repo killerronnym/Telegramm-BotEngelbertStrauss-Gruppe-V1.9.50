@@ -20,5 +20,9 @@ pymysql
 cryptography
 
 # Utilities
+Pillow
 cryptography
 gunicorn
+
+# SYSTEM REQUIREMENT (Not a pip package)
+# FFmpeg must be installed on the system path for birthday video generation.

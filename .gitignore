@@ -40,3 +40,9 @@ bots/id_finder_bot/minecraft_status_config.json
 .DS_Store
 Thumbs.db
 node_modules/
+# --- Assets / Medien (Sollten nicht auf GitHub) ---
+web_dashboard/app/static/avatars/*
+web_dashboard/app/static/uploads/*
+web_dashboard/app/static/media/*
+!web_dashboard/app/static/media/.gitkeep
+tmp/
