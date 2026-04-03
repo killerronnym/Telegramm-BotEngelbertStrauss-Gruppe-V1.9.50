@@ -228,17 +228,17 @@ async def get_best_user_photo(bot, user_id):
         except: pass
         return None
 
-async def generate_birthday_animation(user_id, bot, output_path):
+async def generate_birthday_gif(user_id, bot, output_path):
     """
-    Generiert eine hochauflösende MP4-Animation (als GIF-Ersatz) mit dem Steckbrief-Bild,
+    Generiert ein animiertes GIF mit dem Steckbrief-Bild als Hintergrund,
     aufsteigenden Ballons und fliegendem Konfetti.
     """
     try:
         # Bestmögliches Bild holen
         img_src = await get_best_user_photo(bot, user_id)
         
-        # Arbeitsauflösung 512x512 (Standard für Telegram Animationen)
-        res = 512
+        # Auflösung für GIF optimiert (nicht zu groß wegen Dateigröße)
+        res = 480
         if not img_src:
             bg = Image.new('RGB', (res, res), color=(30, 45, 60))
         else:
@@ -249,40 +249,33 @@ async def generate_birthday_animation(user_id, bot, output_path):
             bg = img_src.crop((left, top, left + size, top + size)).resize((res, res), Image.LANCZOS)
         
         # Dezente Abdunkelung
-        dimmer = Image.new('RGBA', (res, res), (0, 0, 0, 30))
+        dimmer = Image.new('RGBA', (res, res), (0, 0, 0, 35))
         bg.paste(dimmer, (0, 0), dimmer)
 
-        # Temp Verzeichnis für Frames
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(os.path.dirname(current_dir))
-        frames_dir = os.path.join(project_root, 'tmp', f'birthday_frames_{user_id}')
-        os.makedirs(frames_dir, exist_ok=True)
-
-        # Animation Settings (60 Frames = 3 Sek bei 20 FPS)
-        fps = 20
-        num_frames = 60
+        # Animation Settings (Frames reduzieren für Dateigröße)
+        num_frames = 25
         
         balloons = []
-        for _ in range(10): # Etwas mehr Ballons
+        for _ in range(7):
             balloons.append({
-                'x': random.randint(40, res-40),
-                'y': random.randint(res, res + 350),
-                'speed': random.uniform(5, 10),
-                'color': random.choice([(255, 60, 60, 220), (60, 255, 60, 220), (60, 60, 255, 220), (255, 255, 60, 220), (255, 105, 180, 220)]),
+                'x': random.randint(30, res-30),
+                'y': random.randint(res, res + 250),
+                'speed': random.uniform(7, 13),
+                'color': random.choice([(255, 60, 60, 200), (60, 255, 60, 200), (60, 60, 255, 200), (255, 255, 60, 200), (255, 105, 180, 200)]),
                 'size': random.randint(30, 45)
             })
         
         confetti = []
-        for _ in range(50):
+        for _ in range(40):
             confetti.append({
                 'x': random.randint(0, res),
                 'y': random.randint(-res, 0),
-                'speed': random.uniform(8, 18),
+                'speed': random.uniform(9, 22),
                 'color': random.choice([(255,0,0), (0,255,0), (0,0,255), (255,255,0), (255,0,255), (255,255,255)]),
-                'size': random.randint(4, 7)
+                'size': random.randint(3, 7)
             })
 
-        frame_paths = []
+        frames = []
         for i in range(num_frames):
             frame = bg.copy().convert('RGBA')
             draw = ImageDraw.Draw(frame)
@@ -291,44 +284,31 @@ async def generate_birthday_animation(user_id, bot, output_path):
             for p in confetti:
                 p['y'] += p['speed']
                 if p['y'] > res + 20: p['y'] = -40
-                draw.rectangle([p['x'], p['y'], p['x']+p['size'], p['y']+p['size']], fill=p['color'] + (180,))
+                draw.rectangle([p['x'], p['y'], p['x']+p['size'], p['y']+p['size']], fill=p['color'] + (160,))
             
             # Ballons
             for b in balloons:
                 b['y'] -= b['speed']
                 if b['y'] < -100: b['y'] = res + 50
-                # Schnur
                 draw.line([b['x'], b['y']+b['size'], b['x'], b['y']+b['size']+40], fill=(220,220,220,130), width=1)
-                # Ballon
-                draw.ellipse([b['x']-b['size']/2, b['y'], b['x']+b['size']/2, b['y']+b['size']*1.2], fill=b['color'])
-                # Glanzpunkt
-                draw.ellipse([b['x']-b['size']/4, b['y']+5, b['x']-b['size']/8, b['y']+15], fill=(255,255,255,100))
+                draw.ellipse([b['x']-b['size']/2, b['y'], b['x']+b['size']/2, b['y']+b['size']*1.1], fill=b['color'])
+                draw.ellipse([b['x']-b['size']/4, b['y']+5, b['x']-b['size']/8, b['y']+15], fill=(255,255,255,90))
 
-            frame = frame.convert('RGB')
-            f_path = os.path.join(frames_dir, f"frame_{i:03d}.jpg")
-            frame.save(f_path, "JPEG", quality=95) # Hohe Qualität da MP4 Kompression folgt
-            frame_paths.append(f_path)
+            # Umwandeln in P-Modus für GIF (Besser für Dateigröße)
+            # disposal=2 sorgt für saubere Übergänge
+            frames.append(frame.convert('P', palette=Image.ADAPTIVE, colors=128))
 
-        # Mit FFmpeg zu MP4 umwandeln (lautlos, libx264 für Kompatibilität)
-        cmd = [
-            'ffmpeg', '-y', '-framerate', str(fps), 
-            '-i', os.path.join(frames_dir, 'frame_%03d.jpg'),
-            '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20',
-            output_path
-        ]
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        
-        # Aufräumen
-        for f in frame_paths: os.remove(f)
-        os.rmdir(frames_dir)
+        # Als GIF speichern (Loop aktiviert, optimiert)
+        frames[0].save(output_path, format='GIF', append_images=frames[1:], 
+                      save_all=True, duration=60, loop=0, optimize=True, disposal=2)
         return True
     except Exception as e:
-        logger.error(f"Error generating birthday animation: {e}")
+        logger.error(f"Error generating birthday GIF: {e}")
         return False
 
 async def send_birthday_wish(bot, user_id, chat_id, topic_id=None):
     """
-    Sendet eine individuelle Geburtstagsgratulation mit Animation an einen Chat.
+    Sendet eine individuelle Geburtstagsgratulation mit GIF an einen Chat.
     """
     try:
         from web_dashboard.app.models import Birthday
@@ -345,22 +325,21 @@ async def send_birthday_wish(bot, user_id, chat_id, topic_id=None):
                 now = datetime.now()
                 message_text = message_text.replace('{age}', str(now.year - b.year) if b.year else '?')
 
-            # Animation generieren
+            # GIF generieren
             output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'web_dashboard', 'app', 'static', 'media')
             os.makedirs(output_dir, exist_ok=True)
-            mp4_path = os.path.join(output_dir, f"birthday_{user_id}.mp4")
+            gif_path = os.path.join(output_dir, f"birthday_{user_id}.gif")
             
             # Generierung starten
-            success = await generate_birthday_animation(user_id, bot, mp4_path)
+            success = await generate_birthday_gif(user_id, bot, gif_path)
             
             kwargs = {'chat_id': chat_id, 'caption': message_text, 'parse_mode': 'HTML'}
             if topic_id: kwargs['message_thread_id'] = int(topic_id)
             
-            if success and os.path.exists(mp4_path):
-                # Wir schicken das Video als Animation (kein Ton, Autoplay, Looping)
-                with open(mp4_path, 'rb') as animation:
+            if success and os.path.exists(gif_path):
+                with open(gif_path, 'rb') as animation:
                     await bot.send_animation(animation=animation, **kwargs)
-                os.remove(mp4_path)
+                os.remove(gif_path)
             else:
                 await bot.send_message(chat_id=chat_id, text=message_text, parse_mode='HTML', message_thread_id=topic_id)
             return True
