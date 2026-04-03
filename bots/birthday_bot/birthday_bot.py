@@ -157,90 +157,130 @@ async def handle_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     return ConversationHandler.END
 
-async def generate_birthday_gif(user_id, text, output_path):
+async def get_best_user_photo(bot, user_id):
     """
-    Generiert ein animiertes GIF mit dem Profilbild als Hintergrund,
-    aufsteigenden Ballons und fliegendem Konfetti.
+    Versucht das Steckbrief-Foto (InviteBot) zu finden.
+    Falls nicht vorhanden, wird das normale Telegram-Profilbild genommen.
+    Returns: Image Objekt oder None
     """
     try:
-        # Pfade auflösen
+        from web_dashboard.app.models import InviteApplication, db
+        flask_app = get_shared_flask_app()
+        
+        file_id = None
+        with flask_app.app_context():
+            app = InviteApplication.query.filter_by(telegram_user_id=user_id).first()
+            if app:
+                answers = app.answers
+                # Suche nach einem Feld vom Typ Photo in den Antworten
+                # Da wir die Feld-IDs hier nicht direkt kennen, suchen wir nach einer File-ID
+                for key, val in answers.items():
+                    if isinstance(val, str) and (val.startswith('AgAC') or len(val) > 40): # Typische File-ID Muster
+                        file_id = val
+                        break
+        
+        # Fallback auf Avatar-Cache wenn kein Steckbrief-Bild
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(os.path.dirname(current_dir))
         avatar_path = os.path.join(project_root, 'web_dashboard', 'app', 'static', 'avatars', f"{user_id}.jpg")
         
-        # Fallback wenn kein Bild da
-        if not os.path.exists(avatar_path):
-            bg = Image.new('RGB', (480, 480), color=(30, 45, 60))
+        if not file_id:
+            if os.path.exists(avatar_path):
+                return Image.open(avatar_path).convert('RGB')
+            return None
+
+        # Wenn wir eine File-ID haben, laden wir sie frisch von Telegram (beste Qualität)
+        t_file = await bot.get_file(file_id)
+        # Download in ein Byte-Stream
+        import io
+        img_bytes = await t_file.download_as_bytearray()
+        img = Image.open(io.BytesIO(img_bytes)).convert('RGB')
+        
+        # Optional: In Cache speichern damit wir nicht jedes Mal laden müssen
+        os.makedirs(os.path.dirname(avatar_path), exist_ok=True)
+        img.save(avatar_path, "JPEG", quality=90)
+        
+        return img
+    except Exception as e:
+        logger.error(f"Error getting best user photo: {e}")
+        return None
+
+async def generate_birthday_gif(user_id, bot, output_path):
+    """
+    Generiert ein animiertes GIF mit dem Steckbrief-Bild als Hintergrund,
+    aufsteigenden Ballons und fliegendem Konfetti.
+    """
+    try:
+        # Bestmögliches Bild holen
+        img_src = await get_best_user_photo(bot, user_id)
+        
+        if not img_src:
+            bg = Image.new('RGB', (640, 640), color=(30, 45, 60))
         else:
-            bg = Image.open(avatar_path).convert('RGB')
-            w, h = bg.size
+            w, h = img_src.size
             size = min(w, h)
             left = (w - size) / 2
             top = (h - size) / 2
-            bg = bg.crop((left, top, left + size, top + size)).resize((480, 480), Image.LANCZOS)
+            bg = img_src.crop((left, top, left + size, top + size)).resize((640, 640), Image.LANCZOS)
         
-        dimmer = Image.new('RGBA', (480, 480), (0, 0, 0, 70))
+        dimmer = Image.new('RGBA', (640, 640), (0, 0, 0, 40)) # Weniger Dimming da kein Text auf Bild
         bg.paste(dimmer, (0, 0), dimmer)
 
-        # Animation Settings
-        num_frames = 15
+        # Animation Settings (Mehr Frames für flüssige Bewegung)
+        num_frames = 35
         
         balloons = []
-        for _ in range(6):
+        for _ in range(8):
             balloons.append({
-                'x': random.randint(30, 450),
-                'y': random.randint(480, 600),
-                'speed': random.uniform(5, 12),
-                'color': random.choice([(255, 80, 80, 200), (80, 255, 80, 200), (80, 80, 255, 200), (255, 255, 80, 200)]),
-                'size': random.randint(25, 40)
+                'x': random.randint(50, 590),
+                'y': random.randint(640, 940),
+                'speed': random.uniform(8, 15),
+                'color': random.choice([(255, 60, 60, 210), (60, 255, 60, 210), (60, 60, 255, 210), (255, 255, 60, 210), (255, 105, 180, 210)]),
+                'size': random.randint(35, 55)
             })
         
         confetti = []
-        for _ in range(30):
+        for _ in range(60):
             confetti.append({
-                'x': random.randint(0, 480),
-                'y': random.randint(-480, 0),
-                'speed': random.uniform(8, 20),
-                'color': random.choice([(255,0,0), (0,255,0), (0,0,255), (255,255,0), (255,0,255)]),
-                'size': random.randint(3, 6)
+                'x': random.randint(0, 640),
+                'y': random.randint(-640, 0),
+                'speed': random.uniform(10, 25),
+                'color': random.choice([(255,0,0), (0,255,0), (0,0,255), (255,255,0), (255,0,255), (255,255,255)]),
+                'size': random.randint(3, 8)
             })
-
-        # Font laden
-        font_path = "C:\\Windows\\Fonts\\arialbd.ttf"
-        if not os.path.exists(font_path): font_path = "arial.ttf"
-        try:
-            name_font = ImageFont.truetype(font_path, 28)
-        except:
-            name_font = ImageFont.load_default()
 
         frames = []
         for i in range(num_frames):
             frame = bg.copy().convert('RGBA')
             draw = ImageDraw.Draw(frame)
             
+            # Konfetti (Regnet von oben nach ganz unten)
             for p in confetti:
                 p['y'] += p['speed']
-                if p['y'] > 480: p['y'] = -20
-                draw.rectangle([p['x'], p['y'], p['x']+p['size'], p['y']+p['size']], fill=p['color'])
+                if p['y'] > 660: p['y'] = -40
+                draw.rectangle([p['x'], p['y'], p['x']+p['size'], p['y']+p['size']], fill=p['color'] + (180,))
             
+            # Ballons (Steigen von unten nach ganz oben auf)
             for b in balloons:
                 b['y'] -= b['speed']
-                if b['y'] < -100: b['y'] = 550
-                draw.line([b['x'], b['y']+b['size'], b['x'], b['y']+b['size']+30], fill=(200,200,200,150), width=1)
+                if b['y'] < -120: b['y'] = 700
+                # Schnur
+                draw.line([b['x'], b['y']+b['size'], b['x'], b['y']+b['size']+45], fill=(220,220,220,130), width=1)
+                # Ballon Körper
+                # Zeichne Ballon mit Glanz
                 draw.ellipse([b['x']-b['size']/2, b['y'], b['x']+b['size']/2, b['y']+b['size']*1.2], fill=b['color'])
-            
-            lines = text.split('\n')
-            y_text = 380
-            for line in lines:
-                for off in [(-1,-1), (1,-1), (-1,1), (1,1)]:
-                    draw.text((240+off[0], y_text+off[1]), line, font=name_font, fill=(0,0,0,220), anchor="mm")
-                draw.text((240, y_text), line, font=name_font, fill=(255,255,255,255), anchor="mm")
-                y_text += 35
+                # Highlight auf dem Ballon
+                draw.ellipse([b['x']-b['size']/4, b['y']+5, b['x']-b['size']/8, b['y']+20], fill=(255,255,255,100))
 
-            frames.append(frame.convert('P', palette=Image.ADAPTIVE))
+            # KEIN TEXT MEHR AUF DEM BILD
 
-        # Als GIF speichern
-        frames[0].save(output_path, format='GIF', append_images=frames[1:], save_all=True, duration=60, loop=0)
+            # Umwandeln für GIF (P-Modus mit optimierter Palette)
+            # Wir nehmen adaptiv um Qualität zu erhalten
+            frames.append(frame.convert('P', palette=Image.ADAPTIVE, colors=128))
+
+        # Als GIF speichern (Loop aktiviert)
+        # Duration 50ms = 20 FPS
+        frames[0].save(output_path, format='GIF', append_images=frames[1:], save_all=True, duration=50, loop=0, optimize=True)
         return True
     except Exception as e:
         logger.error(f"Error generating birthday GIF: {e}")
@@ -270,7 +310,8 @@ async def send_birthday_wish(bot, user_id, chat_id, topic_id=None):
             os.makedirs(output_dir, exist_ok=True)
             gif_path = os.path.join(output_dir, f"birthday_{user_id}.gif")
             
-            success = await generate_birthday_gif(user_id, message_text, gif_path)
+            # Wir übergeben jetzt den Bot an den GIF-Generator
+            success = await generate_birthday_gif(user_id, bot, gif_path)
             
             kwargs = {'chat_id': chat_id, 'caption': message_text, 'parse_mode': 'HTML'}
             if topic_id: kwargs['message_thread_id'] = int(topic_id)
