@@ -9,7 +9,8 @@
     }
 
     .btn-back {
-        background: rgba(255, 255, 255, 0.02);
+        background: rgba(255, 255, 0, 0.02);
+        background: rgba(255, 255, 255, 0.02); 
         border: 1px solid var(--border-muted);
         color: var(--text-secondary);
         font-weight: 500;
@@ -37,6 +38,12 @@
     .table-dark {
         background: transparent;
     }
+    
+    .status-badge {
+        font-size: 0.75rem;
+        padding: 0.35em 0.65em;
+        font-weight: 700;
+    }
 </style>
 
 <div class="dashboard-container">
@@ -45,15 +52,15 @@
             <a href="{{ url_for('dashboard.index') }}" class="btn-back mb-4"><i class="bi bi-chevron-left"></i>
                 ZURÜCK</a>
             <h1 class="fw-bold mb-1 h3 text-white">Report <span class="text-blue">System</span></h1>
-            <p class="text-secondary small">Konfiguration der Admin-Benachrichtigungen</p>
+            <p class="text-secondary small">Konfiguration der Admin-Benachrichtigungen und Meldungshistorie</p>
         </div>
     </div>
 
     <div class="row g-4">
         <div class="col-lg-4">
-            <div class="card mb-4">
+            <div class="card mb-4 shadow-sm">
                 <div class="card-header">
-                    <h6>Ziel-Konfiguration</h6>
+                    <h6 class="mb-0"><i class="bi bi-gear-fill me-2 text-blue"></i>Ziel-Konfiguration</h6>
                 </div>
                 <div class="card-body">
                     <form action="{{ url_for('dashboard.report_settings') }}" method="POST">
@@ -62,24 +69,24 @@
                             <label class="small text-secondary fw-bold mb-1">ZIEL-CHAT ID</label>
                             <input type="text" class="form-control bg-dark text-white border-secondary"
                                 name="target_chat_id" value="{{ config.target_chat_id or '' }}" placeholder="-100...">
-                            <small class="text-muted">ID des Kanals oder der Gruppe, in die Reports gepostet
-                                werden.</small>
+                            <small class="text-muted">ID des Kanals oder der Gruppe, in die Reports gepostet werden.</small>
                         </div>
                         <div class="mb-4">
                             <label class="small text-secondary fw-bold mb-1">TOPIC-ID (OPTIONAL)</label>
                             <input type="text" class="form-control bg-dark text-white border-secondary"
                                 name="target_topic_id" value="{{ config.target_topic_id or '' }}" placeholder="123">
                         </div>
-                        <button type="submit" class="btn btn-primary w-100 fw-bold">EINSTELLUNGEN SPEICHERN</button>
+                        <button type="submit" class="btn btn-blue-action w-100 fw-bold">EINSTELLUNGEN SPEICHERN</button>
                     </form>
                 </div>
             </div>
 
-            <div class="card">
-                <div class="card-header">
-                    <h6>Aktionen</h6>
+            <div class="card shadow-sm border-danger-subtle">
+                <div class="card-header bg-danger-subtle text-danger-emphasis">
+                    <h6 class="mb-0"><i class="bi bi-trash-fill me-2"></i>Wartung</h6>
                 </div>
                 <div class="card-body">
+                    <p class="small text-secondary mb-3">Löscht alle Berichte dauerhaft aus der Datenbank.</p>
                     <form action="{{ url_for('dashboard.report_settings') }}" method="POST"
                         onsubmit="return confirm('Wirklich alle Berichte löschen?');">
                         <input type="hidden" name="action" value="clear_reports">
@@ -90,38 +97,47 @@
         </div>
 
         <div class="col-lg-8">
-            <div class="card">
+            <div class="card shadow-sm">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h6>Letzte Meldungen</h6>
-                    <span class="badge bg-secondary">{{ reports|length }}</span>
+                    <h6 class="mb-0"><i class="bi bi-list-ul me-2 text-blue"></i>Letzte Meldungen</h6>
+                    <span class="badge bg-blue-deep">{{ reports|length }}</span>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
                         <table class="table table-dark table-hover mb-0">
                             <thead>
-                                <tr class="small text-secondary">
-                                    <th>Datum</th>
-                                    <th>Gemeldet von</th>
-                                    <th>Grund</th>
-                                    <th>Status</th>
+                                <tr class="small text-secondary border-bottom border-secondary">
+                                    <th class="ps-4 py-3">Datum</th>
+                                    <th class="py-3">Melder</th>
+                                    <th class="py-3">Beschuldigter</th>
+                                    <th class="py-3">Grund</th>
+                                    <th class="py-3 pe-4">Status</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for report in reports %}
-                                <tr class="small">
-                                    <td class="text-muted">{{ report.timestamp.strftime('%d.%m %H:%M') }}</td>
+                                <tr class="small align-middle">
+                                    <td class="ps-4 text-muted">{{ report.timestamp.strftime('%d.%m %H:%M') }}</td>
                                     <td><code>{{ report.reporter_id }}</code></td>
-                                    <td>{{ report.reason }}</td>
-                                    <td>
-                                        <span
-                                            class="badge {% if report.status == 'open' %}bg-warning text-dark{% else %}bg-success{% endif %}">
-                                            {{ report.status|upper }}
-                                        </span>
+                                    <td><code>{{ report.reported_user_id }}</code></td>
+                                    <td class="text-secondary">{{ report.reason }}</td>
+                                    <td class="pe-4">
+                                        {% if report.status == 'pending' %}
+                                            <span class="badge bg-warning text-dark status-badge">OFFEN</span>
+                                        {% elif report.status == 'resolved' %}
+                                            <span class="badge bg-success status-badge">ERLEDIGT</span>
+                                        {% elif report.status == 'dismissed' %}
+                                            <span class="badge bg-secondary status-badge">IGNORIERT</span>
+                                        {% else %}
+                                            <span class="badge bg-info status-badge">{{ report.status|upper }}</span>
+                                        {% endif %}
                                     </td>
                                 </tr>
                                 {% else %}
                                 <tr>
-                                    <td colspan="4" class="text-center py-4 text-muted small">Keine Berichte vorhanden.
+                                    <td colspan="5" class="text-center py-5 text-muted small">
+                                        <i class="bi bi-clipboard-check d-block mb-2 h2 opacity-25"></i>
+                                        Keine Berichte vorhanden.
                                     </td>
                                 </tr>
                                 {% endfor %}

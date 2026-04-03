@@ -720,6 +720,40 @@ def umfrage_send_now():
         
     return redirect(url_for('dashboard.umfrage_settings'))
 
+@bp.route('/report-settings', methods=['GET', 'POST'])
+@login_required
+def report_settings():
+    from ..models import ReportedMessage
+    s = BotSettings.query.filter_by(bot_name='report_bot').first()
+    if not s:
+        cfg = {"is_active": True, "target_chat_id": "", "target_topic_id": ""}
+        s = BotSettings(bot_name='report_bot', config_json=json.dumps(cfg), is_active=True)
+        db.session.add(s); db.session.commit()
+    
+    cfg = json.loads(s.config_json)
+    
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'save_config':
+            cfg['target_chat_id'] = request.form.get('target_chat_id')
+            cfg['target_topic_id'] = request.form.get('target_topic_id')
+            s.config_json = json.dumps(cfg)
+            db.session.commit()
+            flash('Einstellungen gespeichert.', 'success')
+        elif action == 'clear_reports':
+            try:
+                ReportedMessage.query.delete()
+                db.session.commit()
+                flash('Berichtshistorie geleert.', 'info')
+            except:
+                db.session.rollback()
+                flash('Fehler beim Leeren der Berichte.', 'danger')
+        return redirect(url_for('dashboard.report_settings'))
+
+    reports = ReportedMessage.query.order_by(ReportedMessage.timestamp.desc()).limit(100).all()
+    return render_template('report_settings.html', config=cfg, reports=reports)
+
+
 @bp.route('/outfit-bot', methods=['GET', 'POST'])
 @login_required
 def outfit_bot_dashboard():
