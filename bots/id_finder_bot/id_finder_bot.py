@@ -163,10 +163,11 @@ async def check_and_send_broadcasts(context: ContextTypes.DEFAULT_TYPE):
             ).all()
 
             for b in pending_broadcasts:
-                logger.info(f"Sende fälligen Broadcast: {b.id}")
+                logger.info(f"Sende fälligenn Broadcast: {b.id}")
                 try:
                     chat_id = main_group_id
                     thread_id = int(b.topic_id) if b.topic_id and str(b.topic_id).isdigit() else None
+                    has_spoiler = getattr(b, 'spoiler', False)
                     
                     msg = None
                     media_files = []
@@ -185,9 +186,9 @@ async def check_and_send_broadcasts(context: ContextTypes.DEFAULT_TYPE):
                             if os.path.exists(fpath):
                                 cap = b.text if i == 0 else None # Caption nur beim ersten Bild
                                 if rel_path.lower().endswith(('.mp4', '.mov', '.avi')):
-                                    media_group.append(InputMediaVideo(open(fpath, 'rb'), caption=cap, parse_mode=ParseMode.HTML))
+                                    media_group.append(InputMediaVideo(open(fpath, 'rb'), caption=cap, parse_mode=ParseMode.HTML, has_spoiler=has_spoiler))
                                 else:
-                                    media_group.append(InputMediaPhoto(open(fpath, 'rb'), caption=cap, parse_mode=ParseMode.HTML))
+                                    media_group.append(InputMediaPhoto(open(fpath, 'rb'), caption=cap, parse_mode=ParseMode.HTML, has_spoiler=has_spoiler))
                         
                         if media_group:
                             msgs = await context.bot.send_media_group(
@@ -206,22 +207,22 @@ async def check_and_send_broadcasts(context: ContextTypes.DEFAULT_TYPE):
                                         msg = await context.bot.send_photo(
                                             chat_id=chat_id, photo=f, caption=b.text,
                                             message_thread_id=thread_id, disable_notification=b.silent_send,
-                                            parse_mode=ParseMode.HTML
+                                            parse_mode=ParseMode.HTML, has_spoiler=has_spoiler
                                         )
                                     elif b.media_type == 'video':
                                         msg = await context.bot.send_video(
                                             chat_id=chat_id, video=f, caption=b.text,
                                             message_thread_id=thread_id, disable_notification=b.silent_send,
-                                            parse_mode=ParseMode.HTML
+                                            parse_mode=ParseMode.HTML, has_spoiler=has_spoiler
                                         )
                                 except Exception as he:
                                     if "Can't parse entities" in str(he):
                                         logger.warning(f"HTML Parse Fehler bei Broadcast {b.id}, versende als Plaintext.")
                                         f.seek(0)
                                         if b.media_type == 'image':
-                                            msg = await context.bot.send_photo(chat_id=chat_id, photo=f, caption=b.text, message_thread_id=thread_id)
+                                            msg = await context.bot.send_photo(chat_id=chat_id, photo=f, caption=b.text, message_thread_id=thread_id, has_spoiler=has_spoiler)
                                         else:
-                                            msg = await context.bot.send_video(chat_id=chat_id, video=f, caption=b.text, message_thread_id=thread_id)
+                                            msg = await context.bot.send_video(chat_id=chat_id, video=f, caption=b.text, message_thread_id=thread_id, has_spoiler=has_spoiler)
                                     else: raise he
                         else:
                             logger.error(f"Mediendatei nicht gefunden: {full_media_path}")

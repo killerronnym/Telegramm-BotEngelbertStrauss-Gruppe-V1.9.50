@@ -403,7 +403,7 @@ def clear_system_logs():
 @login_required
 def broadcast_manager():
     ts = TopicMapping.query.all(); bs = Broadcast.query.order_by(Broadcast.created_at.desc()).all()
-    return render_template('broadcast_manager.html', known_topics={str(t.topic_id): t.topic_name for t in ts}, broadcasts=bs)
+    return render_template('broadcast_manager.html', known_topics={str(t.topic_id): t.topic_name for t in ts}, broadcasts=bs, now=datetime.utcnow())
 
 @bp.route('/broadcast_manager/save', methods=['POST'])
 @login_required

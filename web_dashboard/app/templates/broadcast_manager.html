@@ -33,10 +33,12 @@
         height: 100%;
         transition: all 0.2s ease;
         border: 1px solid var(--border-muted);
+        background: rgba(13, 17, 23, 0.6);
+        backdrop-filter: blur(10px);
     }
 
     .card-header {
-        background: rgba(0, 0, 0, 0.1);
+        background: rgba(255, 255, 255, 0.03);
         border-bottom: 1px solid var(--border-muted);
         padding: 1rem 1.5rem;
     }
@@ -66,6 +68,103 @@
         letter-spacing: 0.08em;
         padding: 0.8rem 1.5rem;
     }
+
+    /* Telegram Preview Styles */
+    .tg-preview {
+        background: #0e1621;
+        border-radius: 12px;
+        padding: 12px;
+        max-width: 350px;
+        margin: 0 auto;
+        position: relative;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    .tg-preview-media {
+        width: 100%;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        background: #17212b;
+        aspect-ratio: 16/9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #555;
+        overflow: hidden;
+        position: relative;
+    }
+    .tg-preview-media img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .tg-preview-text {
+        font-size: 0.95rem;
+        color: #fff;
+        line-height: 1.4;
+        word-wrap: break-word;
+        white-space: pre-wrap;
+    }
+    .tg-preview-time {
+        font-size: 0.75rem;
+        color: #6c7883;
+        text-align: right;
+        margin-top: 4px;
+    }
+    .tg-preview-spoiler {
+        filter: blur(20px);
+        transition: filter 0.3s ease;
+    }
+    .tg-preview-spoiler:hover {
+        filter: blur(0);
+    }
+
+    .formatting-toolbar {
+        display: flex;
+        gap: 8px;
+        background: rgba(255,255,255,0.03);
+        padding: 6px;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        border: 1px solid rgba(255,255,255,0.05);
+    }
+    .format-btn {
+        background: transparent;
+        border: none;
+        color: var(--text-secondary);
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-size: 0.9rem;
+        transition: all 0.2s;
+    }
+    .format-btn:hover {
+        background: rgba(255,255,255,0.1);
+        color: #fff;
+    }
+    
+    .emoji-picker {
+        display: none;
+        position: absolute;
+        bottom: 100%;
+        left: 0;
+        background: #1c2635;
+        border: 1px solid #2d3a4b;
+        border-radius: 12px;
+        padding: 10px;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 8px;
+        z-index: 1000;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+    }
+    .emoji-btn {
+        background: none;
+        border: none;
+        font-size: 1.4rem;
+        cursor: pointer;
+        transition: transform 0.1s;
+    }
+    .emoji-btn:hover {
+        transform: scale(1.2);
+    }
 </style>
 
 <div class="dashboard-container">
@@ -81,22 +180,49 @@
         <!-- Links: Hauptformular -->
         <div class="col-lg-8">
             <div class="card mb-4">
-                <div class="card-header">
+                <div class="card-header d-flex justify-content-between align-items-center">
                     <h6>📢 Nachricht senden / planen</h6>
+                    <span class="badge bg-blue bg-opacity-10 text-blue border border-blue border-opacity-20">NEUER BROADCAST</span>
                 </div>
                 <div class="card-body">
-                    <form action="{{ url_for('dashboard.save_broadcast') }}" method="POST"
+                    <form action="{{ url_for('dashboard.save_broadcast') }}" method="POST" id="broadcastForm"
                         enctype="multipart/form-data">
-                        <div class="mb-3">
+                        
+                        <div class="mb-3 position-relative">
                             <label class="small text-secondary fw-bold mb-1">NACHRICHTENTEXT / CAPTION</label>
-                            <textarea class="form-control" name="text" rows="5"
-                                placeholder="Schreibe hier deine Nachricht..."></textarea>
+                            
+                            <div class="formatting-toolbar">
+                                <button type="button" class="format-btn" onclick="insertTag('<b>', '</b>')" title="Bold"><i class="bi bi-type-bold"></i></button>
+                                <button type="button" class="format-btn" onclick="insertTag('<i>', '</i>')" title="Italic"><i class="bi bi-type-italic"></i></button>
+                                <button type="button" class="format-btn" onclick="insertTag('<u>', '</u>')" title="Underline"><i class="bi bi-type-underline"></i></button>
+                                <button type="button" class="format-btn" onclick="insertTag('<tg-spoiler>', '</tg-spoiler>')" title="Spoiler Text"><i class="bi bi-eye-slash"></i></button>
+                                <button type="button" class="format-btn" onclick="insertTag('<code>', '</code>')" title="Code"><i class="bi bi-code"></i></button>
+                                <button type="button" class="format-btn" onclick="toggleEmojiPicker()"><i class="bi bi-emoji-smile"></i></button>
+                                
+                                <div class="emoji-picker" id="emojiPicker">
+                                    <button type="button" class="emoji-btn" onclick="insertText('😊')">😊</button>
+                                    <button type="button" class="emoji-btn" onclick="insertText('🔔')">🔔</button>
+                                    <button type="button" class="emoji-btn" onclick="insertText('🚨')">🚨</button>
+                                    <button type="button" class="emoji-btn" onclick="insertText('✅')">✅</button>
+                                    <button type="button" class="emoji-btn" onclick="insertText('❌')">❌</button>
+                                    <button type="button" class="emoji-btn" onclick="insertText('📝')">📝</button>
+                                    <button type="button" class="emoji-btn" onclick="insertText('🚀')">🚀</button>
+                                    <button type="button" class="emoji-btn" onclick="insertText('🕒')">🕒</button>
+                                    <button type="button" class="emoji-btn" onclick="insertText('📎')">📎</button>
+                                    <button type="button" class="emoji-btn" onclick="insertText('🎁')">🎁</button>
+                                    <button type="button" class="emoji-btn" onclick="insertText('🔥')">🔥</button>
+                                    <button type="button" class="emoji-btn" onclick="insertText('💡')">💡</button>
+                                </div>
+                            </div>
+
+                            <textarea class="form-control" name="text" id="broadcastText" rows="6"
+                                placeholder="Schreibe hier deine Nachricht..." oninput="updatePreview()"></textarea>
                         </div>
 
                         <div class="row g-3 mb-3">
                             <div class="col-md-6">
                                 <label class="small text-secondary fw-bold mb-1">ZIEL-TOPIC</label>
-                                <select class="form-select" name="topic_id">
+                                <select class="form-select" name="topic_id" id="broadcastTopic">
                                     <option value="">-- Hauptchat (kein Topic) --</option>
                                     {% for tid, name in known_topics.items() %}
                                     <option value="{{ tid }}">{{ name }} (ID: {{ tid }})</option>
@@ -108,22 +234,22 @@
                                 <select class="form-select" name="send_mode" id="sendModeSelect"
                                     onchange="onSendModeChange(this)">
                                     <option value="standard" selected>Standard (Foto/Video Vorschau)</option>
-                                    <option value="document">Dokument (Originalqualität, kein Spoiler möglich)</option>
+                                    <option value="document">Dokument (Originalqualität, kein Spoiler)</option>
                                 </select>
                             </div>
                         </div>
 
                         <div class="row g-3 mb-4">
                             <div class="col-md-6">
-                                <label class="small text-secondary fw-bold mb-1">MEDIEN HOCHLADEN (MEHRERE
-                                    MÖGLICH)</label>
+                                <label class="small text-secondary fw-bold mb-1">MEDIEN HOCHLADEN</label>
                                 <input type="file" class="form-control" name="media" accept="image/*,video/*" multiple
                                     id="mediaInput" onchange="updateMediaPreview(this)">
                                 <div id="mediaPreview" class="mt-2 d-flex flex-wrap gap-2"></div>
                             </div>
                             <div class="col-md-6">
-                                <label class="small text-secondary fw-bold mb-1">GEPLANTER ZEITPUNKT (OPTIONAL)</label>
-                                <input type="datetime-local" class="form-control" name="scheduled_at">
+                                <label class="small text-secondary fw-bold mb-1">GEPLANTER ZEITPUNKT (LOKALE ZEIT)</label>
+                                <input type="datetime-local" class="form-control" name="scheduled_at" id="scheduled_at">
+                                <small class="text-dim">Leer lassen für sofortigen Versand.</small>
                             </div>
                         </div>
 
@@ -132,25 +258,22 @@
                             <div class="col-md-4">
                                 <div class="form-check form-switch p-2 ps-5 rounded border border-white border-opacity-5"
                                     style="background: rgba(255,255,255,0.01);">
-                                    <input class="form-check-input" type="checkbox" id="pin_message" name="pin_message">
-                                    <label class="form-check-label small fw-bold" for="pin_message">Nachricht
-                                        anpinnen</label>
+                                    <input class="form-check-input" type="checkbox" id="pin_message" name="pin_message" onchange="updatePreview()">
+                                    <label class="form-check-label small fw-bold" for="pin_message">📌 Anpinnen</label>
                                 </div>
                             </div>
                             <div class="col-md-4">
                                 <div class="form-check form-switch p-2 ps-5 rounded border border-white border-opacity-5"
                                     style="background: rgba(255,255,255,0.01);">
-                                    <input class="form-check-input" type="checkbox" id="silent_send" name="silent_send">
-                                    <label class="form-check-label small fw-bold" for="silent_send">Leise senden
-                                        (Silent)</label>
+                                    <input class="form-check-input" type="checkbox" id="silent_send" name="silent_send" onchange="updatePreview()">
+                                    <label class="form-check-label small fw-bold" for="silent_send">🔕 Lautlos</label>
                                 </div>
                             </div>
                             <div class="col-md-4" id="spoilerWrapper">
                                 <div class="form-check form-switch p-2 ps-5 rounded border border-white border-opacity-5"
                                     style="background: rgba(255,255,255,0.01);">
-                                    <input class="form-check-input" type="checkbox" id="spoiler" name="spoiler">
-                                    <label class="form-check-label small fw-bold" for="spoiler">🫣 Bild als
-                                        Spoiler</label>
+                                    <input class="form-check-input" type="checkbox" id="spoiler" name="spoiler" onchange="updatePreview()">
+                                    <label class="form-check-label small fw-bold" for="spoiler">🫣 Spoiler / Blur</label>
                                 </div>
                             </div>
                         </div>
@@ -168,9 +291,28 @@
             </div>
         </div>
 
-        <!-- Rechts: Topic Manager -->
+        <!-- Rechts: Preview & Topic Manager -->
         <div class="col-lg-4">
+            <!-- LIVE PREVIEW CARD -->
             <div class="card mb-4">
+                <div class="card-header">
+                    <h6>👀 Live-Vorschau (Telegram)</h6>
+                </div>
+                <div class="card-body d-flex flex-column align-items-center justify-content-center py-4">
+                    <div class="tg-preview" id="tgPreviewContainer">
+                        <div id="previewMediaContainer" class="tg-preview-media d-none">
+                            <!-- Preview images/videos will go here -->
+                        </div>
+                        <div class="tg-preview-text" id="previewText">Deine Nachricht wird hier erscheinen...</div>
+                        <div class="tg-preview-time">
+                            <span id="previewPin" class="d-none">📌 pinned | </span>
+                            {{ now.strftime('%H:%M') if now else '12:00' }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4" id="topicManager">
                 <div class="card-header">
                     <h6>🏷️ Topics verwalten</h6>
                 </div>
@@ -210,8 +352,9 @@
 
     <!-- Verlauf & Warteschlange -->
     <div class="card">
-        <div class="card-header">
+        <div class="card-header d-flex justify-content-between align-items-center">
             <h6>⏳ Verlauf & Warteschlange</h6>
+            <button class="btn btn-outline-secondary btn-sm" onclick="window.location.reload()"><i class="bi bi-arrow-clockwise"></i> Aktualisieren</button>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -222,7 +365,7 @@
                             <th>TYP</th>
                             <th>INHALT</th>
                             <th>TOPIC</th>
-                            <th>DAUER</th>
+                            <th>DATUM</th>
                             <th class="text-end pe-4">AKTION</th>
                         </tr>
                     </thead>
@@ -241,21 +384,28 @@
                             </td>
                             <td><span class="small fw-bold text-dim text-uppercase">{{ b.send_mode or 'doc' }}</span>
                             </td>
-                            <td style="max-width: 300px;" class="text-truncate small">{{ b.text or '—' }} {% if
-                                b.media_name %}<span class="text-blue ms-1"><i class="bi bi-paperclip"></i>
-                                    Media</span>{% endif %}</td>
-                            <td><code
-                                    class="small text-secondary">{{ known_topics.get(b.topic_id|string, b.topic_id or 'Haupt') }}</code>
+                            <td style="max-width: 300px;" class="text-truncate small">
+                                <span title="{{ b.text }}">{{ b.text[:100] or '—' }}{% if b.text and b.text|length > 100 %}...{% endif %}</span>
+                                {% if b.media_path or b.media_files %}<span class="text-blue ms-1"><i class="bi bi-paperclip"></i>
+                                    Media</span>{% endif %}
                             </td>
-                            <td><small class="text-dim">{{ b.scheduled_at or 'Sofort' }}</small></td>
+                            <td><code
+                                    class="small text-secondary">{{ known_topics.get(b.topic_id|string, b.topic_id or 'Chat') }}</code>
+                            </td>
+                            <td><small class="text-dim">{{ b.scheduled_at.strftime('%d.%m %H:%M') if b.scheduled_at else 'Sofort' }}</small></td>
                             <td class="text-end pe-4">
-                                {% if b.status == 'pending' %}
-                                <form action="{{ url_for('dashboard.delete_broadcast', broadcast_id=b.id) }}"
-                                    method="POST" class="d-inline">
-                                    <button class="btn btn-outline-danger btn-sm border-0"><i
-                                            class="bi bi-trash3"></i></button>
-                                </form>
-                                {% endif %}
+                                <div class="d-flex gap-2 justify-content-end">
+                                    <button class="btn btn-outline-blue btn-sm" onclick="resendBroadcast({{ b.id }}, {{ b.text|tojson|safe }}, '{{ b.topic_id or '' }}', '{{ b.send_mode }}', {{ b.spoiler|tojson }}, {{ b.pin_message|tojson }}, {{ b.silent_send|tojson }})">
+                                        <i class="bi bi-arrow-repeat"></i> Kopieren
+                                    </button>
+                                    {% if b.status == 'pending' %}
+                                    <form action="{{ url_for('dashboard.delete_broadcast', broadcast_id=b.id) }}"
+                                        method="POST" class="d-inline">
+                                        <button class="btn btn-outline-danger btn-sm"><i
+                                                class="bi bi-trash3"></i></button>
+                                    </form>
+                                    {% endif %}
+                                </div>
                             </td>
                         </tr>
                         {% endfor %}
@@ -273,6 +423,34 @@
 </div>
 
 <script>
+    function toggleEmojiPicker() {
+        const picker = document.getElementById('emojiPicker');
+        picker.style.display = picker.style.display === 'grid' ? 'none' : 'grid';
+    }
+
+    function insertText(text) {
+        const textarea = document.getElementById('broadcastText');
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        textarea.value = textarea.value.substring(0, start) + text + textarea.value.substring(end);
+        textarea.focus();
+        textarea.selectionStart = textarea.selectionEnd = start + text.length;
+        document.getElementById('emojiPicker').style.display = 'none';
+        updatePreview();
+    }
+
+    function insertTag(openTag, closeTag) {
+        const textarea = document.getElementById('broadcastText');
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const selected = textarea.value.substring(start, end);
+        const replacement = openTag + selected + closeTag;
+        textarea.value = textarea.value.substring(0, start) + replacement + textarea.value.substring(end);
+        textarea.focus();
+        textarea.selectionStart = textarea.selectionEnd = start + replacement.length;
+        updatePreview();
+    }
+
     function editTopic(id, name) {
         document.getElementById('input_topic_id').value = id;
         document.getElementById('input_topic_name').value = name;
@@ -290,20 +468,41 @@
             wrapper.style.opacity = '1';
             cb.disabled = false;
         }
+        updatePreview();
     }
 
     function updateMediaPreview(input) {
         const preview = document.getElementById('mediaPreview');
+        const previewMedia = document.getElementById('previewMediaContainer');
         preview.innerHTML = '';
+        previewMedia.innerHTML = '';
+        
+        if (input.files.length === 0) {
+            previewMedia.classList.add('d-none');
+            return;
+        }
+        
+        previewMedia.classList.remove('d-none');
         const files = Array.from(input.files);
-        files.forEach(file => {
+        
+        files.forEach((file, index) => {
             if (file.type.startsWith('image/')) {
                 const reader = new FileReader();
                 reader.onload = e => {
+                    // Small thumbnail
                     const img = document.createElement('img');
                     img.src = e.target.result;
                     img.style.cssText = 'height:64px;width:64px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,0.1);';
                     preview.appendChild(img);
+                    
+                    // Main preview (only showing first)
+                    if (index === 0) {
+                        const previewImg = document.createElement('img');
+                        previewImg.src = e.target.result;
+                        previewImg.id = 'mainPreviewImg';
+                        previewMedia.appendChild(previewImg);
+                        updatePreview();
+                    }
                 };
                 reader.readAsDataURL(file);
             } else {
@@ -311,15 +510,69 @@
                 badge.className = 'badge bg-secondary d-flex align-items-center gap-1 p-2';
                 badge.innerHTML = '<i class="bi bi-camera-video"></i> ' + file.name.substring(0, 15);
                 preview.appendChild(badge);
+                
+                if (index === 0) {
+                    previewMedia.innerHTML = '<i class="bi bi-play-circle" style="font-size: 3rem; color: #fff;"></i>';
+                }
             }
         });
-        const count = files.length;
-        if (count > 1) {
+        
+        if (files.length > 1) {
             const info = document.createElement('small');
             info.className = 'text-secondary w-100 mt-1';
-            info.textContent = count + ' Datei(en) ausgewaehlt – werden als Album gesendet';
+            info.textContent = files.length + ' Dateien ausgewählt (Album)';
             preview.appendChild(info);
         }
     }
+
+    function updatePreview() {
+        const text = document.getElementById('broadcastText').value;
+        const previewText = document.getElementById('previewText');
+        const isSpoiler = document.getElementById('spoiler').checked;
+        const isPinned = document.getElementById('pin_message').checked;
+        const mainImg = document.getElementById('mainPreviewImg');
+        const pinBadge = document.getElementById('previewPin');
+
+        if (text.trim() === '') {
+            previewText.innerHTML = '<span class="text-dim">Deine Nachricht wird hier erscheinen...</span>';
+        } else {
+            // Very basic HTML simulation for preview
+            let html = text
+                .replace(/<b>(.*?)<\/b>/g, '<strong>$1</strong>')
+                .replace(/<i>(.*?)<\/i>/g, '<em>$1</em>')
+                .replace(/<u>(.*?)<\/u>/g, '<u>$1</u>')
+                .replace(/<code>(.*?)<\/code>/g, '<code style="background: rgba(0,0,0,0.3); padding: 2px 4px; border-radius: 4px;">$1</code>');
+            previewText.innerHTML = html;
+        }
+
+        if (mainImg) {
+            if (isSpoiler) mainImg.classList.add('tg-preview-spoiler');
+            else mainImg.classList.remove('tg-preview-spoiler');
+        }
+        
+        if (isPinned) pinBadge.classList.remove('d-none');
+        else pinBadge.classList.add('d-none');
+    }
+
+    function resendBroadcast(id, text, topicId, sendMode, spoiler, pin, silent) {
+        document.getElementById('broadcastText').value = text;
+        document.getElementById('broadcastTopic').value = topicId;
+        document.getElementById('sendModeSelect').value = sendMode || 'standard';
+        document.getElementById('spoiler').checked = spoiler;
+        document.getElementById('pin_message').checked = pin;
+        document.getElementById('silent_send').checked = silent;
+        
+        // UI Updates
+        onSendModeChange(document.getElementById('sendModeSelect'));
+        updatePreview();
+        
+        // Scroll to form
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    
+    // Auto-update preview on load
+    document.addEventListener('DOMContentLoaded', () => {
+        updatePreview();
+    });
 </script>
 {% endblock %}
