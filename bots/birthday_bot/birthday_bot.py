@@ -159,27 +159,42 @@ async def handle_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_best_user_photo(bot, user_id):
     """
-    Versucht das Steckbrief-Foto (InviteBot) zu finden.
-    Falls nicht vorhanden, wird das normale Telegram-Profilbild genommen.
-    Returns: Image Objekt oder None
+    Versucht das bestmögliche Bild für den User zu finden.
+    Priorität:
+    1. Foto aus dem Steckbrief (InviteApplication)
+    2. Cached Photo aus IDFinderUser
+    3. Normales Telegram-Profilbild (Avatar-Cache)
     """
     try:
-        from web_dashboard.app.models import InviteApplication, db
+        from web_dashboard.app.models import InviteApplication, IDFinderUser, db
         flask_app = get_shared_flask_app()
         
         file_id = None
+        
         with flask_app.app_context():
+            # 1. Check InviteApplication (Steckbrief)
             app = InviteApplication.query.filter_by(telegram_user_id=user_id).first()
             if app:
                 answers = app.answers
-                # Suche nach einem Feld vom Typ Photo in den Antworten
-                # Da wir die Feld-IDs hier nicht direkt kennen, suchen wir nach einer File-ID
-                for key, val in answers.items():
-                    if isinstance(val, str) and (val.startswith('AgAC') or len(val) > 40): # Typische File-ID Muster
-                        file_id = val
-                        break
-        
-        # Fallback auf Avatar-Cache wenn kein Steckbrief-Bild
+                # Priorisiere den Namen "photo"
+                if answers.get('photo') and isinstance(answers['photo'], str):
+                    if answers['photo'].startswith('AgAC'):
+                        file_id = answers['photo']
+                
+                # Fallback: Suche nach dem ersten AgAC im JSON
+                if not file_id:
+                    for val in answers.values():
+                        if isinstance(val, str) and val.startswith('AgAC'):
+                            file_id = val
+                            break
+            
+            # 2. Check IDFinderUser (Cached Photo ID)
+            if not file_id:
+                u = IDFinderUser.query.filter_by(telegram_id=user_id).first()
+                if u and u.photo_file_id:
+                    file_id = u.photo_file_id
+
+        # Fallback auf lokalen Avatar-Cache (Profilbild)
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(os.path.dirname(current_dir))
         avatar_path = os.path.join(project_root, 'web_dashboard', 'app', 'static', 'avatars', f"{user_id}.jpg")
@@ -189,20 +204,28 @@ async def get_best_user_photo(bot, user_id):
                 return Image.open(avatar_path).convert('RGB')
             return None
 
-        # Wenn wir eine File-ID haben, laden wir sie frisch von Telegram (beste Qualität)
+        # Wenn wir eine File-ID haben, laden wir sie frisch von Telegram
+        logger.info(f"Downloading best photo for user {user_id} using file_id {file_id[:10]}...")
         t_file = await bot.get_file(file_id)
-        # Download in ein Byte-Stream
         import io
         img_bytes = await t_file.download_as_bytearray()
         img = Image.open(io.BytesIO(img_bytes)).convert('RGB')
         
-        # Optional: In Cache speichern damit wir nicht jedes Mal laden müssen
+        # In Cache speichern
         os.makedirs(os.path.dirname(avatar_path), exist_ok=True)
         img.save(avatar_path, "JPEG", quality=90)
         
         return img
     except Exception as e:
-        logger.error(f"Error getting best user photo: {e}")
+        logger.error(f"Error getting best user photo for {user_id}: {e}")
+        # Letzter Rettungsversuch: Lokaler Cache
+        try:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(os.path.dirname(current_dir))
+            avatar_path = os.path.join(project_root, 'web_dashboard', 'app', 'static', 'avatars', f"{user_id}.jpg")
+            if os.path.exists(avatar_path):
+                return Image.open(avatar_path).convert('RGB')
+        except: pass
         return None
 
 async def generate_birthday_gif(user_id, bot, output_path):
