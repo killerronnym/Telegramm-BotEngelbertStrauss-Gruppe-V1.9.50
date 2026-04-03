@@ -1729,7 +1729,7 @@ def birthday_settings():
     master_bot = BotSettings.query.filter_by(bot_name='id_finder').first()
     master_cfg = json.loads(master_bot.config_json) if master_bot else {}
 
-    return render_template('birthday.html', settings=cfg, birthdays=birthdays, user_avatars=user_avatars, topics=topics, master_cfg=master_cfg)
+    return render_template('birthday.html', settings=cfg, birthdays=birthdays, topics=topics, master_cfg=master_cfg)
 
 @bp.route('/birthday/gratulieren/<int:birthday_id>', methods=['POST'])
 @login_required

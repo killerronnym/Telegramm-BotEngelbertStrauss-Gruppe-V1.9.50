@@ -157,9 +157,9 @@ async def handle_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     return ConversationHandler.END
 
-async def generate_birthday_video(user_id, text, output_path):
+async def generate_birthday_gif(user_id, text, output_path):
     """
-    Generiert ein hochauflösendes MP4-Video mit dem Profilbild als Hintergrund,
+    Generiert ein animiertes GIF mit dem Profilbild als Hintergrund,
     aufsteigenden Ballons und fliegendem Konfetti.
     """
     try:
@@ -170,119 +170,88 @@ async def generate_birthday_video(user_id, text, output_path):
         
         # Fallback wenn kein Bild da
         if not os.path.exists(avatar_path):
-            # Erstelle ein einfaches buntes Bild wenn kein Profilbild da ist
-            bg = Image.new('RGB', (720, 720), color=(30, 45, 60))
+            bg = Image.new('RGB', (480, 480), color=(30, 45, 60))
         else:
             bg = Image.open(avatar_path).convert('RGB')
-            # Quadratisch zuschneiden und auf 720x720 skalieren
             w, h = bg.size
             size = min(w, h)
             left = (w - size) / 2
             top = (h - size) / 2
-            bg = bg.crop((left, top, left + size, top + size)).resize((720, 720), Image.LANCZOS)
+            bg = bg.crop((left, top, left + size, top + size)).resize((480, 480), Image.LANCZOS)
         
-        # Verdunkeln für bessere Lesbarkeit des Texts
-        dimmer = Image.new('RGBA', (720, 720), (0, 0, 0, 60))
+        dimmer = Image.new('RGBA', (480, 480), (0, 0, 0, 70))
         bg.paste(dimmer, (0, 0), dimmer)
 
-        # Temp Verzeichnis für Frames
-        frames_dir = os.path.join(project_root, 'tmp', f'birthday_frames_{user_id}')
-        os.makedirs(frames_dir, exist_ok=True)
-
         # Animation Settings
-        fps = 20
-        duration = 3 # Sekunden
-        num_frames = fps * duration
+        num_frames = 15
         
-        # Objekte für die Animation
         balloons = []
-        for _ in range(8):
+        for _ in range(6):
             balloons.append({
-                'x': random.randint(50, 670),
-                'y': random.randint(720, 1000),
-                'speed': random.uniform(3, 7),
-                'color': random.choice([(255, 100, 100, 180), (100, 255, 100, 180), (100, 100, 255, 180), (255, 255, 100, 180)]),
-                'size': random.randint(40, 60)
+                'x': random.randint(30, 450),
+                'y': random.randint(480, 600),
+                'speed': random.uniform(5, 12),
+                'color': random.choice([(255, 80, 80, 200), (80, 255, 80, 200), (80, 80, 255, 200), (255, 255, 80, 200)]),
+                'size': random.randint(25, 40)
             })
         
         confetti = []
-        for _ in range(50):
+        for _ in range(30):
             confetti.append({
-                'x': random.randint(0, 720),
-                'y': random.randint(-500, 0),
-                'speed': random.uniform(4, 10),
+                'x': random.randint(0, 480),
+                'y': random.randint(-480, 0),
+                'speed': random.uniform(8, 20),
                 'color': random.choice([(255,0,0), (0,255,0), (0,0,255), (255,255,0), (255,0,255)]),
-                'size': random.randint(4, 8)
+                'size': random.randint(3, 6)
             })
 
         # Font laden
-        font_path = "C:\\Windows\\Fonts\\arialbd.ttf" # Bold
+        font_path = "C:\\Windows\\Fonts\\arialbd.ttf"
         if not os.path.exists(font_path): font_path = "arial.ttf"
         try:
-            name_font = ImageFont.truetype(font_path, 42)
-            wish_font = ImageFont.truetype(font_path, 32)
+            name_font = ImageFont.truetype(font_path, 28)
         except:
             name_font = ImageFont.load_default()
-            wish_font = ImageFont.load_default()
 
-        frame_paths = []
+        frames = []
         for i in range(num_frames):
             frame = bg.copy().convert('RGBA')
             draw = ImageDraw.Draw(frame)
             
-            # Konfetti zeichnen
             for p in confetti:
                 p['y'] += p['speed']
-                if p['y'] > 720: p['y'] = -20
+                if p['y'] > 480: p['y'] = -20
                 draw.rectangle([p['x'], p['y'], p['x']+p['size'], p['y']+p['size']], fill=p['color'])
             
-            # Ballons zeichnen
             for b in balloons:
                 b['y'] -= b['speed']
-                if b['y'] < -100: b['y'] = 800
-                # Schnur
-                draw.line([b['x'], b['y']+b['size'], b['x'], b['y']+b['size']+40], fill=(200,200,200,150), width=2)
-                # Ballon Körper
+                if b['y'] < -100: b['y'] = 550
+                draw.line([b['x'], b['y']+b['size'], b['x'], b['y']+b['size']+30], fill=(200,200,200,150), width=1)
                 draw.ellipse([b['x']-b['size']/2, b['y'], b['x']+b['size']/2, b['y']+b['size']*1.2], fill=b['color'])
             
-            # Text zeichnen (Zentriert unten)
             lines = text.split('\n')
-            y_text = 550
+            y_text = 380
             for line in lines:
-                # Text Outline für Lesbarkeit
-                for off in [(-2,-2), (2,-2), (-2,2), (2,2)]:
-                    draw.text((360+off[0], y_text+off[1]), line, font=name_font, fill=(0,0,0,200), anchor="mm")
-                draw.text((360, y_text), line, font=name_font, fill=(255,255,255,255), anchor="mm")
-                y_text += 50
+                for off in [(-1,-1), (1,-1), (-1,1), (1,1)]:
+                    draw.text((240+off[0], y_text+off[1]), line, font=name_font, fill=(0,0,0,220), anchor="mm")
+                draw.text((240, y_text), line, font=name_font, fill=(255,255,255,255), anchor="mm")
+                y_text += 35
 
-            frame = frame.convert('RGB')
-            f_path = os.path.join(frames_dir, f"frame_{i:03d}.jpg")
-            frame.save(f_path, "JPEG", quality=90)
-            frame_paths.append(f_path)
+            frames.append(frame.convert('P', palette=Image.ADAPTIVE))
 
-        # Mit FFmpeg zu MP4 umwandeln
-        cmd = [
-            'ffmpeg', '-y', '-framerate', str(fps), 
-            '-i', os.path.join(frames_dir, 'frame_%03d.jpg'),
-            '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '23',
-            output_path
-        ]
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        
-        # Aufräumen
-        for f in frame_paths: os.remove(f)
-        os.rmdir(frames_dir)
+        # Als GIF speichern
+        frames[0].save(output_path, format='GIF', append_images=frames[1:], save_all=True, duration=60, loop=0)
         return True
     except Exception as e:
-        logger.error(f"Error generating birthday video: {e}")
+        logger.error(f"Error generating birthday GIF: {e}")
         return False
 
 async def send_birthday_wish(bot, user_id, chat_id, topic_id=None):
     """
-    Sendet eine individuelle Geburtstagsgratulation mit Video an einen Chat.
+    Sendet eine individuelle Geburtstagsgratulation mit GIF an einen Chat.
     """
     try:
-        from web_dashboard.app.models import Birthday, IDFinderUser
+        from web_dashboard.app.models import Birthday
         flask_app = get_shared_flask_app()
         settings = get_birthday_settings()
         
@@ -296,24 +265,21 @@ async def send_birthday_wish(bot, user_id, chat_id, topic_id=None):
                 now = datetime.now()
                 message_text = message_text.replace('{age}', str(now.year - b.year) if b.year else '?')
 
-            # Video generieren
+            # GIF generieren
             output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'web_dashboard', 'app', 'static', 'media')
             os.makedirs(output_dir, exist_ok=True)
-            video_path = os.path.join(output_dir, f"birthday_{user_id}.mp4")
+            gif_path = os.path.join(output_dir, f"birthday_{user_id}.gif")
             
-            # Generierung starten
-            success = await generate_birthday_video(user_id, message_text, video_path)
+            success = await generate_birthday_gif(user_id, message_text, gif_path)
             
             kwargs = {'chat_id': chat_id, 'caption': message_text, 'parse_mode': 'HTML'}
             if topic_id: kwargs['message_thread_id'] = int(topic_id)
             
-            if success and os.path.exists(video_path):
-                with open(video_path, 'rb') as video:
-                    await bot.send_video(video=video, **kwargs)
-                # Video danach löschen um Platz zu sparen
-                os.remove(video_path)
+            if success and os.path.exists(gif_path):
+                with open(gif_path, 'rb') as animation:
+                    await bot.send_animation(animation=animation, **kwargs)
+                os.remove(gif_path)
             else:
-                # Fallback auf Text wenn Video-Generierung feilschlägt
                 await bot.send_message(chat_id=chat_id, text=message_text, parse_mode='HTML', message_thread_id=topic_id)
             return True
     except Exception as e:
