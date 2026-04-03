@@ -1637,7 +1637,7 @@ def profanity_filter_import_google():
 @bp.route('/birthday-settings', methods=['GET', 'POST'])
 @login_required
 def birthday_settings():
-    from ..models import Birthday, BotSettings, IDFinderUser
+    from ..models import Birthday, BotSettings, IDFinderUser, TopicMapping
     
     s = BotSettings.query.filter_by(bot_name='birthday').first()
     if not s:
@@ -1722,14 +1722,60 @@ def birthday_settings():
         
     birthdays = Birthday.query.order_by(Birthday.month, Birthday.day).all()
     
-    # Load avatars
-    user_avatars = {}
-    for b in birthdays:
-        u = IDFinderUser.query.filter_by(telegram_id=b.telegram_user_id).first()
-        if u:
-            user_avatars[b.telegram_user_id] = u
-            
-    return render_template('birthday.html', settings=cfg, birthdays=birthdays, user_avatars=user_avatars)
+    # Load topics
+    topics = TopicMapping.query.all()
+    
+    # Load master bot config
+    master_bot = BotSettings.query.filter_by(bot_name='id_finder').first()
+    master_cfg = json.loads(master_bot.config_json) if master_bot else {}
+
+    return render_template('birthday.html', settings=cfg, birthdays=birthdays, user_avatars=user_avatars, topics=topics, master_cfg=master_cfg)
+
+@bp.route('/birthday/gratulieren/<int:birthday_id>', methods=['POST'])
+@login_required
+def birthday_gratulieren(birthday_id):
+    from ..models import Birthday, BotSettings
+    from bots.birthday_bot.birthday_bot import send_birthday_wish
+    from shared_bot_utils import get_bot_token
+    import asyncio
+    from telegram import Bot
+    
+    b = Birthday.query.get(birthday_id)
+    if not b:
+        flash('Geburtstag nicht gefunden.', 'danger')
+        return redirect(url_for('dashboard.birthday_settings'))
+    
+    s = BotSettings.query.filter_by(bot_name='birthday').first()
+    cfg = json.loads(s.config_json) if s else {}
+    
+    # Load master bot config for fallback
+    master_bot = BotSettings.query.filter_by(bot_name='id_finder').first()
+    master_cfg = json.loads(master_bot.config_json) if master_bot else {}
+    
+    target_chat = cfg.get('target_chat_id') or str(master_cfg.get('main_group_id')) or str(b.chat_id)
+    target_topic = cfg.get('target_topic_id') or b.topic_id
+    
+    token = get_bot_token()
+    if not token:
+        flash('Bot Token nicht gefunden.', 'danger')
+        return redirect(url_for('dashboard.birthday_settings'))
+    
+    try:
+        bot = Bot(token=token)
+        # Wir müssen den async Aufruf in ein Event-Loop packen
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        success = loop.run_until_complete(send_birthday_wish(bot, b.telegram_user_id, target_chat, target_topic))
+        loop.close()
+        
+        if success:
+            flash(f'Gratulation an {b.first_name} wurde gesendet!', 'success')
+        else:
+            flash('Senden fehlgeschlagen. Prüfe die Logs.', 'warning')
+    except Exception as e:
+        flash(f'Fehler beim Senden: {e}', 'danger')
+        
+    return redirect(url_for('dashboard.birthday_settings'))
 
 @bp.route('/api/backup/download')
 @login_required

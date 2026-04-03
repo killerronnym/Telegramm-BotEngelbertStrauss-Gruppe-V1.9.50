@@ -13,8 +13,12 @@ except ImportError:
     db = None
 import json
 import re
+import os
+import subprocess
+import random
 from datetime import datetime, timedelta
 import pytz
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 logger = logging.getLogger("BirthdayBot")
 logger.setLevel(logging.INFO)
@@ -153,6 +157,169 @@ async def handle_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     return ConversationHandler.END
 
+async def generate_birthday_video(user_id, text, output_path):
+    """
+    Generiert ein hochauflösendes MP4-Video mit dem Profilbild als Hintergrund,
+    aufsteigenden Ballons und fliegendem Konfetti.
+    """
+    try:
+        # Pfade auflösen
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(os.path.dirname(current_dir))
+        avatar_path = os.path.join(project_root, 'web_dashboard', 'app', 'static', 'avatars', f"{user_id}.jpg")
+        
+        # Fallback wenn kein Bild da
+        if not os.path.exists(avatar_path):
+            # Erstelle ein einfaches buntes Bild wenn kein Profilbild da ist
+            bg = Image.new('RGB', (720, 720), color=(30, 45, 60))
+        else:
+            bg = Image.open(avatar_path).convert('RGB')
+            # Quadratisch zuschneiden und auf 720x720 skalieren
+            w, h = bg.size
+            size = min(w, h)
+            left = (w - size) / 2
+            top = (h - size) / 2
+            bg = bg.crop((left, top, left + size, top + size)).resize((720, 720), Image.LANCZOS)
+        
+        # Verdunkeln für bessere Lesbarkeit des Texts
+        dimmer = Image.new('RGBA', (720, 720), (0, 0, 0, 60))
+        bg.paste(dimmer, (0, 0), dimmer)
+
+        # Temp Verzeichnis für Frames
+        frames_dir = os.path.join(project_root, 'tmp', f'birthday_frames_{user_id}')
+        os.makedirs(frames_dir, exist_ok=True)
+
+        # Animation Settings
+        fps = 20
+        duration = 3 # Sekunden
+        num_frames = fps * duration
+        
+        # Objekte für die Animation
+        balloons = []
+        for _ in range(8):
+            balloons.append({
+                'x': random.randint(50, 670),
+                'y': random.randint(720, 1000),
+                'speed': random.uniform(3, 7),
+                'color': random.choice([(255, 100, 100, 180), (100, 255, 100, 180), (100, 100, 255, 180), (255, 255, 100, 180)]),
+                'size': random.randint(40, 60)
+            })
+        
+        confetti = []
+        for _ in range(50):
+            confetti.append({
+                'x': random.randint(0, 720),
+                'y': random.randint(-500, 0),
+                'speed': random.uniform(4, 10),
+                'color': random.choice([(255,0,0), (0,255,0), (0,0,255), (255,255,0), (255,0,255)]),
+                'size': random.randint(4, 8)
+            })
+
+        # Font laden
+        font_path = "C:\\Windows\\Fonts\\arialbd.ttf" # Bold
+        if not os.path.exists(font_path): font_path = "arial.ttf"
+        try:
+            name_font = ImageFont.truetype(font_path, 42)
+            wish_font = ImageFont.truetype(font_path, 32)
+        except:
+            name_font = ImageFont.load_default()
+            wish_font = ImageFont.load_default()
+
+        frame_paths = []
+        for i in range(num_frames):
+            frame = bg.copy().convert('RGBA')
+            draw = ImageDraw.Draw(frame)
+            
+            # Konfetti zeichnen
+            for p in confetti:
+                p['y'] += p['speed']
+                if p['y'] > 720: p['y'] = -20
+                draw.rectangle([p['x'], p['y'], p['x']+p['size'], p['y']+p['size']], fill=p['color'])
+            
+            # Ballons zeichnen
+            for b in balloons:
+                b['y'] -= b['speed']
+                if b['y'] < -100: b['y'] = 800
+                # Schnur
+                draw.line([b['x'], b['y']+b['size'], b['x'], b['y']+b['size']+40], fill=(200,200,200,150), width=2)
+                # Ballon Körper
+                draw.ellipse([b['x']-b['size']/2, b['y'], b['x']+b['size']/2, b['y']+b['size']*1.2], fill=b['color'])
+            
+            # Text zeichnen (Zentriert unten)
+            lines = text.split('\n')
+            y_text = 550
+            for line in lines:
+                # Text Outline für Lesbarkeit
+                for off in [(-2,-2), (2,-2), (-2,2), (2,2)]:
+                    draw.text((360+off[0], y_text+off[1]), line, font=name_font, fill=(0,0,0,200), anchor="mm")
+                draw.text((360, y_text), line, font=name_font, fill=(255,255,255,255), anchor="mm")
+                y_text += 50
+
+            frame = frame.convert('RGB')
+            f_path = os.path.join(frames_dir, f"frame_{i:03d}.jpg")
+            frame.save(f_path, "JPEG", quality=90)
+            frame_paths.append(f_path)
+
+        # Mit FFmpeg zu MP4 umwandeln
+        cmd = [
+            'ffmpeg', '-y', '-framerate', str(fps), 
+            '-i', os.path.join(frames_dir, 'frame_%03d.jpg'),
+            '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '23',
+            output_path
+        ]
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        # Aufräumen
+        for f in frame_paths: os.remove(f)
+        os.rmdir(frames_dir)
+        return True
+    except Exception as e:
+        logger.error(f"Error generating birthday video: {e}")
+        return False
+
+async def send_birthday_wish(bot, user_id, chat_id, topic_id=None):
+    """
+    Sendet eine individuelle Geburtstagsgratulation mit Video an einen Chat.
+    """
+    try:
+        from web_dashboard.app.models import Birthday, IDFinderUser
+        flask_app = get_shared_flask_app()
+        settings = get_birthday_settings()
+        
+        with flask_app.app_context():
+            b = Birthday.query.filter_by(telegram_user_id=user_id).first()
+            if not b: return False
+            
+            display_name = b.first_name if b.first_name else (f"@{b.username}" if b.username else "Geburtstagskind")
+            message_text = settings.get('congratulation_text', 'Herzlichen Glückwunsch!').replace('{user}', display_name)
+            if '{age}' in message_text:
+                now = datetime.now()
+                message_text = message_text.replace('{age}', str(now.year - b.year) if b.year else '?')
+
+            # Video generieren
+            output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'web_dashboard', 'app', 'static', 'media')
+            os.makedirs(output_dir, exist_ok=True)
+            video_path = os.path.join(output_dir, f"birthday_{user_id}.mp4")
+            
+            # Generierung starten
+            success = await generate_birthday_video(user_id, message_text, video_path)
+            
+            kwargs = {'chat_id': chat_id, 'caption': message_text, 'parse_mode': 'HTML'}
+            if topic_id: kwargs['message_thread_id'] = int(topic_id)
+            
+            if success and os.path.exists(video_path):
+                with open(video_path, 'rb') as video:
+                    await bot.send_video(video=video, **kwargs)
+                # Video danach löschen um Platz zu sparen
+                os.remove(video_path)
+            else:
+                # Fallback auf Text wenn Video-Generierung feilschlägt
+                await bot.send_message(chat_id=chat_id, text=message_text, parse_mode='HTML', message_thread_id=topic_id)
+            return True
+    except Exception as e:
+        logger.error(f"Error in send_birthday_wish: {e}")
+        return False
+
 async def cancel_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
     settings = get_birthday_settings()
     msg = settings.get('cancel_text', "Abgebrochen.")
@@ -192,17 +359,8 @@ async def check_birthdays(context: ContextTypes.DEFAULT_TYPE, force: bool = Fals
             
             if final_chat_id:
                 try:
-                    text = settings.get('congratulation_text', 'Glückwunsch!').replace('{user}', b.first_name if b.first_name else f"@{b.username}")
-                    if '{age}' in text:
-                        text = text.replace('{age}', str(now.year - b.year) if b.year else '?')
-                    
-                    kwargs = {'chat_id': final_chat_id, 'text': text}
-                    if global_target_topic and global_target_topic.isdigit():
-                        kwargs['message_thread_id'] = int(global_target_topic)
-                    elif b.chat_id == int(final_chat_id) and b.topic_id:
-                         kwargs['message_thread_id'] = b.topic_id
-                        
-                    await context.bot.send_message(**kwargs)
+                    target_topic = global_target_topic if global_target_topic else b.topic_id
+                    await send_birthday_wish(context.bot, b.telegram_user_id, final_chat_id, target_topic)
                 except Exception as e:
                     logger.error(f"Birthday Send Error: {e}")
 
