@@ -30,11 +30,12 @@
     }
 
     .card {
-        height: 100%;
+        height: auto; /* Changed from 100% to auto to prevent overlap */
         transition: all 0.2s ease;
         border: 1px solid var(--border-muted);
         background: rgba(13, 17, 23, 0.6);
         backdrop-filter: blur(10px);
+        margin-bottom: 1.5rem;
     }
 
     .card-header {
@@ -74,17 +75,19 @@
         background: #0e1621;
         border-radius: 12px;
         padding: 12px;
-        max-width: 350px;
+        width: 100%;
+        max-width: 320px;
         margin: 0 auto;
         position: relative;
         box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        border-bottom-left-radius: 4px;
     }
     .tg-preview-media {
         width: 100%;
         border-radius: 8px;
         margin-bottom: 8px;
         background: #17212b;
-        aspect-ratio: 16/9;
+        aspect-ratio: 1/1;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -98,31 +101,59 @@
         object-fit: cover;
     }
     .tg-preview-text {
-        font-size: 0.95rem;
+        font-size: 0.9rem;
         color: #fff;
         line-height: 1.4;
         word-wrap: break-word;
         white-space: pre-wrap;
     }
     .tg-preview-time {
-        font-size: 0.75rem;
+        font-size: 0.7rem;
         color: #6c7883;
         text-align: right;
         margin-top: 4px;
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 4px;
     }
-    .tg-preview-spoiler {
-        filter: blur(20px);
+    
+    /* Telegram Spoiler Effect */
+    .tg-spoiler {
+        background: rgba(255,255,255,0.1);
+        color: transparent !important;
+        border-radius: 3px;
+        cursor: pointer;
+        position: relative;
+        transition: background 0.3s;
+        /* Noise Effect Simulation */
+        background-image: repeating-radial-gradient(circle at 10% 10%, rgba(255,255,255,0.2) 0px, rgba(255,255,255,0.2) 1px, transparent 1px, transparent 100%);
+        background-size: 3px 3px;
+    }
+    .tg-spoiler:hover {
+        background-color: rgba(255,255,255,0.15);
+    }
+    .tg-spoiler.revealed {
+        background: transparent !important;
+        color: inherit !important;
+        background-image: none !important;
+    }
+
+    .tg-preview-media-spoiler {
+        filter: blur(25px) !important;
         transition: filter 0.3s ease;
+        cursor: pointer;
     }
-    .tg-preview-spoiler:hover {
-        filter: blur(0);
+    .tg-preview-media-spoiler.revealed {
+        filter: blur(0) !important;
     }
 
     .formatting-toolbar {
         display: flex;
-        gap: 8px;
+        flex-wrap: wrap;
+        gap: 5px;
         background: rgba(255,255,255,0.03);
-        padding: 6px;
+        padding: 5px;
         border-radius: 8px;
         margin-bottom: 8px;
         border: 1px solid rgba(255,255,255,0.05);
@@ -131,10 +162,13 @@
         background: transparent;
         border: none;
         color: var(--text-secondary);
-        padding: 4px 10px;
+        padding: 5px 8px;
         border-radius: 4px;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
         transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 4px;
     }
     .format-btn:hover {
         background: rgba(255,255,255,0.1);
@@ -165,6 +199,28 @@
     .emoji-btn:hover {
         transform: scale(1.2);
     }
+
+    /* Fixed Height for List Group */
+    .topic-list-container {
+        max-height: 250px;
+        overflow-y: auto;
+        padding-right: 5px;
+    }
+    .topic-list-container::-webkit-scrollbar {
+        width: 4px;
+    }
+    .topic-list-container::-webkit-scrollbar-thumb {
+        background: rgba(255,255,255,0.1);
+        border-radius: 10px;
+    }
+
+    .topic-item {
+        background: rgba(255,255,255,0.02) !important;
+        border: 1px solid rgba(255,255,255,0.05) !important;
+        border-radius: 8px !important;
+        margin-bottom: 5px;
+        padding: 0.75rem !important;
+    }
 </style>
 
 <div class="dashboard-container">
@@ -176,28 +232,28 @@
         </div>
     </div>
 
-    <div class="row g-4">
-        <!-- Links: Hauptformular -->
-        <div class="col-lg-8">
-            <div class="card mb-4">
+    <!-- MAIN GRID -->
+    <div class="row g-4 mb-4">
+        <!-- LEFT COLUMN: EDITOR -->
+        <div class="col-xl-8">
+            <div class="card h-100">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h6>📢 Nachricht senden / planen</h6>
-                    <span class="badge bg-blue bg-opacity-10 text-blue border border-blue border-opacity-20">NEUER BROADCAST</span>
+                    <h6>📢 Nachricht erstellen</h6>
+                    <span class="badge bg-blue bg-opacity-10 text-blue border border-blue border-opacity-20 px-3">EDITOR</span>
                 </div>
                 <div class="card-body">
-                    <form action="{{ url_for('dashboard.save_broadcast') }}" method="POST" id="broadcastForm"
-                        enctype="multipart/form-data">
+                    <form action="{{ url_for('dashboard.save_broadcast') }}" method="POST" id="broadcastForm" enctype="multipart/form-data">
                         
                         <div class="mb-3 position-relative">
-                            <label class="small text-secondary fw-bold mb-1">NACHRICHTENTEXT / CAPTION</label>
+                            <label class="small text-secondary fw-bold mb-2">NACHRICHTENTEXT / CAPTION</label>
                             
                             <div class="formatting-toolbar">
-                                <button type="button" class="format-btn" onclick="insertTag('<b>', '</b>')" title="Bold"><i class="bi bi-type-bold"></i></button>
-                                <button type="button" class="format-btn" onclick="insertTag('<i>', '</i>')" title="Italic"><i class="bi bi-type-italic"></i></button>
-                                <button type="button" class="format-btn" onclick="insertTag('<u>', '</u>')" title="Underline"><i class="bi bi-type-underline"></i></button>
+                                <button type="button" class="format-btn" onclick="insertTag('<b>', '</b>')" title="Fett"><i class="bi bi-type-bold"></i></button>
+                                <button type="button" class="format-btn" onclick="insertTag('<i>', '</i>')" title="Kursiv"><i class="bi bi-type-italic"></i></button>
+                                <button type="button" class="format-btn" onclick="insertTag('<u>', '</u>')" title="Unterstrichen"><i class="bi bi-type-underline"></i></button>
                                 <button type="button" class="format-btn" onclick="insertTag('<tg-spoiler>', '</tg-spoiler>')" title="Spoiler Text"><i class="bi bi-eye-slash"></i></button>
                                 <button type="button" class="format-btn" onclick="insertTag('<code>', '</code>')" title="Code"><i class="bi bi-code"></i></button>
-                                <button type="button" class="format-btn" onclick="toggleEmojiPicker()"><i class="bi bi-emoji-smile"></i></button>
+                                <button type="button" class="format-btn" onclick="toggleEmojiPicker()"><i class="bi bi-emoji-smile"></i> Emoji</button>
                                 
                                 <div class="emoji-picker" id="emojiPicker">
                                     <button type="button" class="emoji-btn" onclick="insertText('😊')">😊</button>
@@ -209,13 +265,13 @@
                                     <button type="button" class="emoji-btn" onclick="insertText('🚀')">🚀</button>
                                     <button type="button" class="emoji-btn" onclick="insertText('🕒')">🕒</button>
                                     <button type="button" class="emoji-btn" onclick="insertText('📎')">📎</button>
-                                    <button type="button" class="emoji-btn" onclick="insertText('🎁')">🎁</button>
                                     <button type="button" class="emoji-btn" onclick="insertText('🔥')">🔥</button>
                                     <button type="button" class="emoji-btn" onclick="insertText('💡')">💡</button>
+                                    <button type="button" class="emoji-btn" onclick="insertText('💬')">💬</button>
                                 </div>
                             </div>
 
-                            <textarea class="form-control" name="text" id="broadcastText" rows="6"
+                            <textarea class="form-control" name="text" id="broadcastText" rows="7"
                                 placeholder="Schreibe hier deine Nachricht..." oninput="updatePreview()"></textarea>
                         </div>
 
@@ -231,10 +287,9 @@
                             </div>
                             <div class="col-md-6">
                                 <label class="small text-secondary fw-bold mb-1">SENDE-MODUS</label>
-                                <select class="form-select" name="send_mode" id="sendModeSelect"
-                                    onchange="onSendModeChange(this)">
+                                <select class="form-select" name="send_mode" id="sendModeSelect" onchange="onSendModeChange(this)">
                                     <option value="standard" selected>Standard (Foto/Video Vorschau)</option>
-                                    <option value="document">Dokument (Originalqualität, kein Spoiler)</option>
+                                    <option value="document">Dokument (Originalqualität)</option>
                                 </select>
                             </div>
                         </div>
@@ -247,99 +302,109 @@
                                 <div id="mediaPreview" class="mt-2 d-flex flex-wrap gap-2"></div>
                             </div>
                             <div class="col-md-6">
-                                <label class="small text-secondary fw-bold mb-1">GEPLANTER ZEITPUNKT (LOKALE ZEIT)</label>
-                                <input type="datetime-local" class="form-control" name="scheduled_at" id="scheduled_at">
-                                <small class="text-dim">Leer lassen für sofortigen Versand.</small>
+                                <label class="small text-secondary fw-bold mb-1">GEPLANTER ZEITPUNKT</label>
+                                <input type="datetime-local" class="form-control" name="scheduled_at" id="scheduled_at" onchange="updatePreview()">
+                                <small class="text-dim">Sofort senden, wenn leer.</small>
                             </div>
                         </div>
 
-                        <!-- FUNKTIONEN: PIN, SILENT, SPOILER -->
-                        <div class="row g-3 mb-4 border-top border-white border-opacity-5 pt-3">
+                        <!-- OPTIONS: PIN, SILENT, SPOILER -->
+                        <div class="row g-2 mb-4 border-top border-white border-opacity-5 pt-3">
                             <div class="col-md-4">
-                                <div class="form-check form-switch p-2 ps-5 rounded border border-white border-opacity-5"
-                                    style="background: rgba(255,255,255,0.01);">
+                                <div class="form-check form-switch p-3 rounded border border-white border-opacity-5 bg-opacity-10 bg-white" style="padding-left: 3.5rem !important;">
                                     <input class="form-check-input" type="checkbox" id="pin_message" name="pin_message" onchange="updatePreview()">
                                     <label class="form-check-label small fw-bold" for="pin_message">📌 Anpinnen</label>
                                 </div>
                             </div>
                             <div class="col-md-4">
-                                <div class="form-check form-switch p-2 ps-5 rounded border border-white border-opacity-5"
-                                    style="background: rgba(255,255,255,0.01);">
+                                <div class="form-check form-switch p-3 rounded border border-white border-opacity-5 bg-opacity-10 bg-white" style="padding-left: 3.5rem !important;">
                                     <input class="form-check-input" type="checkbox" id="silent_send" name="silent_send" onchange="updatePreview()">
                                     <label class="form-check-label small fw-bold" for="silent_send">🔕 Lautlos</label>
                                 </div>
                             </div>
                             <div class="col-md-4" id="spoilerWrapper">
-                                <div class="form-check form-switch p-2 ps-5 rounded border border-white border-opacity-5"
-                                    style="background: rgba(255,255,255,0.01);">
+                                <div class="form-check form-switch p-3 rounded border border-white border-opacity-5 bg-opacity-10 bg-white" style="padding-left: 3.5rem !important;">
                                     <input class="form-check-input" type="checkbox" id="spoiler" name="spoiler" onchange="updatePreview()">
-                                    <label class="form-check-label small fw-bold" for="spoiler">🫣 Spoiler / Blur</label>
+                                    <label class="form-check-label small fw-bold" for="spoiler">🫣 Medien Spoiler</label>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="d-flex gap-3">
-                            <button type="submit" name="action" value="send_now"
-                                class="btn btn-warning flex-grow-1 py-3 fw-bold" style="border-radius: 10px;">🚀 SOFORT
-                                SENDEN</button>
-                            <button type="submit" name="action" value="schedule"
-                                class="btn btn-primary flex-grow-1 py-3 fw-bold"
-                                style="border-radius: 10px; background-color: var(--blue-deep);">🕒 PLANEN</button>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <button type="submit" name="action" value="send_now" class="btn btn-warning w-100 py-3 fw-bold shadow-sm" style="border-radius: 12px; font-size: 1rem;">
+                                    🚀 JETZT ABSCHICKEN
+                                </button>
+                            </div>
+                            <div class="col-md-6">
+                                <button type="submit" name="action" value="schedule" class="btn btn-blue-action w-100 py-3 fw-bold shadow-sm" style="border-radius: 12px; font-size: 1rem; background: var(--blue-deep);">
+                                    🕒 ZEITPLAN ERSTELLEN
+                                </button>
+                            </div>
                         </div>
                     </form>
                 </div>
             </div>
         </div>
 
-        <!-- Rechts: Preview & Topic Manager -->
-        <div class="col-lg-4">
-            <!-- LIVE PREVIEW CARD -->
+        <!-- RIGHT COLUMN: PREVIEW & TOPICS -->
+        <div class="col-xl-4">
+            
+            <!-- PREVIEW CARD -->
             <div class="card mb-4">
-                <div class="card-header">
-                    <h6>👀 Live-Vorschau (Telegram)</h6>
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6>👀 Telegram Vorschau</h6>
                 </div>
-                <div class="card-body d-flex flex-column align-items-center justify-content-center py-4">
+                <div class="card-body py-5 d-flex align-items-center justify-content-center" style="background: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); background-size: cover; border-radius: 0 0 12px 12px;">
                     <div class="tg-preview" id="tgPreviewContainer">
-                        <div id="previewMediaContainer" class="tg-preview-media d-none">
-                            <!-- Preview images/videos will go here -->
-                        </div>
-                        <div class="tg-preview-text" id="previewText">Deine Nachricht wird hier erscheinen...</div>
+                        <div id="previewMediaContainer" class="tg-preview-media d-none"></div>
+                        <div class="tg-preview-text" id="previewText">Deine Nachricht...</div>
                         <div class="tg-preview-time">
-                            <span id="previewPin" class="d-none">📌 pinned | </span>
-                            {{ now.strftime('%H:%M') if now else '12:00' }}
+                            <span id="previewPin" class="d-none"><i class="bi bi-pin-angle-fill"></i> anpinnen</span>
+                            <span id="previewTimeStr">{{ now.strftime('%H:%M') if now else '12:00' }}</span>
+                            <i class="bi bi-check2-all text-blue"></i>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="card mb-4" id="topicManager">
+            <!-- TOPIC MANAGER CARD -->
+            <div class="card mb-0">
                 <div class="card-header">
-                    <h6>🏷️ Topics verwalten</h6>
+                    <h6>🏷️ Topics Manager</h6>
                 </div>
                 <div class="card-body">
-                    <form action="{{ url_for('dashboard.save_topic_mapping') }}" method="POST">
-                        <div class="mb-2"><input type="text" name="topic_id" id="input_topic_id"
-                                class="form-control form-control-sm" placeholder="ID (z.B. 1234)" required></div>
-                        <div class="mb-2"><input type="text" name="topic_name" id="input_topic_name"
-                                class="form-control form-control-sm" placeholder="Name (z.B. Gear-Talk)" required></div>
-                        <button type="submit" class="btn btn-blue-action btn-sm w-100 fw-bold">SPEICHERN</button>
+                    <form action="{{ url_for('dashboard.save_topic_mapping') }}" method="POST" class="mb-4">
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <input type="text" name="topic_id" id="input_topic_id" class="form-control form-control-sm" placeholder="ID (z.B. 104)" required>
+                            </div>
+                            <div class="col-6">
+                                <input type="text" name="topic_name" id="input_topic_name" class="form-control form-control-sm" placeholder="Name (z.B. Allgemein)" required>
+                            </div>
+                            <div class="col-12">
+                                <button type="submit" class="btn btn-blue-action btn-sm w-100 fw-bold">TOPIC SPEICHERN</button>
+                            </div>
+                        </div>
                     </form>
-                    <hr class="my-3 border-white border-opacity-10">
-                    <div style="max-height: 250px; overflow-y: auto;">
+                    
+                    <div class="topic-list-container">
                         <ul class="list-group list-group-flush">
                             {% for tid, name in known_topics.items() %}
-                            <li
-                                class="list-group-item d-flex justify-content-between align-items-center p-2 small bg-transparent border-white border-opacity-5">
-                                <div class="text-truncate text-white"><b>{{ name }}</b> <code
-                                        class="ms-1 text-dim">({{ tid }})</code></div>
+                            <li class="list-group-item topic-item d-flex justify-content-between align-items-center">
+                                <div class="text-truncate text-white small">
+                                    <span class="fw-bold">{{ name }}</span> 
+                                    <code class="ms-1 text-dim">#{{ tid }}</code>
+                                </div>
                                 <div class="d-flex gap-2">
-                                    <button type="button" class="btn btn-sm text-blue p-0"
-                                        onclick="editTopic('{{ tid }}', '{{ name }}')"><i
-                                            class="bi bi-pencil-square"></i></button>
-                                    <form action="{{ url_for('dashboard.delete_topic_mapping', topic_id=tid) }}"
-                                        method="POST" class="m-0"><button type="submit"
-                                            class="btn btn-sm text-danger p-0" onclick="return confirm('Löschen?')"><i
-                                                class="bi bi-trash3"></i></button></form>
+                                    <button type="button" class="btn btn-sm text-blue p-0" onclick="editTopic('{{ tid }}', '{{ name }}')">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <form action="{{ url_for('dashboard.delete_topic_mapping', topic_id=tid) }}" method="POST" class="m-0">
+                                        <button type="submit" class="btn btn-sm text-danger p-0" onclick="return confirm('Sicher löschen?')">
+                                            <i class="bi bi-trash3"></i>
+                                        </button>
+                                    </form>
                                 </div>
                             </li>
                             {% endfor %}
@@ -347,62 +412,59 @@
                     </div>
                 </div>
             </div>
+
         </div>
     </div>
 
-    <!-- Verlauf & Warteschlange -->
+    <!-- HISTORY SECTION -->
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <h6>⏳ Verlauf & Warteschlange</h6>
-            <button class="btn btn-outline-secondary btn-sm" onclick="window.location.reload()"><i class="bi bi-arrow-clockwise"></i> Aktualisieren</button>
+            <h6>⏳ Verlauf & Archiv</h6>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary btn-sm" onclick="window.location.reload()"><i class="bi bi-arrow-clockwise"></i></button>
+            </div>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-borderless align-middle mb-0">
+                <table class="table table-hover align-middle mb-0">
                     <thead>
                         <tr>
                             <th class="ps-4">STATUS</th>
-                            <th>TYP</th>
-                            <th>INHALT</th>
-                            <th>TOPIC</th>
-                            <th>DATUM</th>
+                            <th>MODUS</th>
+                            <th>NACHRICHT</th>
+                            <th>ZIEL</th>
+                            <th>ZEITPUNKT</th>
                             <th class="text-end pe-4">AKTION</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% if broadcasts %}
                         {% for b in broadcasts %}
-                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.02) !important;">
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.03) !important;">
                             <td class="ps-4">
-                                {% if b.status == 'sent' %}<span
-                                    class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-20 px-3">GESENDET</span>
-                                {% elif b.status == 'pending' %}<span
-                                    class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 px-3">WARTEND</span>
-                                {% else %}<span
-                                    class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-20 px-3">FEHLER</span>
+                                {% if b.status == 'sent' %}
+                                    <span class="badge rounded-pill bg-success bg-opacity-10 text-success border border-success border-opacity-20 px-3">OK</span>
+                                {% elif b.status == 'pending' %}
+                                    <span class="badge rounded-pill bg-primary bg-opacity-10 text-primary border border-primary border-opacity-20 px-3">OFFEN</span>
+                                {% else %}
+                                    <span class="badge rounded-pill bg-danger bg-opacity-10 text-danger border border-danger border-opacity-20 px-3">FEHLER</span>
                                 {% endif %}
                             </td>
-                            <td><span class="small fw-bold text-dim text-uppercase">{{ b.send_mode or 'doc' }}</span>
+                            <td class="text-dim small text-uppercase fw-bold">{{ b.send_mode or 'std' }}</td>
+                            <td style="max-width: 320px;" class="text-truncate small">
+                                <span class="text-white">{{ b.text[:80] or 'Kein Text' }}{% if b.text and b.text|length > 80 %}...{% endif %}</span>
+                                {% if b.media_path or b.media_files %}<span class="text-blue ms-1 fw-bold"><i class="bi bi-image"></i> Media</span>{% endif %}
                             </td>
-                            <td style="max-width: 300px;" class="text-truncate small">
-                                <span title="{{ b.text }}">{{ b.text[:100] or '—' }}{% if b.text and b.text|length > 100 %}...{% endif %}</span>
-                                {% if b.media_path or b.media_files %}<span class="text-blue ms-1"><i class="bi bi-paperclip"></i>
-                                    Media</span>{% endif %}
-                            </td>
-                            <td><code
-                                    class="small text-secondary">{{ known_topics.get(b.topic_id|string, b.topic_id or 'Chat') }}</code>
-                            </td>
-                            <td><small class="text-dim">{{ b.scheduled_at.strftime('%d.%m %H:%M') if b.scheduled_at else 'Sofort' }}</small></td>
+                            <td><span class="badge bg-secondary bg-opacity-10 text-secondary border border-white border-opacity-10">{{ known_topics.get(b.topic_id|string, b.topic_id or 'Hauptchat') }}</span></td>
+                            <td class="small text-dim">{{ b.scheduled_at.strftime('%d.%m %H:%M') if b.scheduled_at else 'Sofort' }}</td>
                             <td class="text-end pe-4">
                                 <div class="d-flex gap-2 justify-content-end">
-                                    <button class="btn btn-outline-blue btn-sm" onclick="resendBroadcast({{ b.id }}, {{ b.text|tojson|safe }}, '{{ b.topic_id or '' }}', '{{ b.send_mode }}', {{ b.spoiler|tojson }}, {{ b.pin_message|tojson }}, {{ b.silent_send|tojson }})">
-                                        <i class="bi bi-arrow-repeat"></i> Kopieren
+                                    <button class="btn btn-blue-action btn-sm px-3" onclick="resendBroadcast({{ b.id }}, {{ b.text|tojson|safe }}, '{{ b.topic_id or '' }}', '{{ b.send_mode }}', {{ b.spoiler|tojson }}, {{ b.pin_message|tojson }}, {{ b.silent_send|tojson }})">
+                                        <i class="bi bi-arrow-repeat"></i> KOPIEREN
                                     </button>
                                     {% if b.status == 'pending' %}
-                                    <form action="{{ url_for('dashboard.delete_broadcast', broadcast_id=b.id) }}"
-                                        method="POST" class="d-inline">
-                                        <button class="btn btn-outline-danger btn-sm"><i
-                                                class="bi bi-trash3"></i></button>
+                                    <form action="{{ url_for('dashboard.delete_broadcast', broadcast_id=b.id) }}" method="POST" class="m-0">
+                                        <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash3"></i></button>
                                     </form>
                                     {% endif %}
                                 </div>
@@ -411,8 +473,10 @@
                         {% endfor %}
                         {% else %}
                         <tr>
-                            <td colspan="6" class="text-center py-5 text-dim small italic">Keine Broadcasts im Verlauf
-                                vorhanden.</td>
+                            <td colspan="6" class="text-center py-5">
+                                <i class="bi bi-inbox text-dim h1 d-block mb-2"></i>
+                                <span class="text-dim small italic">Noch keine Nachrichten im Verlauf.</span>
+                            </td>
                         </tr>
                         {% endif %}
                     </tbody>
@@ -489,13 +553,11 @@
             if (file.type.startsWith('image/')) {
                 const reader = new FileReader();
                 reader.onload = e => {
-                    // Small thumbnail
                     const img = document.createElement('img');
                     img.src = e.target.result;
                     img.style.cssText = 'height:64px;width:64px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,0.1);';
                     preview.appendChild(img);
                     
-                    // Main preview (only showing first)
                     if (index === 0) {
                         const previewImg = document.createElement('img');
                         previewImg.src = e.target.result;
@@ -512,46 +574,54 @@
                 preview.appendChild(badge);
                 
                 if (index === 0) {
-                    previewMedia.innerHTML = '<i class="bi bi-play-circle" style="font-size: 3rem; color: #fff;"></i>';
+                    previewMedia.innerHTML = '<div class="text-center"><i class="bi bi-play-circle" style="font-size: 3.5rem; color: #fff;"></i><br><small class="text-secondary">Video</small></div>';
                 }
             }
         });
-        
-        if (files.length > 1) {
-            const info = document.createElement('small');
-            info.className = 'text-secondary w-100 mt-1';
-            info.textContent = files.length + ' Dateien ausgewählt (Album)';
-            preview.appendChild(info);
-        }
     }
 
     function updatePreview() {
         const text = document.getElementById('broadcastText').value;
         const previewText = document.getElementById('previewText');
-        const isSpoiler = document.getElementById('spoiler').checked;
+        const isMediaSpoiler = document.getElementById('spoiler').checked;
         const isPinned = document.getElementById('pin_message').checked;
-        const mainImg = document.getElementById('mainPreviewImg');
+        const mainMedia = document.getElementById('mainPreviewImg') || document.querySelector('.tg-preview-media i');
         const pinBadge = document.getElementById('previewPin');
 
         if (text.trim() === '') {
-            previewText.innerHTML = '<span class="text-dim">Deine Nachricht wird hier erscheinen...</span>';
+            previewText.innerHTML = '<span class="text-white opacity-25">Deine Nachricht...</span>';
         } else {
-            // Very basic HTML simulation for preview
             let html = text
                 .replace(/<b>(.*?)<\/b>/g, '<strong>$1</strong>')
                 .replace(/<i>(.*?)<\/i>/g, '<em>$1</em>')
                 .replace(/<u>(.*?)<\/u>/g, '<u>$1</u>')
-                .replace(/<code>(.*?)<\/code>/g, '<code style="background: rgba(0,0,0,0.3); padding: 2px 4px; border-radius: 4px;">$1</code>');
+                .replace(/<tg-spoiler>(.*?)<\/tg-spoiler>/g, '<span class="tg-spoiler" onclick="this.classList.toggle(\'revealed\')">$1</span>')
+                .replace(/<code>(.*?)<\/code>/g, '<code style="background: rgba(0,0,0,0.4); padding: 2px 4px; border-radius: 4px; color: #eebb55;">$1</code>');
             previewText.innerHTML = html;
         }
 
-        if (mainImg) {
-            if (isSpoiler) mainImg.classList.add('tg-preview-spoiler');
-            else mainImg.classList.remove('tg-preview-spoiler');
+        const mediaContainer = document.getElementById('previewMediaContainer');
+        if (!mediaContainer.classList.contains('d-none')) {
+            if (isMediaSpoiler) mediaContainer.classList.add('tg-preview-media-spoiler');
+            else mediaContainer.classList.remove('tg-preview-media-spoiler', 'revealed');
+            
+            // Allow clicking media preview to reveal if blurred
+            mediaContainer.onclick = function() {
+                if (this.classList.contains('tg-preview-media-spoiler')) {
+                    this.classList.toggle('revealed');
+                }
+            };
         }
         
         if (isPinned) pinBadge.classList.remove('d-none');
         else pinBadge.classList.add('d-none');
+
+        // Show scheduled time in preview if set
+        const schedTime = document.getElementById('scheduled_at').value;
+        if (schedTime) {
+            const date = new Date(schedTime);
+            document.getElementById('previewTimeStr').textContent = date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
+        }
     }
 
     function resendBroadcast(id, text, topicId, sendMode, spoiler, pin, silent) {
@@ -561,18 +631,11 @@
         document.getElementById('spoiler').checked = spoiler;
         document.getElementById('pin_message').checked = pin;
         document.getElementById('silent_send').checked = silent;
-        
-        // UI Updates
         onSendModeChange(document.getElementById('sendModeSelect'));
         updatePreview();
-        
-        // Scroll to form
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
     
-    // Auto-update preview on load
-    document.addEventListener('DOMContentLoaded', () => {
-        updatePreview();
-    });
+    document.addEventListener('DOMContentLoaded', updatePreview);
 </script>
 {% endblock %}
