@@ -181,17 +181,11 @@
                         <tbody>
                             {% for b in birthdays %}
                             <tr>
-                                <td class="text-center">
-                                    {% set user_info = user_avatars.get(b.telegram_user_id) %}
-                                    {% if user_info and user_info.avatar_file_id %}
-                                    <img src="{{ url_for('dashboard.get_telegram_file', file_id=user_info.avatar_file_id) }}"
-                                        class="rounded-circle" width="40" height="40" style="object-fit: cover;">
-                                    {% else %}
-                                    <div class="bg-secondary text-white rounded-circle d-inline-flex align-items-center justify-content-center"
-                                        style="width: 40px; height: 40px;">
-                                        <i class="bi bi-person"></i>
-                                    </div>
-                                    {% endif %}
+                                <td>
+                                    <img src="/api/avatar/{{ b.telegram_user_id }}" 
+                                         class="rounded-circle" width="40" height="40" 
+                                         style="object-fit: cover;" 
+                                         onerror="this.src='https://ui-avatars.com/api/?name={{ b.first_name or b.username or b.telegram_user_id }}&background=random&color=fff'">
                                 </td>
                                 <td>{{ b.first_name }} <small class="text-muted">(@{{ b.username }})</small></td>
                                 <td>{{ b.telegram_user_id }}</td>
@@ -238,18 +232,18 @@
                 <div class="modal-body">
                     <input type="hidden" name="action" value="update_birthday">
                     <input type="hidden" name="birthday_id" value="{{ b.id }}">
-                    <div class="form-row">
-                        <div class="form-group col-md-4">
+                    <div class="row">
+                        <div class="form-group col-md-4 mb-3">
                             <label>Tag</label>
                             <input type="number" class="form-control" name="day" value="{{ b.day }}" min="1" max="31"
                                 required>
                         </div>
-                        <div class="form-group col-md-4">
+                        <div class="form-group col-md-4 mb-3">
                             <label>Monat</label>
                             <input type="number" class="form-control" name="month" value="{{ b.month }}" min="1"
                                 max="12" required>
                         </div>
-                        <div class="form-group col-md-4">
+                        <div class="form-group col-md-4 mb-3">
                             <label>Jahr (optional)</label>
                             <input type="number" class="form-control" name="year" value="{{ b.year or '' }}" min="1900"
                                 max="2100">
@@ -282,20 +276,22 @@
                 </div>
                 <div class="modal-body">
                     <input type="hidden" name="action" value="add_birthday">
-                    <div class="form-group">
-                        <label>Telegram User ID</label>
-                        <input type="number" class="form-control" name="telegram_user_id" required>
+                    <div class="row">
+                        <div class="form-group mb-3">
+                            <label>Telegram User ID</label>
+                            <input type="number" class="form-control" name="telegram_user_id" required>
+                        </div>
                     </div>
-                    <div class="form-row">
-                        <div class="form-group col-md-4">
+                    <div class="row">
+                        <div class="form-group col-md-4 mb-3">
                             <label>Tag</label>
                             <input type="number" class="form-control" name="day" min="1" max="31" required>
                         </div>
-                        <div class="form-group col-md-4">
+                        <div class="form-group col-md-4 mb-3">
                             <label>Monat</label>
                             <input type="number" class="form-control" name="month" min="1" max="12" required>
                         </div>
-                        <div class="form-group col-md-4">
+                        <div class="form-group col-md-4 mb-3">
                             <label>Jahr (opt)</label>
                             <input type="number" class="form-control" name="year" min="1900" max="2100">
                         </div>
